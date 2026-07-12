@@ -16,6 +16,12 @@ use log::info;
 pub extern "system" fn JNI_OnLoad(vm: jni::JavaVM, _: *mut std::ffi::c_void) -> jni::sys::jint {
     let _ = JAVA_VM.set(vm);
 
+    android_logger::init_once(
+        android_logger::Config::default()
+            .with_max_level(log::LevelFilter::Debug)
+            .with_tag("handy-core"),
+    );
+
     // Initialize transcribe-cpp native backends (loads ggml CPU backend)
     transcribe_cpp::init_logging();
     if let Err(e) = transcribe_cpp::init_backends_default() {

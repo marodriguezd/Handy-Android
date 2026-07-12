@@ -163,7 +163,15 @@ class EngineViewModel(
 
     fun refreshModels() {
         viewModelScope.launch(Dispatchers.IO) {
-            val json = EngineBridge.nativeGetAvailableModels()
+            var json: String
+            var attempts = 0
+            do {
+                json = EngineBridge.nativeGetAvailableModels()
+                if (json.isBlank() && attempts < 10) {
+                    kotlinx.coroutines.delay(500)
+                    attempts++
+                }
+            } while (json.isBlank() && attempts < 10)
             _availableModels.value = ModelInfo.fromJsonArray(json)
         }
     }

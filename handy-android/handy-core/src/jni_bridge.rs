@@ -6,14 +6,36 @@ use jni::JNIEnv;
 use log::{info, warn};
 use std::panic::{self, AssertUnwindSafe};
 
-fn with_engine<F, R>(f: F) -> R
+fn with_engine_or<F, R>(f: F, default: R) -> R
 where
     F: FnOnce(&mut EngineState) -> R,
 {
-    let lock = ENGINE.get().expect("ENGINE not initialized");
-    let mut guard = lock.lock().expect("ENGINE lock poisoned");
-    let state = guard.as_mut().expect("ENGINE state not initialized");
-    f(state)
+    let lock = ENGINE.get();
+    if lock.is_none() {
+        warn!("with_engine: ENGINE not initialized");
+        return default;
+    }
+    let mut guard = match lock.unwrap().lock() {
+        Ok(g) => g,
+        Err(e) => {
+            warn!("with_engine: ENGINE lock poisoned: {e}");
+            return default;
+        }
+    };
+    let state = guard.as_mut();
+    if state.is_none() {
+        warn!("with_engine: ENGINE state not initialized");
+        return default;
+    }
+    f(state.unwrap())
+}
+
+fn with_engine<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut EngineState) -> R,
+    R: Default,
+{
+    with_engine_or(f, R::default())
 }
 
 /// Wraps a JNI entry point with catch_unwind.
@@ -749,11 +771,11 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeGetHistory<'
     limit: jint,
 ) -> jstring {
     with_guard(&mut env, "nativeGetHistory", |env| {
-        let entries = with_engine(|state| {
+        let entries = with_engine_or(|state| {
             state
                 .history_manager
                 .get_entries(offset as i64, limit as i64)
-        });
+        }, Ok(vec![]));
 
         let json = match entries {
             Ok(e) => serde_json::to_string(&e).unwrap_or_else(|_| "[]".to_string()),

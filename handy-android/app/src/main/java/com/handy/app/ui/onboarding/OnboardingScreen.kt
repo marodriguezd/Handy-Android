@@ -295,16 +295,15 @@ private fun ModelDownloadContent(viewModel: OnboardingViewModel) {
         )
         Spacer(Modifier.height(24.dp))
 
-        if (!uiState.isDownloadReady && uiState.downloadError == null && uiState.downloadProgress <= 0f) {
+        if (!uiState.isDownloading && !uiState.isDownloadReady && uiState.downloadError == null) {
             Button(onClick = {
                 viewModel.skipToModelDownload()
-                viewModel.nextStep()
             }) {
                 Text(stringResource(R.string.onboarding_model_download))
             }
         }
 
-        if (uiState.downloadProgress > 0f && !uiState.isDownloadReady) {
+        if (uiState.isDownloading) {
             LinearProgressIndicator(
                 progress = { uiState.downloadProgress.coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth(0.7f),
@@ -335,6 +334,13 @@ private fun ModelDownloadContent(viewModel: OnboardingViewModel) {
             Spacer(Modifier.height(8.dp))
             Button(onClick = { viewModel.nextStep() }) {
                 Text(stringResource(R.string.onboarding_continue_anyway))
+            }
+        }
+
+        if (uiState.isDownloading) {
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = { viewModel.skipDownload() }) {
+                Text(stringResource(R.string.onboarding_skip))
             }
         }
     }

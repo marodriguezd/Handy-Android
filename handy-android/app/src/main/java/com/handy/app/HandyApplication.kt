@@ -53,8 +53,10 @@ class HandyApplication : Application(), ComponentCallbacks2 {
 
     override fun onCreate() {
         super.onCreate()
-        SentryAndroid.init(this) { options ->
-            options.dsn = BuildConfig.SENTRY_DSN
+        if (BuildConfig.SENTRY_DSN.isNotEmpty() && !BuildConfig.SENTRY_DSN.contains("examplePublicKey")) {
+            SentryAndroid.init(this) { options ->
+                options.dsn = BuildConfig.SENTRY_DSN
+            }
         }
         Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
             if (grantResult == 0) {
@@ -62,7 +64,12 @@ class HandyApplication : Application(), ComponentCallbacks2 {
                 shizukuInjector.bindService()
             }
         }
-        shizukuInjector.bindService()
+        Shizuku.addBinderReceivedListenerSticky {
+            shizukuInjector.bindService()
+            if (Shizuku.checkSelfPermission() != 0) {
+                Shizuku.requestPermission(1001)
+            }
+        }
         engineViewModel
         createQuickDictateChannel()
         showQuickDictateNotification()

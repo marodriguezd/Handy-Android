@@ -56,6 +56,7 @@ class ShizukuInjector(
         try {
             val component = ComponentName(context, HandyUserService::class.java)
             val args = Shizuku.UserServiceArgs(component)
+                .processNameSuffix("shizuku")
                 .daemon(true)
                 .version(1)
             Shizuku.bindUserService(args, serviceConnection)
@@ -68,6 +69,7 @@ class ShizukuInjector(
         try {
             val component = ComponentName(context, HandyUserService::class.java)
             val args = Shizuku.UserServiceArgs(component)
+                .processNameSuffix("shizuku")
                 .daemon(true)
                 .version(1)
             Shizuku.unbindUserService(args, serviceConnection, true)

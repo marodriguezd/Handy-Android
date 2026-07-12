@@ -12,6 +12,7 @@ data class ModelInfo(
     val description: String?,
     val isDownloaded: Boolean,
     val isActive: Boolean,
+    val recommended: Boolean = false,
 ) {
     companion object {
         fun fromJsonArray(json: String): List<ModelInfo> {
@@ -31,6 +32,7 @@ data class ModelInfo(
                         description = obj.optString("description", null),
                         isDownloaded = obj.getBoolean("downloaded"),
                         isActive = obj.getBoolean("active"),
+                        recommended = obj.optBoolean("recommended", false),
                     )
                 )
             }

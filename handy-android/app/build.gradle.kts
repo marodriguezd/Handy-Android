@@ -69,18 +69,24 @@ val buildRust by tasks.registering(Exec::class) {
     val isRelease = gradle.startParameter.taskNames.any {
         it.contains("release", ignoreCase = true)
     }
-    val buildFlag = if (isRelease) "--release" else ""
-    commandLine(
-        "cargo", "ndk",
-        "--target", "aarch64-linux-android",
-        "--platform", "26",
-        "--",
-        "-p", "handy-core",
-        "build", buildFlag
-    )
+    environment("CARGO_NDK_LINK_LIBCXX_SHARED", "true")
+    val ndkDir = android.ndkDirectory.absolutePath
+    environment("ANDROID_NDK_HOME", ndkDir)
+    environment("CMAKE_TOOLCHAIN_FILE", "${ndkDir}/build/cmake/android.toolchain.cmake")
+    environment("TRANSCRIBE_CMAKE_ARGS", "-DGGML_NATIVE=OFF")
+    environment("CMAKE_ARGS", "-DCMAKE_TOOLCHAIN_FILE=${ndkDir}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DGGML_NATIVE=OFF")
+    if (isRelease) {
+        commandLine("cargo", "ndk", "--target", "aarch64-linux-android", "--platform", "26", "--link-libcxx-shared", "--", "build", "-p", "handy-core", "--release")
+    } else {
+        commandLine("cargo", "ndk", "--target", "aarch64-linux-android", "--platform", "26", "--link-libcxx-shared", "--", "build", "-p", "handy-core")
+    }
 }
 
-val rustLibFile = file("${rootDir}/handy-core/target/aarch64-linux-android/release/libhandy_core.so")
+val isRelease = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val buildProfile = if (isRelease) "release" else "debug"
+val rustLibFile = file("${rootDir}/handy-core/target/aarch64-linux-android/$buildProfile/libhandy_core.so")
 val jniLibDir = file("src/main/jniLibs/arm64-v8a")
 
 val copyRustLib by tasks.registering(Copy::class) {
@@ -89,9 +95,17 @@ val copyRustLib by tasks.registering(Copy::class) {
     into(jniLibDir)
 }
 
+val copyLibCxx by tasks.registering(Copy::class) {
+    description = "Copy libc++_shared.so from NDK into jniLibs"
+    val ndkDir = android.ndkDirectory
+    from("$ndkDir/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so")
+    into(jniLibDir)
+}
+
 tasks.whenTaskAdded {
     if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
         dependsOn(copyRustLib)
+        dependsOn(copyLibCxx)
     }
 }
 
