@@ -410,8 +410,8 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSaveHistory<
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     transcription_text: JString<'local>,
-    post_processed_text: JString<'local>,
-    wav_path: JString<'local>,
+    post_processed_text: JObject<'local>,
+    wav_path: JObject<'local>,
 ) {
     let text: String = match env.get_string(&transcription_text) {
         Ok(s) => s.into(),
@@ -420,10 +420,32 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSaveHistory<
             return;
         }
     };
+
+    let _post_processed: Option<String> = if post_processed_text.is_null() {
+        None
+    } else {
+        match env.get_string(&JString::from(post_processed_text)) {
+            Ok(s) => Some(s.into()),
+            Err(e) => {
+                warn!("nativeSaveHistory: invalid post_processed_text: {e}");
+                None
+            }
+        }
+    };
+
+    let _wav_path: Option<String> = if wav_path.is_null() {
+        None
+    } else {
+        match env.get_string(&JString::from(wav_path)) {
+            Ok(s) => Some(s.into()),
+            Err(e) => {
+                warn!("nativeSaveHistory: invalid wav_path: {e}");
+                None
+            }
+        }
+    };
+
     info!("nativeSaveHistory: {text} (stub)");
-    let _ = text;
-    let _ = post_processed_text;
-    let _ = wav_path;
 }
 
 #[no_mangle]

@@ -45,12 +45,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.getSystemService
+import com.handy.app.HandyApplication
 import com.handy.app.R
 import com.handy.app.viewmodel.EngineViewModel
 
 class HandyInputMethodService : InputMethodService() {
 
-    private val engineViewModel = EngineViewModel(application)
+    private val engineViewModel: EngineViewModel
+        get() = (application as HandyApplication).engineViewModel
 
     private var composeView: ComposeView? = null
     private var scope: CoroutineScope? = null
@@ -71,6 +73,9 @@ class HandyInputMethodService : InputMethodService() {
     override fun onDestroy() {
         super.onDestroy()
         scope?.cancel()
+        // engineViewModel.cleanup() is intentionally NOT called here.
+        // The engine is a process-wide singleton; destroying it on IME
+        // switch would kill the Rust core for the entire app.
     }
 
     override fun onCreateInputView(): View {

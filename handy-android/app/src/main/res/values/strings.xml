@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Handy</string>
+    <string name="dictation_button">Dictate</string>
+    <string name="stop_dictation">Stop</string>
+    <string name="switch_keyboard">Switch Keyboard</string>
+    <string name="text_copied_to_clipboard">Text copied to clipboard</string>
+    <string name="insert_text">Insert</string>
+    <string name="retry">Retry</string>
+    <string name="ime_label">Handy</string>
+    <string name="ime_subtype">Handy Dictation</string>
+    <string name="ime_settings">Handy Settings</string>
+    <string name="ime_enable_title">Enable Handy Keyboard</string>
+    <string name="ime_enable_message">To start dictating, enable Handy in your keyboard settings.</string>
+    <string name="ime_enable_action">Open Settings</string>
+    <string name="recording_notification_title">Handy Dictation</string>
+    <string name="recording_notification_text">Listening…</string>
 </resources>

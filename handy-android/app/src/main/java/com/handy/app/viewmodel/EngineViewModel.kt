@@ -37,6 +37,7 @@ class EngineViewModel(application: Application) : AndroidViewModel(application),
 
     private val modelsDir: File = File(application.filesDir, "models")
     private val configDir: File = application.filesDir
+    private var cleanedUp = false
 
     init {
         modelsDir.mkdirs()
@@ -47,6 +48,16 @@ class EngineViewModel(application: Application) : AndroidViewModel(application),
                 callback = this@EngineViewModel
             )
         }
+    }
+
+    /**
+     * Explicit cleanup for manual ViewModel lifecycle (IME, Application singleton).
+     * Idempotent — safe to call multiple times.
+     */
+    fun cleanup() {
+        if (cleanedUp) return
+        cleanedUp = true
+        EngineBridge.nativeDestroy()
     }
 
     // ── Public API ─────────────────────────────────────────────
@@ -109,8 +120,8 @@ class EngineViewModel(application: Application) : AndroidViewModel(application),
 
     override fun onCleared() {
         super.onCleared()
-        viewModelScope.launch(Dispatchers.IO) {
-            EngineBridge.nativeDestroy()
-        }
+        if (cleanedUp) return
+        cleanedUp = true
+        EngineBridge.nativeDestroy()
     }
 }
