@@ -1,10 +1,7 @@
 package com.handy.app.ime
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.inputmethodservice.InputMethodService
 import android.view.View
-import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,9 +41,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.getSystemService
 import com.handy.app.HandyApplication
 import com.handy.app.R
+import com.handy.app.injection.ImeInjector
+import com.handy.app.injection.InjectorRouter
 import com.handy.app.viewmodel.EngineViewModel
 
 class HandyInputMethodService : InputMethodService() {
@@ -54,28 +52,24 @@ class HandyInputMethodService : InputMethodService() {
     private val engineViewModel: EngineViewModel
         get() = (application as HandyApplication).engineViewModel
 
+    private val injectorRouter: InjectorRouter
+        get() = (application as HandyApplication).injectorRouter
+
+    private val imeInjector = ImeInjector { currentInputConnection }
+
     private var composeView: ComposeView? = null
     private var scope: CoroutineScope? = null
 
     override fun onCreate() {
         super.onCreate()
+        injectorRouter.setImeInjector(imeInjector)
         val job = Job()
         scope = CoroutineScope(Dispatchers.Main + job)
-        scope?.launch {
-            engineViewModel.finalText.collect { text ->
-                if (text != null) {
-                    commitTranscription(text)
-                }
-            }
-        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         scope?.cancel()
-        // engineViewModel.cleanup() is intentionally NOT called here.
-        // The engine is a process-wide singleton; destroying it on IME
-        // switch would kill the Rust core for the entire app.
     }
 
     override fun onCreateInputView(): View {
@@ -89,7 +83,9 @@ class HandyInputMethodService : InputMethodService() {
                     vadLevel = engineViewModel.vadLevel.collectAsState().value,
                     onStartDictation = { startDictation() },
                     onStopDictation = { stopDictation() },
-                    onCommitText = { commitTranscription(it) },
+                    onCommitText = { text ->
+                        scope?.launch { injectorRouter.inject(text) }
+                    },
                     onRetry = { engineViewModel.resetPartialText() },
                     onSwitchKeyboard = { switchToPreviousKeyboard() }
                 )
@@ -104,25 +100,6 @@ class HandyInputMethodService : InputMethodService() {
 
     override fun onFinishInput() {
         super.onFinishInput()
-        engineViewModel.finalText.value?.let { text ->
-            currentInputConnection?.commitText(text, 1)
-            currentInputConnection?.finishComposingText()
-        }
-    }
-
-    fun commitTranscription(text: String) {
-        val ic = currentInputConnection ?: run {
-            fallbackToClipboard(text)
-            return
-        }
-        ic.commitText(text, 1)
-        ic.finishComposingText()
-    }
-
-    private fun fallbackToClipboard(text: String) {
-        val clipboard = getSystemService<ClipboardManager>()
-        clipboard.setPrimaryClip(ClipData.newPlainText("Handy Dictation", text))
-        Toast.makeText(this, R.string.text_copied_to_clipboard, Toast.LENGTH_SHORT).show()
     }
 
     private fun startDictation() {

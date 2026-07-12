@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.handy.app.bridge.EngineBridge
 import com.handy.app.bridge.EngineCallback
+import com.handy.app.injection.InjectorRouter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,7 +13,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
-class EngineViewModel(application: Application) : AndroidViewModel(application), EngineCallback {
+class EngineViewModel(
+    application: Application,
+    val injectorRouter: InjectorRouter,
+) : AndroidViewModel(application), EngineCallback {
 
     companion object {
         const val STATE_IDLE = 0
@@ -50,10 +54,6 @@ class EngineViewModel(application: Application) : AndroidViewModel(application),
         }
     }
 
-    /**
-     * Explicit cleanup for manual ViewModel lifecycle (IME, Application singleton).
-     * Idempotent — safe to call multiple times.
-     */
     fun cleanup() {
         if (cleanedUp) return
         cleanedUp = true
@@ -87,6 +87,19 @@ class EngineViewModel(application: Application) : AndroidViewModel(application),
         _finalText.value = null
     }
 
+    fun testInject(text: String) {
+        _finalText.value = text
+        _state.value = STATE_CONFIRM
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = injectorRouter.inject(text)
+            if (result.isSuccess) {
+                _state.value = STATE_IDLE
+                _finalText.value = null
+                _partialText.value = ""
+            }
+        }
+    }
+
     // ── EngineCallback Implementation ──────────────────────────
 
     override fun onStateChange(state: Int) {
@@ -99,6 +112,14 @@ class EngineViewModel(application: Application) : AndroidViewModel(application),
         } else {
             _finalText.value = text
             _state.value = STATE_CONFIRM
+            viewModelScope.launch(Dispatchers.IO) {
+                val result = injectorRouter.inject(text)
+                if (result.isSuccess) {
+                    _state.value = STATE_IDLE
+                    _finalText.value = null
+                    _partialText.value = ""
+                }
+            }
         }
     }
 
@@ -111,11 +132,9 @@ class EngineViewModel(application: Application) : AndroidViewModel(application),
     }
 
     override fun onDownloadProgress(modelId: String, bytesSoFar: Long, totalBytes: Long) {
-        // handled by UI layer
     }
 
     override fun onDownloadComplete(modelId: String, success: Boolean, errorMsg: String?) {
-        // handled by UI layer
     }
 
     override fun onCleared() {

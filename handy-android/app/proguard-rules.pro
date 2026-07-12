@@ -18,6 +18,19 @@
 
 # ── General ──────────────────────────────────────────────────────
 
+# Shizuku — suppress hidden API warnings in our code
+-dontwarn android.os.ServiceManager
+-dontwarn android.hardware.input.IInputManager
+
+# Shizuku SDK
+-keep class moe.shizuku.api.** { *; }
+
+# HandyUserService AIDL — protect interface and generated inner classes
+-keep class com.handy.app.injection.IHandyUserService { *; }
+-keep class com.handy.app.injection.IHandyUserService$Stub { *; }
+-keep class com.handy.app.injection.IHandyUserService$Proxy { *; }
+-keep class com.handy.app.injection.HandyUserService { *; }
+
 # Keep Compose-related metadata
 -dontwarn androidx.compose.**
 -keep class androidx.compose.** { *; }

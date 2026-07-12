@@ -40,6 +40,20 @@
             android:foregroundServiceType="microphone"
             android:exported="false" />
 
+        <service
+            android:name=".injection.HandyUserService"
+            android:process=":shizuku"
+            android:exported="true"
+            android:permission="moe.shizuku.manager.permission.API_V23" />
+
+        <provider
+            android:name="moe.shizuku.api.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
     </application>
 
 </manifest>

@@ -1,7 +1,7 @@
 # Handy for Android — Master Technical Specification
 
-**Status:** Implementation in progress (Sprint 0 complete)  
-**Version:** 1.1.0  
+**Status:** Implementation in progress (Sprint 2 complete)  
+**Version:** 1.2.0  
 **Target:** Android 8.0+ (API 26), `targetSdk 35`  
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 
@@ -55,6 +55,9 @@ The following modules are ported with **zero or minimal code changes** from the 
 - **ProGuard rules** (`app/proguard-rules.pro`) — JNI class/method name preservation for release builds
 - **RecordingService stub** — Declared in manifest, ready for Sprint 1 Foreground Service logic
 - **String resources** — All IME UI strings mapped in `res/values/strings.xml` (16 resources)
+- **Power-User injection system** — Strategy pattern (`InjectorRouter`) with three strategies: `ShizukuInjector` (UID 2000 shell-level injection via AIDL IPC), `ImeInjector` (InputConnection.commitText()), and `ClipboardInjector` (clipboard fallback with Toast). Strategy selection is automatic based on Shizuku availability and user preference (`SettingsStore.shizukuEnabled`).
+- **AIDL IPC bridge** — `IHandyUserService.aidl` defining `getInputServiceBinder()` method. `HandyUserService` runs in process `:shizuku` (UID 2000) via `Shizuku.bindUserService()`, bypassing Android 14/15 Core Platform API reflection restrictions. The `getInputServiceBinder()` call uses `ServiceManager.getService("input")` without hidden API errors.
+- **ProGuard rules for AIDL** — Explicit keep rules for `IHandyUserService`, `IHandyUserService$Stub`, `IHandyUserService$Proxy`, and `HandyUserService` to prevent R8 obfuscation of the generated IPC deserialization code.
 
 ---
 
@@ -214,15 +217,30 @@ USER ACTION: Tap dictation button in IME / Tap notification action / Press volum
               → Kotlin: callback.onTranscription(finalText, isPartial = false)
     │
     ▼
-[10] Kotlin: IME text injection
+[10] Kotlin: Text injection (InjectorRouter)
     │
-    │   HandyInputMethodService:
-    │     currentInputConnection?.commitText(finalText, 1)
-    │     currentInputConnection?.finishComposingText()
+    │   EngineViewModel.onTranscription(finalText, false):
+    │     └── viewModelScope.launch(Dispatchers.IO) {
+    │           injectorRouter.inject(text)
+    │               │
+    │               ├── ShizukuInjector (if enabled + available):
+    │               │     clipboard.setPrimaryClip(text)
+    │               │     delay(50ms)
+    │               │     HandyUserService.getInputServiceBinder()   ← IPC UID 2000
+    │               │     ShizukuBinderWrapper + IInputManager.proxy
+    │               │     KEYCODE_PASTE (279) DOWN + UP
+    │               │
+    │               ├── ImeInjector (if IME active):
+    │               │     currentInputConnection?.commitText(text, 1)
+    │               │     currentInputConnection?.finishComposingText()
+    │               │
+    │               └── ClipboardInjector (fallback):
+    │                     clipboardManager.setPrimaryClip(ClipData.newPlainText(...))
+    │                     Toast: "Text copied to clipboard"
+    │       }
     │
-    │   Fallback (IME not active):
-    │     clipboardManager.setPrimaryClip(ClipData.newPlainText("", finalText))
-    │     Show notification: "Text copied — switch to Handy IME to paste"
+    │   On success → EngineViewModel resets to STATE_IDLE
+    │   On failure → Router cascades to next strategy
     │
     ▼
 [11] Kotlin: Save to history
@@ -664,16 +682,32 @@ Instead:
 
 ```proguard
 # app/proguard-rules.pro — CRITICAL for release builds
+#
+# JNI classes (Kotlin ↔ Rust)
 -keep class com.handy.app.bridge.EngineBridge {
     native <methods>;
     <init>();
 }
 -keep interface com.handy.app.bridge.EngineCallback { *; }
 -keep class * implements com.handy.app.bridge.EngineCallback { *; }
+
+# Shizuku — suppress hidden API warnings in our code
+-dontwarn android.os.ServiceManager
+-dontwarn android.hardware.input.IInputManager
+
+# Shizuku SDK API
+-keep class moe.shizuku.api.** { *; }
+
+# AIDL IPC inner classes (ShizukuUserService deserialization)
+-keep class com.handy.app.injection.IHandyUserService { *; }
+-keep class com.handy.app.injection.IHandyUserService$Stub { *; }
+-keep class com.handy.app.injection.IHandyUserService$Proxy { *; }
+-keep class com.handy.app.injection.HandyUserService { *; }
 ```
 
-Without these rules, R8 obfuscation renames `onTranscription`, `onStateChange`, etc.,
-causing `JNIEnv::call_method` to fail with `NoSuchMethodError` at runtime.
+Without these rules, R8 obfuscation renames JNI callbacks and AIDL inner classes,
+causing `JNIEnv::call_method` to fail with `NoSuchMethodError` at runtime,
+and `IHandyUserService.Stub.asInterface()` to crash with `ClassNotFoundException`.
 
 ### 4.1 Audio Pipeline Specification
 
@@ -924,6 +958,193 @@ Actions:
 - **Start Dictation:** Calls `RecordingService.startRecording()`. The text appears in the notification until the user switches to Handy IME to commit it.
 - **Switch Keyboard:** Opens `Settings.ACTION_INPUT_METHOD_SETTINGS` so the user can enable Handy IME.
 
+### 5.7 Power-User Injection: Strategy Pattern
+
+The `InjectorRouter` (in `com.handy.app.injection`) implements a Strategy pattern to
+automatically select the best text injection method based on Shizuku availability,
+IME state, and user preferences:
+
+```kotlin
+// InjectorRouter.selectStrategy()
+private fun selectStrategy(): InjectorStrategy = when {
+    settingsStore.shizukuEnabled && shizukuInjector.isAvailable() -> shizukuInjector
+    imeInjector.isAvailable() -> imeInjector
+    else -> clipboardInjector
+}
+```
+
+**Strategy hierarchy:**
+
+| Priority | Strategy | Class | Mechanism | Requirements |
+|----------|----------|-------|-----------|-------------|
+| 1 (best) | Shizuku (UID 2000) | `ShizukuInjector` | Clipboard copy + KEYCODE_PASTE (279) via `IInputManager.injectInputEvent()` through Shizuku IPC | Shizuku APK installed + service running + permission granted + `shizukuEnabled` setting |
+| 2 | IME | `ImeInjector` | `InputConnection.commitText(text, 1)` + `finishComposingText()` on `Dispatchers.Main` | Handy is the active IME + `currentInputConnection != null` |
+| 3 (fallback) | Clipboard | `ClipboardInjector` | `ClipboardManager.setPrimaryClip()` + Toast | Always available |
+
+**Cascade on failure:**
+```
+Shizuku fails (DeadObjectException, SecurityException, timeout)
+  → Router logs error + exception, falls through
+  → IME fails (InputConnection null)
+    → Router logs error, falls through
+    → ClipboardInjector (always succeeds)
+```
+
+All strategies communicate results via `Result<Unit>`. Failed strategies do not
+mask successful fallbacks: if Shizuku fails but clipboard succeeds, the caller
+receives `Result.success`.
+
+#### 5.7.1 InjectorRouter Integration
+
+The `InjectorRouter` is created in `HandyApplication` as a process-wide singleton
+and injected into `EngineViewModel`:
+
+```kotlin
+// HandyApplication.kt
+val injectorRouter: InjectorRouter by lazy {
+    InjectorRouter(
+        shizukuInjector = shizukuInjector,
+        clipboardInjector = clipboardInjector,
+        settingsStore = settingsStore,
+    )
+}
+
+val engineViewModel: EngineViewModel by lazy {
+    EngineViewModel(this, injectorRouter)
+}
+```
+
+The `HandyInputMethodService` registers an `ImeInjector` at `onCreate()` via
+`injectorRouter.setImeInjector(ImeInjector { currentInputConnection })`, replacing
+the default stub (`ImeInjector { null }`).
+
+#### 5.7.2 State Reset on Successful Injection
+
+When `EngineViewModel.onTranscription(text, false)` fires:
+1. `_finalText.value = text` and `_state.value = STATE_CONFIRM` are set first
+2. A coroutine in `viewModelScope.launch(Dispatchers.IO)` calls `router.inject(text)`
+3. If the result is success:
+   - `_state.value = STATE_IDLE`
+   - `_finalText.value = null`
+   - `_partialText.value = ""`
+4. This prevents the IME from showing a stale ConfirmMode with "Insert" button
+   after the text has already been delivered
+
+### 5.8 ShizukuUserService — AIDL IPC Architecture
+
+The hidden API restriction in Android 14+ (Core Platform API blockade) prevents
+calling `ServiceManager.getService("input")` from app process. To bypass this,
+the reflection call is delegated to a `HandyUserService` running in Shizuku's
+process (UID 2000).
+
+#### 5.8.1 AIDL Interface
+
+```
+// IHandyUserService.aidl
+package com.handy.app.injection;
+
+interface IHandyUserService {
+    IBinder getInputServiceBinder();
+}
+```
+
+The AIDL compiler generates `IHandyUserService.java` with `Stub` (extends `Binder`,
+used by the service) and `Proxy` (used by the client via `asInterface()`).
+
+#### 5.8.2 Service Implementation
+
+```kotlin
+// HandyUserService.kt — runs in process :shizuku (UID 2000)
+class HandyUserService : Service() {
+    private val binder = object : IHandyUserService.Stub() {
+        override fun getInputServiceBinder(): IBinder {
+            // Shizuku UID 2000 context — no hidden API restriction
+            val smClass = Class.forName("android.os.ServiceManager")
+            val getSvc = smClass.getDeclaredMethod("getService", String::class.java)
+            return getSvc.invoke(null, "input") as IBinder
+        }
+    }
+    override fun onBind(intent: Intent?): IBinder? = binder
+}
+```
+
+#### 5.8.3 Manifest Declaration
+
+```xml
+<service
+    android:name=".injection.HandyUserService"
+    android:process=":shizuku"
+    android:exported="true"
+    android:permission="moe.shizuku.manager.permission.API_V23" />
+```
+
+- `process=":shizuku"` — runs in a process managed by Shizuku server (UID 2000)
+- `permission="moe.shizuku.manager.permission.API_V23"` — only apps holding
+  Shizuku's signature-level permission can bind to this service
+
+#### 5.8.4 Client-Side Binding
+
+```kotlin
+// ShizukuInjector.kt
+@Volatile
+private var userService: IHandyUserService? = null
+
+private val serviceConnection = object : Shizuku.UserServiceConnection {
+    override fun onServiceConnected(component: ComponentName, binder: IBinder) {
+        userService = IHandyUserService.Stub.asInterface(binder)
+    }
+    override fun onServiceDisconnected(component: ComponentName) {
+        userService = null
+    }
+}
+
+fun bindService() {
+    val component = ComponentName(context, HandyUserService::class.java)
+    Shizuku.bindUserService(component, serviceConnection)
+}
+```
+
+#### 5.8.5 Injection Pipeline
+
+```
+ShizukuInjector.inject(text):
+  1. clipboard.setPrimaryClip(text)
+  2. delay(50ms)                  ← clipboard propagation
+  3. val inputBinder = userService.getInputServiceBinder()
+       └── IPC → HandyUserService (UID 2000)
+             └── ServiceManager.getService("input")
+  4. val wrapper = ShizukuBinderWrapper(inputBinder)
+       └── All transact() calls forwarded through Shizuku (UID 2000)
+  5. val inputManager = IInputManager.Stub.asInterface(wrapper)
+  6. injectMethod.invoke(inputManager, KEYCODE_PASTE DOWN, 0)
+  7. delay(10ms)
+  8. injectMethod.invoke(inputManager, KEYCODE_PASTE UP, 0)
+```
+
+#### 5.8.6 Thread Safety
+
+| Component | Thread | Protection |
+|-----------|--------|------------|
+| `userService` (AIDL proxy) | Written on binder thread (`onServiceConnected`), read on IO dispatcher (`inject`) | `@Volatile` annotation ensures happens-before across threads |
+| `inject()` body | `withContext(Dispatchers.IO)` prevents blocking the main thread | Coroutine-safe; `Thread.sleep(10)` replaced by `delay(10)` |
+| `ImeInjector.commitText()` | `withContext(Dispatchers.Main)` ensures `InputConnection` operations on UI thread | Prevents ANR/jank from binder call on IO thread |
+| Clipboard `setPrimaryClip()` | Runs on IO dispatcher | `setPrimaryClip()` is unrestricted on all Android API levels |
+
+### 5.9 Settings Persistence
+
+```kotlin
+// SettingsStore.kt
+class SettingsStore(context: Context) {
+    var shizukuEnabled: Boolean
+        get() = prefs.getBoolean("shizuku_enabled", false)
+        set(value) = prefs.edit().putBoolean("shizuku_enabled", value).apply()
+}
+```
+
+Gated behind a developer toggle (default `false`). When enabled AND Shizuku is
+available, the `InjectorRouter` selects `ShizukuInjector` with highest priority.
+When disabled or unavailable, the standard IME/clipboard flow is used.
+
 ---
 
 ## 6. Execution Roadmap
@@ -950,6 +1171,31 @@ Actions:
 
 **Milestone achieved:** 23 source files, 1,635+ lines of code. Rust compiles clean (`cargo check`),
 Gradle project structure valid, JNI bridge functional (stubs ready for real implementation in Sprint 1).
+
+### Sprint 2 — Power-User Shizuku Injection ✅ COMPLETED
+
+**Goal:** Direct text injection via Shizuku (UID 2000) with automatic fallback chain.
+Bypass Android 14/15 hidden API restrictions via AIDL IPC bridge.
+
+| # | Task | Status | Deliverable |
+|---|---|---|---|
+| 2.0 | `InjectorStrategy` interface + 3 implementations (Shizuku, IME, Clipboard) | ✅ | Strategy pattern in `com.handy.app.injection` |
+| 2.1 | `InjectorRouter` with automatic strategy selection and cascading fallback | ✅ | Router integrated into `EngineViewModel` |
+| 2.2 | `ShizukuInjector`: clipboard copy + `KeyEvent.KEYCODE_PASTE` via `IInputManager.injectInputEvent()` through Shizuku UID 2000 | ✅ | Text injected into active app via paste shortcut |
+| 2.3 | `ImeInjector`: wraps `InputConnection.commitText()` inside `withContext(Dispatchers.Main)` | ✅ | Thread-safe IME injection |
+| 2.4 | `ClipboardInjector`: clipboard fallback with Toast | ✅ | Last-resort delivery always works |
+| 2.5 | `IHandyUserService.aidl` + `HandyUserService` (AIDL IPC running in process `:shizuku`, UID 2000) | ✅ | ServiceManager reflection moved to UID 2000, bypassing API 34+ hidden API restrictions |
+| 2.6 | `Shizuku.bindUserService()` async binding with `@Volatile` proxy reference | ✅ | Safe race-condition handling (null check + fallback) |
+| 2.7 | Binder death recovery: `onServiceDisconnected` → `userService = null` → `isAvailable()` false → router falls back | ✅ | Graceful recovery from Shizuku process death |
+| 2.8 | Manifest security: `android:permission="moe.shizuku.manager.permission.API_V23"` on `HandyUserService` | ✅ | No unauthorized app can bind to the service |
+| 2.9 | ProGuard rules for AIDL `$Stub`/`$Proxy` inner classes | ✅ | Release builds protected against R8 obfuscation of IPC deserialization |
+| 2.10 | State reset on successful injection: auto-return to `STATE_IDLE` after injection completes | ✅ | No double-insertion via stale ConfirmMode button |
+| 2.11 | `SettingsStore.shizukuEnabled` gate (developer toggle, default false) | ✅ | No Shizuku dependency for core dictation flow |
+
+**Milestone achieved:** 6 new files (AIDL interface, 4 injection strategies, router, user service, settings store).
+11 modified files (build config, manifest, ProGuard, DI, ViewModel, IME, MainActivity, strings).
+Hidden API reflection blockade on API 34+ bypassed via ShizukuUserService AIDL IPC.
+Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 
 ### Phase 1 — Audio Capture and STT Pipeline (Weeks 3-5)
 
@@ -1050,17 +1296,27 @@ handy-android/
 │       │   │   └── EngineCallback.kt     # Callback interface ✅
 │       │   ├── ime/
 │       │   │   └── HandyInputMethodService.kt  # IME + Compose 3-mode UI ✅
-│       │   ├── service/
-│       │   │   └── RecordingService.kt   # Foreground Service (stub) ✅
-│       │   ├── viewmodel/
-│       │   │   └── EngineViewModel.kt    # Shared state + cleanup() ✅
-│       │   ├── ui/                       # TODO: Sprint 3
-│       │   │   ├── theme/
-│       │   │   ├── settings/
-│       │   │   ├── models/
-│       │   │   ├── history/
-│       │   │   └── onboarding/
-│       │   └── di/                       # TODO: Sprint 3 (Koin/Hilt deferred)
+│   │   ├── service/
+│   │   │   └── RecordingService.kt   # Foreground Service (stub) ✅
+│   │   ├── viewmodel/
+│   │   │   └── EngineViewModel.kt    # Shared state + cleanup() ✅
+│   │   ├── injection/
+│   │   │   ├── InjectorStrategy.kt   # Strategy interface ✅
+│   │   │   ├── ShizukuInjector.kt    # UID 2000 key-event injection ✅
+│   │   │   ├── ImeInjector.kt        # InputConnection.commitText() ✅
+│   │   │   ├── ClipboardInjector.kt  # Clipboard fallback ✅
+│   │   │   ├── InjectorRouter.kt     # Strategy selector + cascade ✅
+│   │   │   └── HandyUserService.kt   # AIDL IPC service (UID 2000) ✅
+│   │   ├── SettingsStore.kt          # SharedPreferences toggle ✅
+│   │   ├── ui/                       # TODO: Sprint 3
+│   │   │   ├── theme/
+│   │   │   ├── settings/
+│   │   │   ├── models/
+│   │   │   ├── history/
+│   │   │   └── onboarding/
+│   │   └── di/                       # TODO: Sprint 3 (Koin/Hilt deferred)
+│   ├── aidl/com/handy/app/injection/
+│   │   └── IHandyUserService.aidl    # AIDL interface for UID 2000 IPC ✅
 │       ├── res/
 │       │   ├── values/
 │       │   │   ├── strings.xml          # 16 IME + app strings ✅
