@@ -11,6 +11,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.handy.app.bridge.EngineBridge
 import com.handy.app.injection.ClipboardInjector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.injection.ShizukuInjector
@@ -19,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import io.sentry.android.core.SentryAndroid
 import moe.shizuku.api.Shizuku
 
 class HandyApplication : Application(), ComponentCallbacks2 {
@@ -51,6 +53,9 @@ class HandyApplication : Application(), ComponentCallbacks2 {
 
     override fun onCreate() {
         super.onCreate()
+        SentryAndroid.init(this) { options ->
+            options.dsn = BuildConfig.SENTRY_DSN
+        }
         Shizuku.initialize(this)
         Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
             if (grantResult == Shizuku.PERMISSION_GRANTED) {

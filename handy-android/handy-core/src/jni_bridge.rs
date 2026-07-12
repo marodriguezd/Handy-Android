@@ -25,7 +25,7 @@ where
 {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
         // Try to get attached env for error dispatch
-        let attached = get_env_attached();
+        let _attached = get_env_attached();
         f(env)
     }));
     match result {
@@ -59,6 +59,7 @@ pub(crate) fn get_env_attached() -> Result<jni::JNIEnv<'static>, jni::errors::Er
     jvm.attach_current_thread_as_daemon()
 }
 
+#[allow(dead_code)]
 /// Helper that calls with_engine inside a panic-safe guard.
 pub(crate) fn with_engine_guard<F, R>(f: F) -> R
 where
@@ -548,9 +549,7 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDownloadMode
                         success,
                         error.as_deref(),
                     );
-                    if success {
-                        let _ = env.call_method(cb2.as_obj(), "refreshModels", "()V", &[]);
-                    }
+
                 }
             };
 

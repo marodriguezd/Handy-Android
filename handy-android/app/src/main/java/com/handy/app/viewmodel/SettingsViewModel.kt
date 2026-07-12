@@ -2,6 +2,7 @@ package com.handy.app.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.handy.app.SettingsStore
 import com.handy.app.model.AppSettings
 import kotlinx.coroutines.Job

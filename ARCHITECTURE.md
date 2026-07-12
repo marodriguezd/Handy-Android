@@ -1380,7 +1380,7 @@ handy-android/
 │   │   └── IHandyUserService.aidl    # AIDL interface for UID 2000 IPC ✅
 │       ├── res/
 │       │   ├── values/
-│       │   │   ├── strings.xml          # 121 IME + app + Sprint 3–5 strings ✅
+│       │   │                   ├── strings.xml          # 124 IME + app + Sprint 3–6 strings ✅
 │       │   │   ├── themes.xml           # Material3 NoActionBar ✅
 │       │   │   └── colors.xml
 │       │   └── xml/
@@ -1395,11 +1395,12 @@ handy-android/
 │   ├── Cargo.toml                        # ✅ jni, log, serde, aaudio-sys, rubato, rusqlite, reqwest, tokio, hound, chrono, uuid, transcribe-cpp 0.1.3
 │   ├── build.rs                          # Links OpenSLES on Android
 │   ├── Cargo.lock
-│   └── src/                              # 3,125 lines total (18 files) ✅ Sprint 5
+│   └── src/                              # ~3,300 lines total (19 files, +idle_watcher) ✅ Sprint 6
 │       ├── lib.rs                        # JNI_OnLoad, JavaVM storage ✅
-│       ├── engine.rs                     # EngineState (77 loc) — 4 managers ✅ Sprint 4
-│       ├── jni_bridge.rs                 # 21 JNI functions (695 loc) — ALL REAL ✅ Sprint 4
+│       ├── engine.rs                     # EngineState (79 loc) — 4 managers + idle_watcher ✅ Sprint 6
+│       ├── jni_bridge.rs                 # 22 JNI functions (805 loc) — catch_unwind + idle watcher + OOM ✅ Sprint 6
 │       ├── jni_callback.rs               # 6 dispatch helpers (132 loc) ✅
+│       ├── idle_watcher.rs               # IdleWatcher (88 loc) — background model unload ✅ Sprint 6
 │       ├── audio/                        # ✅ Sprint 4 (711 loc)
 │       │   ├── mod.rs                    # Module declarations
 │       │   ├── capture.rs                # AAudio wrapper via aaudio-sys FFI
@@ -1427,9 +1428,11 @@ handy-android/
 ├── gradle/
 │   ├── wrapper/
 │   │   └── gradle-wrapper.properties     # ✅
-│   └── libs.versions.toml                # TODO (dependencies hardcoded in build.gradle.kts)
+│   └── libs.versions.toml                # Version catalog (Compose, Shizuku, Sentry, coroutines) ✅ Sprint 6
 ├── ARCHITECTURE.md                       # This document
-└── README.md                             # TODO
+├── README.md                             # Android build instructions ✅ Sprint 6
+├── KEYSTORE.md                           # Release keystore generation guide ✅ Sprint 6
+└── CHANGELOG.md                          # v1.0.0-alpha1 release notes ✅ Sprint 6
 ```
 
 ## Appendix B: Key Constraints and Non-Negotiables

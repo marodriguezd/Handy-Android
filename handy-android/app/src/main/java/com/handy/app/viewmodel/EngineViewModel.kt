@@ -227,6 +227,7 @@ class EngineViewModel(
                 error = errorMsg.takeUnless { success },
             )
         )
+        if (success) refreshModels()
     }
 
     override fun onCleared() {
