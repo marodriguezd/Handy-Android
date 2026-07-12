@@ -13,7 +13,98 @@
     <string name="ime_enable_title">Enable Handy Keyboard</string>
     <string name="ime_enable_message">To start dictating, enable Handy in your keyboard settings.</string>
     <string name="ime_enable_action">Open Settings</string>
-    <string name="recording_notification_title">Handy Dictation</string>
-    <string name="recording_notification_text">Listening…</string>
+    <string name="recording_channel_name">Recording</string>
+    <string name="recording_channel_description">Microphone recording notification</string>
+    <string name="recording_notification_title">Dictating…</string>
+    <string name="recording_notification_text">Listening</string>
+    <string name="recording_stop_action">Stop</string>
     <string name="test_injection_button">Test Text Injection</string>
+
+    <!-- Models Screen -->
+    <string name="models_title">Models</string>
+    <string name="models_empty">No models available</string>
+    <string name="models_download">Download</string>
+    <string name="models_cancel">Cancel Download</string>
+    <string name="models_delete">Delete</string>
+    <string name="models_use">Set Active</string>
+    <string name="models_active">Active</string>
+    <string name="models_downloading">Downloading…</string>
+    <string name="models_refresh">Refresh</string>
+    <string name="models_confirm_delete">Delete this model?</string>
+    <string name="models_confirm_delete_message">You will need to download it again to use it.</string>
+    <string name="models_retry">Retry</string>
+    <string name="models_size_warning">Large Model</string>
+    <string name="models_size_warning_message">This model may use significant memory. Continue?</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_audio">Audio</string>
+    <string name="settings_idle_timeout">Idle Timeout</string>
+    <string name="settings_idle_timeout_never">Never</string>
+    <string name="settings_injection">Text Injection</string>
+    <string name="settings_shizuku">Shizuku Injection</string>
+    <string name="settings_shizuku_description">Requires Shizuku app. Enables direct text paste in any app.</string>
+    <string name="settings_shizuku_dialog_title">Shizuku Required</string>
+    <string name="settings_shizuku_dialog_message">Shizuku injection requires the Shizuku app to be installed and running. Please install Shizuku from the official source, enable it in developer settings, and grant permission.</string>
+    <string name="settings_switch_keyboard">Switch Keyboard</string>
+    <string name="settings_switch">Switch</string>
+    <string name="settings_postproc">Post-Processing</string>
+    <string name="settings_llm_endpoint">LLM Endpoint</string>
+    <string name="settings_api_key">API Key</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_licenses">Open Source Licenses</string>
+    <string name="settings_licenses_text">Licensed under Apache 2.0 and MIT.</string>
+
+    <!-- History Screen -->
+    <string name="history_title">History</string>
+    <string name="history_empty">No transcriptions yet. Start dictating to see your history here.</string>
+    <string name="history_load_more">Load More</string>
+    <string name="history_delete_confirm">Delete this transcription?</string>
+    <string name="history_delete_confirm_message">This action cannot be undone.</string>
+    <string name="history_show_more">Show more</string>
+    <string name="history_show_less">Show less</string>
+    <string name="history_post_processed">Post-processed</string>
+
+    <!-- Onboarding Screen -->
+    <string name="onboarding_welcome_title">Handy Dictation</string>
+    <string name="onboarding_welcome_subtitle">Offline voice-to-text on your device. Private, fast, and free.</string>
+    <string name="onboarding_get_started">Get Started</string>
+    <string name="onboarding_skip_all">Skip All</string>
+    <string name="onboarding_skip">Skip for now</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_mic_title">Microphone Access</string>
+    <string name="onboarding_mic_body">Handy needs your microphone to hear you. All audio processing happens 100%% on-device. Nothing is ever uploaded.</string>
+    <string name="onboarding_grant">Grant Permission</string>
+    <string name="onboarding_permission_granted">Permission granted</string>
+    <string name="onboarding_ime_title">Enable Handy Keyboard</string>
+    <string name="onboarding_ime_body">To type with your voice in any app, enable Handy as an input method.</string>
+    <string name="onboarding_ime_open">Open Keyboard Settings</string>
+    <string name="onboarding_model_title">Download Speech Model</string>
+    <string name="onboarding_model_body">Handy needs a language model to transcribe your speech. Recommended: Whisper Small (~500 MB).</string>
+    <string name="onboarding_model_download">Download Recommended Model</string>
+    <string name="onboarding_model_ready">Model ready!</string>
+    <string name="onboarding_ready_title">You\'re All Set!</string>
+    <string name="onboarding_ready_body">Start dictating anywhere by switching to the Handy keyboard. Tap the microphone button to begin.</string>
+    <string name="onboarding_start">Start Using Handy</string>
+    <string name="onboarding_continue_anyway">Continue anyway</string>
+
+    <!-- Dictation Screen -->
+    <string name="dictation_title">Dictation</string>
+    <string name="dictation_start">Start Dictation</string>
+    <string name="dictation_stop">Stop</string>
+    <string name="dictation_placeholder">Tap the mic to start dictating…</string>
+    <string name="state_idle">Idle</string>
+    <string name="state_loading">Loading Model</string>
+    <string name="state_listening">Listening</string>
+    <string name="state_transcribing">Transcribing</string>
+    <string name="state_error">Error</string>
+    <string name="dictation_tab">Dictation</string>
+
+    <!-- Common Dialogs -->
+    <string name="dialog_confirm">Confirm</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_delete">Delete</string>
 </resources>

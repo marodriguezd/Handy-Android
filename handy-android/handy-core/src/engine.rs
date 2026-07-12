@@ -1,5 +1,10 @@
+use crate::audio::pipeline::AudioPipeline;
+use crate::history::manager::HistoryManager;
+use crate::model::manager::ModelManager;
+use crate::transcription::engine::TranscriptionEngine;
 use jni::objects::GlobalRef;
 use jni::JavaVM;
+use log::warn;
 use std::sync::{Mutex, OnceLock};
 
 pub struct EngineState {
@@ -11,12 +16,23 @@ pub struct EngineState {
     pub idle_timeout_secs: u32,
     pub post_process_endpoint: Option<String>,
     pub post_process_api_key: Option<String>,
+    pub audio_pipeline: AudioPipeline,
+    pub transcription_engine: TranscriptionEngine,
+    pub model_manager: ModelManager,
+    pub history_manager: HistoryManager,
+    pub worker_id: Option<u64>,
 }
 
 impl EngineState {
     pub fn new(model_dir: String, config_dir: String, callback: GlobalRef) -> Self {
+        let history_path = format!("{}/history.db", config_dir);
+        let history_manager = HistoryManager::new(&history_path).unwrap_or_else(|e| {
+            warn!("History init failed: {e}");
+            panic!("{}", e);
+        });
+
         Self {
-            model_dir,
+            model_dir: model_dir.clone(),
             config_dir,
             callback,
             model_loaded: false,
@@ -24,6 +40,11 @@ impl EngineState {
             idle_timeout_secs: 30,
             post_process_endpoint: None,
             post_process_api_key: None,
+            audio_pipeline: AudioPipeline::new(),
+            transcription_engine: TranscriptionEngine::new(),
+            model_manager: ModelManager::new(&model_dir),
+            history_manager,
+            worker_id: None,
         }
     }
 

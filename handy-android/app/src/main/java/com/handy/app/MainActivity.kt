@@ -3,56 +3,62 @@ package com.handy.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.handy.app.viewmodel.EngineViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.handy.app.di.ViewModelFactory
+import com.handy.app.navigation.AppNavigation
+import com.handy.app.ui.dictation.DictationScreen
+import com.handy.app.ui.history.HistoryScreen
+import com.handy.app.ui.models.ModelCatalogScreen
+import com.handy.app.ui.onboarding.OnboardingScreen
+import com.handy.app.ui.settings.SettingsScreen
+import com.handy.app.ui.theme.HandyTheme
+import com.handy.app.viewmodel.HistoryViewModel
+import com.handy.app.viewmodel.ModelsViewModel
+import com.handy.app.viewmodel.OnboardingViewModel
+import com.handy.app.viewmodel.SettingsViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
-            val vm = remember { (application as HandyApplication).engineViewModel }
             val app = remember { (application as HandyApplication) }
 
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Handy - Power User Test",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(onClick = {
-                        vm.testInject("Hello! This is a test transcription from Handy.")
-                    }) {
-                        Text("Test Text Injection")
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(onClick = {
-                        app.shizukuInjector.requestPermissionIfNeeded(this@MainActivity)
-                    }) {
-                        Text("Grant Shizuku Permission")
-                    }
-                }
+            HandyTheme {
+                AppNavigation(
+                    onboardingCompleted = app.settingsStore.onboardingCompleted,
+                    onboardingContent = { onComplete ->
+                        val vm: OnboardingViewModel = viewModel(
+                            factory = ViewModelFactory.create(app)
+                        )
+                        OnboardingScreen(
+                            viewModel = vm,
+                            onComplete = onComplete,
+                        )
+                    },
+                    dictationContent = {
+                        DictationScreen(engineViewModel = app.engineViewModel)
+                    },
+                    modelsContent = {
+                        val vm: ModelsViewModel = viewModel(
+                            factory = ViewModelFactory.create(app)
+                        )
+                        ModelCatalogScreen(viewModel = vm)
+                    },
+                    settingsContent = {
+                        val vm: SettingsViewModel = viewModel(
+                            factory = ViewModelFactory.create(app)
+                        )
+                        SettingsScreen(viewModel = vm)
+                    },
+                    historyContent = {
+                        val vm: HistoryViewModel = viewModel(
+                            factory = ViewModelFactory.create(app)
+                        )
+                        HistoryScreen(viewModel = vm)
+                    },
+                )
             }
         }
     }

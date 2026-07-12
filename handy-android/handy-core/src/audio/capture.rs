@@ -1,0 +1,195 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+#[derive(thiserror::Error, Debug)]
+pub enum CaptureError {
+    #[error("AAudio error: {0}")]
+    Aaudio(String),
+    #[error("Stream already open")]
+    AlreadyOpen,
+    #[error("Stream not open")]
+    NotOpen,
+    #[error("Callback error: {0}")]
+    Callback(String),
+}
+
+pub struct AudioCapture {
+    stream_ptr: Option<*mut aaudio_sys::AAudioStream>,
+    callback_ptr: Option<*mut std::ffi::c_void>,
+    running: Arc<AtomicBool>,
+}
+
+unsafe impl Send for AudioCapture {}
+
+impl AudioCapture {
+    pub fn new() -> Self {
+        Self {
+            stream_ptr: None,
+            callback_ptr: None,
+            running: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn set_callback<F>(&mut self, cb: F)
+    where
+        F: FnMut(&[f32]) + Send + 'static,
+    {
+        if let Some(old) = self.callback_ptr.take() {
+            let _ = unsafe { Box::from_raw(old as *mut Box<dyn FnMut(&[f32]) + Send>) };
+        }
+        self.callback_ptr = Some(
+            Box::into_raw(Box::new(Box::new(cb) as Box<dyn FnMut(&[f32]) + Send>))
+                as *mut std::ffi::c_void,
+        );
+    }
+
+    pub fn start(&mut self) -> Result<(), CaptureError> {
+        if self.stream_ptr.is_some() {
+            return Err(CaptureError::AlreadyOpen);
+        }
+
+        let user_data = self
+            .callback_ptr
+            .ok_or_else(|| CaptureError::Callback("No callback set".to_string()))?;
+
+        let mut builder_ptr: *mut aaudio_sys::AAudioStreamBuilder = std::ptr::null_mut();
+        let result = unsafe { aaudio_sys::AAudio_createStreamBuilder(&mut builder_ptr) };
+        if result != aaudio_sys::OK {
+            return Err(CaptureError::Aaudio(format!(
+                "AAudio_createStreamBuilder failed: {}",
+                result
+            )));
+        }
+
+        unsafe {
+            aaudio_sys::AAudioStreamBuilder_setDirection(
+                builder_ptr,
+                aaudio_sys::DIRECTION_INPUT,
+            );
+            aaudio_sys::AAudioStreamBuilder_setSharingMode(
+                builder_ptr,
+                aaudio_sys::SHARING_SHARED,
+            );
+            aaudio_sys::AAudioStreamBuilder_setFormat(
+                builder_ptr,
+                aaudio_sys::FORMAT_PCM_FLOAT,
+            );
+            aaudio_sys::AAudioStreamBuilder_setSampleRate(builder_ptr, 16000);
+            aaudio_sys::AAudioStreamBuilder_setChannelCount(builder_ptr, 1);
+            aaudio_sys::AAudioStreamBuilder_setDataCallback(
+                builder_ptr,
+                Some(Self::data_callback_thunk),
+                user_data,
+            );
+            aaudio_sys::AAudioStreamBuilder_setErrorCallback(
+                builder_ptr,
+                Some(Self::error_callback_thunk),
+                user_data,
+            );
+        }
+
+        let mut stream_ptr: *mut aaudio_sys::AAudioStream = std::ptr::null_mut();
+        let result = unsafe {
+            aaudio_sys::AAudioStreamBuilder_openStream(builder_ptr, &mut stream_ptr)
+        };
+
+        unsafe {
+            aaudio_sys::AAudioStreamBuilder_delete(builder_ptr);
+        }
+
+        if result != aaudio_sys::OK {
+            return Err(CaptureError::Aaudio(format!(
+                "AAudioStreamBuilder_openStream failed: {}",
+                result
+            )));
+        }
+
+        let result = unsafe { aaudio_sys::AAudioStream_requestStart(stream_ptr) };
+        if result != aaudio_sys::OK {
+            unsafe {
+                aaudio_sys::AAudioStream_close(stream_ptr);
+            }
+            return Err(CaptureError::Aaudio(format!(
+                "AAudioStream_requestStart failed: {}",
+                result
+            )));
+        }
+
+        self.stream_ptr = Some(stream_ptr);
+        self.running.store(true, Ordering::SeqCst);
+
+        Ok(())
+    }
+
+    extern "C" fn data_callback_thunk(
+        _stream: *mut aaudio_sys::AAudioStream,
+        user_data: *mut std::ffi::c_void,
+        audio_data: *mut std::ffi::c_void,
+        num_frames: i32,
+    ) -> i32 {
+        if num_frames <= 0 || audio_data.is_null() {
+            return aaudio_sys::CALLBACK_CONTINUE;
+        }
+
+        let cb = unsafe { &mut *(user_data as *mut Box<dyn FnMut(&[f32]) + Send>) };
+        let samples =
+            unsafe { std::slice::from_raw_parts(audio_data as *const f32, num_frames as usize) };
+        cb(samples);
+
+        aaudio_sys::CALLBACK_CONTINUE
+    }
+
+    extern "C" fn error_callback_thunk(
+        _stream: *mut aaudio_sys::AAudioStream,
+        _user_data: *mut std::ffi::c_void,
+        error: i32,
+    ) {
+        log::error!("AAudio error callback: {}", error);
+    }
+
+    pub fn stop(&mut self) -> Result<(), CaptureError> {
+        let ptr = self
+            .stream_ptr
+            .ok_or(CaptureError::NotOpen)?;
+
+        let result = unsafe { aaudio_sys::AAudioStream_requestStop(ptr) };
+        if result != aaudio_sys::OK {
+            return Err(CaptureError::Aaudio(format!(
+                "AAudioStream_requestStop failed: {}",
+                result
+            )));
+        }
+
+        self.running.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+
+    pub fn close(&mut self) -> Result<(), CaptureError> {
+        if let Some(ptr) = self.stream_ptr.take() {
+            unsafe {
+                aaudio_sys::AAudioStream_close(ptr);
+            }
+        }
+        self.running.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for AudioCapture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for AudioCapture {
+    fn drop(&mut self) {
+        let _ = self.close();
+        if let Some(ptr) = self.callback_ptr.take() {
+            let _ = unsafe { Box::from_raw(ptr as *mut Box<dyn FnMut(&[f32]) + Send>) };
+        }
+    }
+}

@@ -1,10 +1,10 @@
 pub mod engine;
 pub mod jni_bridge;
 pub mod jni_callback;
-// pub mod audio;    // TODO: Sprint 1
-// pub mod stt;      // TODO: Sprint 1
-// pub mod model;    // TODO: Sprint 1
-// pub mod history;  // TODO: Sprint 1
+pub mod audio;
+pub mod transcription;
+pub mod model;
+pub mod history;
 
 use engine::JAVA_VM;
 use log::info;
@@ -14,8 +14,6 @@ use log::info;
 #[no_mangle]
 pub extern "system" fn JNI_OnLoad(vm: jni::JavaVM, _: *mut std::ffi::c_void) -> jni::sys::jint {
     let _ = JAVA_VM.set(vm);
-
     info!("handy-core loaded");
-
     jni::sys::JNI_VERSION_1_6
 }

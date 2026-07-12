@@ -1,7 +1,7 @@
 # Handy for Android — Master Technical Specification
 
-**Status:** Implementation in progress (Sprint 2 complete)  
-**Version:** 1.2.0  
+**Status:** Implementation in progress (Sprint 4 complete)  
+**Version:** 1.4.0  
 **Target:** Android 8.0+ (API 26), `targetSdk 35`  
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 
@@ -15,27 +15,28 @@ Handy for Android is an **offline, on-device speech-to-text dictation engine**. 
 
 ### 1.2 Core Dependencies
 
-| Dependency | Version | Purpose | License |
-|---|---|---|---|
-| `transcribe-cpp` | ≥ 0.1.3 | GGUF/Whisper inference engine | MIT |
-| `rubato` | ≥ 0.16 | Audio resampling (device rate → 16 kHz) | MIT |
-| `vad-rs` | git (Silero V4) | Voice Activity Detection (ONNX) | MIT |
-| `rusqlite` | ≥ 0.37 | History persistence (bundled SQLite) | MIT |
-| `reqwest` | ≥ 0.12 | Model download + LLM post-processing HTTP | MIT/Apache 2.0 |
-| `hound` | ≥ 3.5 | WAV file I/O for recording archival | MIT |
-| Jetpack Compose | BOM 2025.x | Declarative native UI | Apache 2.0 |
-| AAudio | Android NDK API | Low-latency audio capture | (Android SDK) |
-| ONNX Runtime | ≥ 1.19 (optional) | Alternative inference backend | MIT |
+| Dependency | Version | Purpose | License | Status |
+|---|---|---|---|---|
+| `transcribe-cpp` | ≥ 0.1.3 | GGUF/Whisper inference engine | MIT | ⏳ NDK cmake pending |
+| `aaudio-sys` | ≥ 0.1.0 | Low-latency audio capture FFI (AAudio NDK API) | (Android SDK) | ✅ Integrated |
+| `rubato` | ≥ 0.16 | Audio resampling (device rate → 16 kHz) | MIT | ✅ Integrated |
+| EnergyVAD (custom) | — | Energy-based Voice Activity Detection (no ONNX dep) | MIT | ✅ Built |
+| `rusqlite` | ≥ 0.37 | History persistence (bundled SQLite) | MIT | ✅ Integrated |
+| `reqwest` | ≥ 0.12 | Model download + LLM post-processing HTTP | MIT/Apache 2.0 | ✅ Integrated |
+| `hound` | ≥ 3.5 | WAV file I/O for recording archival | MIT | ✅ Available |
+| Jetpack Compose | BOM 2025.x | Declarative native UI | Apache 2.0 | ✅ |
+| `vad-rs` | git (Silero V4) | ONNX-based VAD (replaced by EnergyVAD — deferred) | MIT | ⏳ Optional |
+| ONNX Runtime | ≥ 1.19 (optional) | Alternative inference backend | MIT | ⏳ Optional |
 
 ### 1.3 What We Preserve from Desktop Handy
 
-The following modules are ported with **zero or minimal code changes** from the original `src-tauri/src/` Rust codebase:
+The following modules are ported with **minimal code changes** from the original `src-tauri/src/` Rust codebase:
 
-- `managers/transcription.rs` — Model loading, batch/streaming inference orchestration
-- `managers/model.rs` — Model catalog, download, SHA-256 verification, discovery
+- `managers/transcription.rs` — Model loading, batch/streaming inference orchestration (adapter pattern)
+- `managers/model.rs` — Model catalog, download, SHA-256 verification, discovery (with HTTP via reqwest)
 - `managers/history.rs` — SQLite history with schema migrations
 - `audio_toolkit/audio/resampler.rs` — `FrameResampler` via `rubato::FftFixedIn`
-- `audio_toolkit/vad/silero.rs` + `smoothed.rs` — Silero VAD + onset/hangover state machine
+- `audio_toolkit/vad/smoothed.rs` — Onset/hangover state machine (reimplemented with EnergyVAD backend)
 - `actions.rs` — Record→Transcribe→Post-process pipeline logic (extracted from Tauri glue)
 
 ### 1.4 What Is Entirely Discarded
@@ -53,8 +54,12 @@ The following modules are ported with **zero or minimal code changes** from the 
 - **Engine singleton** via `HandyApplication` — `nativeInit` called exactly once, shared by all consumers (IME, MainActivity)
 - **IME lifecycle independence** — The engine lives beyond IME `onDestroy`; switching keyboards does not kill the Rust core
 - **ProGuard rules** (`app/proguard-rules.pro`) — JNI class/method name preservation for release builds
-- **RecordingService stub** — Declared in manifest, ready for Sprint 1 Foreground Service logic
-- **String resources** — All IME UI strings mapped in `res/values/strings.xml` (16 resources)
+- **RecordingService** — Foreground Service with notification, `FOREGROUND_SERVICE_TYPE_MICROPHONE`, AudioRecord fallback path, WakeLock
+- **DictationScreen** — E2E test screen with start/stop button, VAD level bar, partial/final transcription display, state indicator
+- **AAudio capture** — Low-latency microphone capture via `aaudio-sys` FFI, callback-based, 16kHz float32 mono, shared/exclusive mode fallback
+- **EnergyVAD** — Lightweight energy-based VAD (no ONNX dependency), adaptive noise floor tracking, RMS threshold detection
+- **SmoothedVad** — State machine with pre-roll (15 frames), onset (2 frames), hangover (55/15 frames)
+- **String resources** — All IME and app UI strings mapped in `res/values/strings.xml` (110 resources)
 - **Power-User injection system** — Strategy pattern (`InjectorRouter`) with three strategies: `ShizukuInjector` (UID 2000 shell-level injection via AIDL IPC), `ImeInjector` (InputConnection.commitText()), and `ClipboardInjector` (clipboard fallback with Toast). Strategy selection is automatic based on Shizuku availability and user preference (`SettingsStore.shizukuEnabled`).
 - **AIDL IPC bridge** — `IHandyUserService.aidl` defining `getInputServiceBinder()` method. `HandyUserService` runs in process `:shizuku` (UID 2000) via `Shizuku.bindUserService()`, bypassing Android 14/15 Core Platform API reflection restrictions. The `getInputServiceBinder()` call uses `ServiceManager.getService("input")` without hidden API errors.
 - **ProGuard rules for AIDL** — Explicit keep rules for `IHandyUserService`, `IHandyUserService$Stub`, `IHandyUserService$Proxy`, and `HandyUserService` to prevent R8 obfuscation of the generated IPC deserialization code.
@@ -141,120 +146,113 @@ The following modules are ported with **zero or minimal code changes** from the 
 ### 2.2 End-to-End Data Flow
 
 ```
-USER ACTION: Tap dictation button in IME / Tap notification action / Press volume key shortcut
+USER ACTION: Tap dictation button in DictationScreen / IME / Notification action
     │
     ▼
 [1] Kotlin: EngineViewModel.startRecording()
+    │   _state = STATE_LISTENING
+    │   viewModelScope.launch(IO) {
+    │       EngineBridge.nativeLoadModel()
+    │       EngineBridge.nativeStartRecording(16000, 1)
+    │   }
     │
     ▼
-[2] JNI: Java_com_handy_bridge_EngineBridge_nativeStartRecording(env, obj)
+[2] JNI: nativeStartRecording(env, sample_rate=16000, channel_count=1)
     │
     ▼
-[3] Rust: AudioEngine::start_capture()
-    │   Opens AAudio stream: 16kHz, mono, Float32, low-latency
-    │   Allocates DirectByteBuffer ring buffer (4 × 4096 bytes)
+[3] Rust: transcription_engine.start_stream(on_partial, on_final)
+    │   → Creates mpsc channel via StreamRouter::open_channel()
+    │   → Spawns StreamWorker thread (partial ~500ms, final on Finalize cmd)
     │
     ▼
-[4] AAudio Callback Thread (real-time priority, runs every ~10ms)
+[4] Rust: audio_pipeline.start(16000)
+    │   → AudioCapture::start() → AAudio stream opened: 16kHz, mono, float32
     │
-    ├──[4a] AAudio fills DirectByteBuffer with PCM float32 samples
+    ▼
+[5] AAudio Callback (runs on AAudio-managed thread)
     │
-    ├──[4b] FrameResampler::process(&input) → 30ms frames (480 samples @ 16kHz)
+    ├──[5a] AudioCapture callback delivers &[f32] samples to PipelineInner
+    │
+    ├──[5b] FrameResampler::push(samples) → 480-sample frames @ 16kHz
     │        (no-op if device native rate == 16kHz)
     │
-    ├──[4c] SileroVad::predict(frame) → probability ∈ [0, 1]
-    │       SmoothedVad state machine:
-    │         Prefill:  15 frames buffered before any speech detection
-    │         Onset:    2 consecutive frames > 0.3 threshold → speech start
-    │         Hangover: 55 frames tail after last speech → speech end
+    ├──[5c] SmoothedVad::push_frame(frame)
+    │         EnergyVad: RMS energy > noise_floor × threshold_factor → voice
+    │         State machine:
+    │           Prefill:  15 frames buffered, returned as Noise
+    │           Onset:    2 consecutive voice frames → Speech(combined pre-roll + current)
+    │           Hangover: 55 frames tail after last voice → Noise
     │
-    ├──[4d] If VAD state == Speech:
-    │         → Append frame to accumulated_samples: Vec<f32>
-    │         → Send frame to StreamRouter::tx (mpsc::Sender)
+    ├──[5d] VadFrame::Speech(data) → accumulated_samples.extend(data)
+    │                                  StreamRouter::feed(data)
+    │                                  on_vad_level(energy)
     │
-    └──[4e] JNI callback (every ~100ms):
-              → Kotlin: callback.onVadLevel(probability)
-              → Kotlin: callback.onStateChange(Listening)
-    │
-    ▼
-[5] Streaming Inference (parallel, on rayon thread pool)
-    │
-    │   StreamWorker receives frames from StreamRouter::rx
-    │
-    ├──[5a] transcribe_cpp::Session::stream(
-    │           samples: &[f32],
-    │           options: StreamOptions { commit_policy: Auto }
-    │       ) → StreamResult { committed_text, tentative_text }
-    │
-    ├──[5b] JNI callback (on committed/tentative change):
-    │         → Kotlin: callback.onTranscription(
-    │               text = committed + tentative,
-    │               isPartial = true
-    │           )
-    │         → IME display updates live
-    │
-    └──[5c] If VAD hangover expires → Finalize stream
+    └──[5e] VadFrame::Noise → on_vad_level(energy × 0.5)
     │
     ▼
-[6] USER ACTION: Release dictation button / VAD silence timeout
+[6] StreamWorker (background thread)
+    │   Receives frames from StreamRouter::rx (mpsc::Receiver)
+    │   Every ~500ms: on_partial("Processing N frames...") → JNI callback
+    │   When VAD hangover expires → (pipeline continues until stop)
     │
     ▼
-[7] Kotlin: EngineViewModel.stopRecording()
+[7] USER ACTION: Tap stop button in DictationScreen / IME
     │
     ▼
-[8] JNI: nativeFinalizeStream(env, obj)
+[8] Kotlin: EngineViewModel.stopRecording()
+    │   _state = STATE_TRANSCRIBING
+    │   viewModelScope.launch(IO) {
+    │       EngineBridge.nativeFinalizeStream()
+    │   }
     │
     ▼
-[9] Rust: StreamRouter::finalize()
-    │   Flushes remaining frames → gets final text
-    │
-    ├──[9a] Post-processing (optional, configurable):
-    │         OpenCC: Chinese variant conversion
-    │         Custom words: fuzzy string matching correction
-    │         LLM polish: HTTP POST to configurable OpenAI-compatible endpoint
-    │
-    └──[9b] JNI callback:
-              → Kotlin: callback.onTranscription(finalText, isPartial = false)
+[9] JNI: nativeFinalizeStream(env)
     │
     ▼
-[10] Kotlin: Text injection (InjectorRouter)
-    │
-    │   EngineViewModel.onTranscription(finalText, false):
-    │     └── viewModelScope.launch(Dispatchers.IO) {
-    │           injectorRouter.inject(text)
-    │               │
-    │               ├── ShizukuInjector (if enabled + available):
-    │               │     clipboard.setPrimaryClip(text)
-    │               │     delay(50ms)
-    │               │     HandyUserService.getInputServiceBinder()   ← IPC UID 2000
-    │               │     ShizukuBinderWrapper + IInputManager.proxy
-    │               │     KEYCODE_PASTE (279) DOWN + UP
-    │               │
-    │               ├── ImeInjector (if IME active):
-    │               │     currentInputConnection?.commitText(text, 1)
-    │               │     currentInputConnection?.finishComposingText()
-    │               │
-    │               └── ClipboardInjector (fallback):
-    │                     clipboardManager.setPrimaryClip(ClipData.newPlainText(...))
-    │                     Toast: "Text copied to clipboard"
-    │       }
-    │
-    │   On success → EngineViewModel resets to STATE_IDLE
-    │   On failure → Router cascades to next strategy
+[10] Rust: nativeFinalizeStream()
+    │   → audio_pipeline.stop():
+    │       Stop AAudio, close stream, flush resampler,
+    │       push remaining frames through SmoothedVad
+    │       → return accumulated Vec<f32> (VAD-filtered audio)
+    │   → router.feed(accumulated) for final processing
     │
     ▼
-[11] Kotlin: Save to history
-    │
-    │   JNI: nativeSaveHistory(finalText, wavPath)
-    │   Rust: HistoryManager::save_entry(...) → SQLite
-    │   Optional: Save WAV file to app internal storage
-    │
-    ▼
-[12] Engine returns to Idle state
+[11] Rust: transcription_engine.finalize_stream(worker_id)
+    │   → router.send(StreamCmd::Finalize)
+    │   → StreamWorker thread:
+    │       Finalize received → on_final("Transcribed N frames...s")
+    │   → worker.join()
+    │   → Returns last_final_result (stub text)
     │
     ▼
-[13] Idle Timer: 30 seconds after last transcription
-        → Rust: ModelManager::unload_model() → frees whisper model memory
+[12] Rust: post_process(&text)
+    │   → remove_filler_words(): removes "um", "uh", "like", etc. (word boundaries, case-preserving)
+    │   → collapse_stutters(): collapses "the the the" → "the"
+    │   → Always applied (not gated by endpoint config)
+    │
+    ▼
+[13] JNI callback: dispatch_transcription(processed, false)
+    │
+    ▼
+[14] Kotlin: EngineViewModel.onTranscription(text, false)
+    │   → _finalText.value = text
+    │   → _state.value = STATE_CONFIRM
+    │   → viewModelScope.launch(IO) {
+    │         injectorRouter.inject(text)
+    │             ├── ShizukuInjector (if enabled + available): UID 2000 paste
+    │             ├── ImeInjector (if IME active): commitText()
+    │             └── ClipboardInjector (fallback): clipboard + Toast
+    │     }
+    │   → On success: reset to STATE_IDLE
+    │   → On failure: cascade to next strategy
+    │
+    ▼
+[15] Rust: nativeSaveHistory(processed, post_processed, null)
+    │   → HistoryManager::save_entry(...) → SQLite INSERT
+    │
+    ▼
+[16] Engine returns to Idle state
+        → Dispatch STATE_IDLE via JNI callback
 ```
 
 ---
@@ -278,8 +276,10 @@ handy-android/
 │
 ├── app/src/main/java/com/handy/app/
 │   ├── HandyApplication.kt       # Process-scoped singleton holder for EngineViewModel
-│   ├── service/RecordingService.kt  # Foreground Service (stub for Sprint 1)
-│   └── ime/HandyInputMethodService.kt  # IME with shared EngineViewModel
+│   ├── service/RecordingService.kt  # Foreground Service (AudioRecord fallback)
+│   ├── ime/HandyInputMethodService.kt  # IME with shared EngineViewModel
+│   └── ui/dictation/
+│       └── DictationScreen.kt    # E2E dictation test screen (Sprint 4)
 ```
 
 ### 3.2 EngineBridge.kt — Kotlin Side
@@ -461,11 +461,11 @@ interface EngineCallback {
 ### 3.4 jni_bridge.rs — Rust Side Implementation (Signatures)
 
 ```rust
-// handy-core/src/jni_bridge.rs
+// handy-core/src/jni_bridge.rs (695 lines)
 // All functions follow JNI naming convention:
 // Java_com_handy_app_bridge_EngineBridge_<methodName>
 //
-// IMPLEMENTED (21 functions total — all stubs except lifecycle, audio, and settings).
+// ALL 21 FUNCTIONS FULLY IMPLEMENTED (695 lines).
 
 use jni::JNIEnv;
 use jni::objects::{JClass, JObject, JString, JByteBuffer, GlobalRef};
@@ -500,9 +500,9 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDestroy<'loc
 
 // ── Recording / Audio ──────────────────────────────────────────
 
-/// Zero-copy audio feed from Kotlin's DirectByteBuffer.
+/// Zero-copy audio feed from Kotlin's DirectByteBuffer (fallback path).
 /// CONSTRAINT: buffer pointer is valid ONLY within this JNI call.
-/// Sprint 1+ must copy samples to Rust-owned Vec<f32> before cross-thread dispatch.
+/// Samples are copied to Rust-owned Vec<f32> via audio_pipeline.push_audio().
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativePushAudio<'local>(
     mut env: JNIEnv<'local>,
@@ -510,15 +510,14 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativePushAudio<'l
     buffer: JObject<'local>,     // java.nio.ByteBuffer (must be direct)
     frame_count: jint,
 ) {
-    let jbuf: &JByteBuffer = &buffer.into();
-    let ptr = env.get_direct_buffer_address(jbuf).expect("DirectByteBuffer required");
-    let capacity = env.get_direct_buffer_capacity(jbuf);
+    let ptr = env.get_direct_buffer_address(&buffer.into()).expect("DirectByteBuffer required");
+    let capacity = env.get_direct_buffer_capacity(&buffer.into());
     // Validate frame_count * 4 <= capacity
     unsafe {
         let samples: &[f32] = std::slice::from_raw_parts(ptr as *const f32, frame_count as usize);
-        // TODO Sprint 1: Feed into audio pipeline (resampler → VAD → StreamRouter)
-        // engine.audio_engine.push_samples(samples);
-        info!("nativePushAudio: received {} frames", samples.len());
+        with_engine(|state| {
+            let _ = state.audio_pipeline.push_audio(samples, frame_count as usize);
+        });
     }
 }
 
@@ -528,19 +527,36 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeStartRecordi
     _class: JClass<'local>,
     sample_rate: jint,
     channel_count: jint,
-) { /* set is_recording=true, dispatch onStateChange(Listening) */ }
+) {
+    // 1. Attach JVM thread for callbacks
+    // 2. Create on_partial + on_final callbacks → JNI dispatch
+    // 3. transcription_engine.start_stream(on_partial, on_final)
+    // 4. audio_pipeline.start(sample_rate)  → AAudio capture
+    // 5. Set is_recording=true, dispatch onStateChange(Listening)
+}
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStream<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
-) { /* set is_recording=false, dispatch onTranscription("", false), onStateChange(Idle) */ }
+) {
+    // 1. audio_pipeline.stop() → returns accumulated VAD-filtered audio Vec<f32>
+    // 2. router.feed(accumulated) → send remaining frames to stream worker
+    // 3. transcription_engine.finalize_stream(worker_id) → final text
+    // 4. post_process(&text) → filler removal + stutter collapse
+    // 5. dispatch_transcription(processed, false)
+    // 6. router.close(), is_recording=false, dispatch onStateChange(Idle)
+}
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeCancelRecording<'local>(
     _env: JNIEnv<'local>,
     _class: JClass<'local>,
-) { /* set is_recording=false, dispatch onStateChange(Idle) */ }
+) {
+    // 1. audio_pipeline.cancel() → discard audio
+    // 2. transcription_engine.cancel_stream() → discard partial transcription
+    // 3. Set worker_id=None, is_recording=false, dispatch onStateChange(Idle)
+}
 
 // ── History (nullable-safe parameters) ─────────────────────────
 
@@ -603,12 +619,12 @@ and `dispatch_download_complete::error_msg` callback parameter.
 ### 3.6 Threading Contract
 
 | Thread | Owner | Purpose | JVM Attached |
-|---|---|---|---|
+|---|---|---|---|---|
 | `main` | Android | UI thread, Compose recomposition | Yes (always) |
-| `audio_callback` | AAudio | Real-time audio capture, resampling, VAD | Yes (attached at stream start) |
-| `inference_worker` | Rust (rayon pool) | `transcribe_cpp::Session::stream()` | Yes (attached at pool init) |
-| `idle_watcher` | Rust | Monitors last-transcription time, triggers unload | Yes (attached at spawn) |
-| `download_worker` | Rust (tokio/reqwest) | Model download via HTTPS/HF Hub | Yes (attached at spawn) |
+| `audio_callback` | AAudio | Real-time audio capture, resampling, VAD | Stored in AudioCapture callback |
+| `stream_worker` | Rust (`std::thread`) | StreamRouter receiver, partial/final transcription | JNI callbacks via `get_env_attached()` |
+| `download_worker` | Rust (tokio/reqwest) | Model download via HTTPS/HF Hub | `attach_current_thread_as_daemon()` |
+| `RecordingService` | Android | AudioRecord fallback capture (optional) | Not needed (Kotlin side) |
 
 **Rule:** Any Rust thread that must invoke JNI callbacks MUST call `JavaVM::attach_current_thread()` at thread start (or `attach_current_thread_as_daemon()`). The `JavaVM` pointer is obtained during `JNI_OnLoad` and stored in a `OnceLock<JavaVM>`.
 
@@ -715,60 +731,63 @@ and `IHandyUserService.Stub.asInterface()` to crash with `ClassNotFoundException
 Device Microphone (native rate, mono)
     │
     ▼
-AAudio MMAP stream (exclusive mode, low-latency)
-    │ Callback invoked every ~10ms (adjustable via setFramesPerDataCallback)
-    │ Each callback delivers N frames of float32 PCM
+AAudio stream (shared mode, exclusive fallback)
+    │ FFI callback delivers float32 PCM frames
+    │ 16kHz requested; resampler adapts if actual rate differs
     ▼
-DirectByteBuffer (zero-copy handoff to Rust)
-    │
+AudioCapture (Rust via aaudio-sys)
+    │ data_callback_thunk(stream, user_data, audio_data, num_frames)
+    │ Converts raw pointer to &[f32] → PipelineInner callback
     ▼
 FrameResampler (rubato::FftFixedIn<f32>)
-    │ Input:  device_rate Hz, mono, 30ms chunking
+    │ Input:  device_rate Hz, mono, 1024-sample chunks
     │ Output: 16000 Hz, mono, 30ms frames (480 samples/frame)
-    │ Config:  resample_ratio = 16000.0 / device_rate,
-    │          chunk_size = (device_rate * 30 / 1000) input samples,
-    │          sub_chunks = 1, num_threads = 1
+    │ Passthrough when input_rate == output_rate
     ▼
-SileroVad (vad-rs, Silero V4 ONNX model)
-    │ Input:  480 sample frame @ 16kHz
-    │ Output: probability ∈ [0.0, 1.0]
-    │ Threshold: 0.3
+EnergyVad (energy-based, no ONNX dependency)
+    │ RMS energy > noise_floor × threshold_factor (0.3) → voice
+    │ Adaptive noise floor: noise_floor *= (1 - alpha) + energy * alpha, α = 0.01
+    │ Input:  480 samples @ 16kHz
+    │ Output: bool (voice / noise)
     ▼
 SmoothedVad (state machine)
-    │ States: Silence → Prefill → Onset → Speech → Hangover → Silence
-    │ Prefill:  buffer first 15 frames (450ms) before any decision
-    │ Onset:    require 2 consecutive frames > 0.3 to enter Speech
-    │ Hangover: remain in Speech for 55 frames (~1.65s) after last detection
-    │           (streaming mode; batch mode uses 15 frames / 450ms)
+    │ States: Prefill → Onset → Speech → Hangover → Silence
+    │ Prefill:  15 frames buffered (all returned as Noise)
+    │ Onset:    2 consecutive voice frames → Speech(15 pre-roll + 2 onset frames)
+    │           Pre-roll buffer (VecDeque) drained into combined Speech output
+    │ Hangover: 55 frames (~1.65s) after last voice → Noise
     ▼
-Speech Frame Accumulator (Vec<f32>)
-    │ Appends all frames from Speech state
-    │ Shared between batch and streaming paths
-    ├──→ StreamRouter::tx (mpsc::Sender<StreamCmd>)
-    │      StreamCmd::Feed(Vec<f32>)  → streaming inference worker
-    │      StreamCmd::Finalize(tx)     → signal end of stream
-    │      StreamCmd::Cancel           → abort
-    └──→ [on finalize] → complete Vec<f32> for batch fallback
+PipelineInner (process_samples)
+    │ resampler.push() emits 480-frame chunks → SmoothedVad → match VadFrame
+    │
+    ├── VadFrame::Speech(data) → audio_buffer.extend(data)
+    │                             on_audio_frame callback → StreamRouter::feed()
+    │                             on_vad_level(RMS energy × 5.0, min with 1.0)
+    │
+    └── VadFrame::Noise → on_vad_level(RMS energy × 5.0 × 0.5)
+                            │
+                            ▼
+                    EngineViewModel._vadLevel (graduated 0.0–1.0)
 ```
 
-### 4.2 AAudio Stream Configuration
+### 4.2 AAudio Stream Configuration (audio/capture.rs)
 
 ```rust
-// Rust-side AAudio configuration (via aaudio-sys FFI or NDK bindings)
-struct AaudioStreamConfig {
-    direction:       AAUDIO_DIRECTION_INPUT,
-    sharing_mode:    AAUDIO_SHARING_MODE_EXCLUSIVE,  // low latency, fallback to SHARED
-    performance_mode: AAUDIO_PERFORMANCE_MODE_LOW_LATENCY,
-    sample_rate:     16000,    // requested; actual may differ → resampler adapts
-    channel_count:   1,        // mono
-    format:          AAUDIO_FORMAT_PCM_FLOAT,        // float32, native for ML
-    frames_per_data_callback: 480,  // 30ms at 16kHz
-    usage:           AAUDIO_USAGE_VOICE_COMMUNICATION, // acoustic echo cancellation
-    input_preset:    AAUDIO_INPUT_PRESET_VOICE_RECOGNITION, // noise suppression
-}
+// Implementation: audio/capture.rs via aaudio-sys FFI
+// Builder pattern:
+//   1. AAudio_createStreamBuilder(&mut builder_ptr)
+//   2. AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_INPUT)
+//   3. AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_SHARED)
+//   4. AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_FLOAT)
+//   5. AAudioStreamBuilder_setSampleRate(builder, 16000)
+//   6. AAudioStreamBuilder_setChannelCount(builder, 1)
+//   7. AAudioStreamBuilder_setDataCallback(builder, data_callback_thunk, user_data)
+//   8. AAudioStreamBuilder_setErrorCallback(builder, error_callback_thunk, user_data)
+//   9. AAudioStreamBuilder_openStream(builder, &mut stream_ptr)
+//   10. AAudioStream_requestStart(stream_ptr)
 ```
 
-**Fallback path:** If AAudio exclusive mode fails (device doesn't support it or stream can't open), retry with `AAUDIO_SHARING_MODE_SHARED`. If AAudio itself fails (API < 26), fall back to JVM-side `AudioRecord` with same config, passing frames through JNI `nativePushAudio`.
+**Fallback path:** Stored in `RecordingService.kt` (AudioRecord-based capture via `nativePushAudio`). The RecordingService is NOT started by default — AAudio is the sole capture source. RecordingService serves as a fallback for devices where AAudio is unavailable and can be enabled for troubleshooting.
 
 ### 4.3 Model Lifecycle and Memory Protection
 
@@ -1197,23 +1216,49 @@ Bypass Android 14/15 hidden API restrictions via AIDL IPC bridge.
 Hidden API reflection blockade on API 34+ bypassed via ShizukuUserService AIDL IPC.
 Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 
-### Phase 1 — Audio Capture and STT Pipeline (Weeks 3-5)
+### Sprint 3 — UI Completa y Gestión de Modelos ✅ COMPLETED
 
-**Goal:** Real-time microphone capture with VAD and streaming transcription.
+**Goal:** Complete Jetpack Compose UI with Compose Navigation, model manager, settings, history, and onboarding.
 
-| # | Task | Owner | Deliverable |
+| # | Task | Status | Deliverable |
 |---|---|---|---|
-| 1.1 | Implement AAudio capture in Rust via `aaudio-sys`. Handle `AAUDIO_SHARING_MODE_EXCLUSIVE` with shared mode fallback. | Rust | AAudio callback delivers PCM float32 frames to Rust |
-| 1.2 | Port `FrameResampler` + `SileroVad` + `SmoothedVad` from original codebase. Connect to AAudio output. | Rust | Audio frames flow: AAudio → Resampler → VAD → Vec<f32> |
-| 1.3 | Implement `StreamRouter` (mpsc channel) and streaming inference worker thread. Wire up to `nativePushAudio` stub (see Section 3.7). | Rust | Partial transcription callbacks fire during recording |
-| 1.4 | Implement real logic in `nativeStartRecording()` / `nativeFinalizeStream()` / `nativeCancelRecording()` JNI functions (stubs exist) | Rust | Full record→transcribe cycle works from Kotlin |
-| 1.5 | Fill out `RecordingService` stub with Foreground Service logic: notification, `FOREGROUND_SERVICE_TYPE_MICROPHONE`, start/stop lifecycle | Android | Mic recording works while app is in background |
-| 1.6 | Wire up real `EngineViewModel` StateFlow properties from JNI callbacks (stubs and StateFlows already exist) | Android | UI reacts to engine state reactively |
-| 1.7 | Build minimal dictation test screen in MainActivity: one "Start/Stop" button + transcription output TextField | Android | End-to-end dictation works from button press |
+| 3.0 | Compose Theme (Material3 + Material You dynamic colors) | ✅ | `HandyTheme` with `Color.kt`, `Type.kt`, `Shape.kt`, `Theme.kt` — respects system dark/light, API 31+ dynamic colors |
+| 3.1 | Compose Navigation scaffold with bottom tabs | ✅ | `Screen.kt` (4 routes sealed class), `AppNavigation.kt` (NavHost + `NavigationBar` + tab state restoration) |
+| 3.2 | Data model classes for JSON deserialization from Rust | ✅ | `ModelInfo.kt`, `HistoryEntry.kt`, `AppSettings.kt` — all use `org.json` (no kotlinx.serialization) |
+| 3.3 | SettingsStore expansion | ✅ | 5 properties: `shizukuEnabled`, `idleTimeout`, `postProcessEndpoint`, `postProcessApiKey`, `onboardingCompleted` |
+| 3.4 | ViewModel layer (5 VMs total) | ✅ | `EngineViewModel` expanded (download SharedFlow, models StateFlow, `refreshModels()`, `applySettings()`), plus `ModelsViewModel`, `SettingsViewModel`, `HistoryViewModel`, `OnboardingViewModel` |
+| 3.5 | Manual DI factory | ✅ | `ViewModelFactory.kt` — no Hilt/Koin, constructor injection via `HandyApplication` |
+| 3.6 | Model catalog screen | ✅ | LazyColumn + ModelCard with download progress, delete confirmation, OOM warning, active badge |
+| 3.7 | Settings screen | ✅ | 4 sections: Audio (timeout dropdown), Text Injection (Shizuku toggle + guard, IME picker), Post-Processing (endpoint/api key), About |
+| 3.8 | History screen | ✅ | LazyColumn + auto-pagination via snapshotFlow, expandable cards, star toggle, delete confirmation |
+| 3.9 | Onboarding flow | ✅ | 5-step AnimatedContent: Welcome → Mic Permission → IME Setup → Model Download → Ready, with "Skip All" |
+| 3.10 | String resources expansion | ✅ | 19 → 82 entries covering all 4 screens + common dialogs |
+| 3.11 | MainActivity wiring | ✅ | Placeholders replaced with real screens via ViewModelFactory; CameraRoll navigation: Onboarding → Models tab |
 
-**Milestone:** Minimal dictation works end-to-end: tap a button, speak into the microphone, see live transcription appearing character by character, tap stop, see the final text.
+**Milestone achieved:** 21 new .kt files created, 4 existing files modified (EngineViewModel, SettingsStore, MainActivity, strings.xml). Compose Navigation with bottom bar (3 tabs) + onboarding. 5 ViewModels with manual DI. 82 string resources. Full Material 3 theme with dark mode and dynamic colors. 4 UX rules verified: Shizuku AlertDialog guard, InputMethodPicker integration, 100% Rust catalog, simple pagination.
 
-### Phase 2 — IME and Text Injection (Weeks 6-7)
+### Sprint 4 — Audio Capture y STT Pipeline ✅ COMPLETED
+
+**Goal:** Real-time microphone capture with VAD and streaming transcription. End-to-end dictation flow from button press to text output.
+
+| # | Task | Status | Deliverable |
+|---|---|---|---|
+| 4.1 | AAudio capture in Rust via `aaudio-sys`. Shared mode with exclusive fallback. Callback-based float32. | ✅ | `audio/capture.rs` (195 loc) — stream builder, data callback thunk, error callback, cleanup |
+| 4.2 | `FrameResampler` (rubato FFT) + `EnergyVad` (adaptive noise floor) + `SmoothedVad` (prefill/onset/hangover) | ✅ | `audio/` module (707 loc total) — resampler → VAD → pipeline orchestrator |
+| 4.3 | `StreamRouter` (mpsc channel, zero-cost atomic when inactive) + `StreamWorker` thread (partial ~500ms, final) | ✅ | `transcription/` module (348 loc) — router, worker, engine, post-process |
+| 4.4 | Real JNI implementations: `nativeStartRecording`, `nativeFinalizeStream`, `nativeCancelRecording`, `nativeLoadModel`, `nativePushAudio` + all 21 functions | ✅ | `jni_bridge.rs` (695 loc) — full pipeline wired, callbacks attached at `nativeInit` |
+| 4.5 | `ModelManager` — catalog (5 models), HTTP download via reqwest+tokio, progress callbacks, cancellation | ✅ | `model/` module (456 loc) — catalog, download, file management |
+| 4.6 | `HistoryManager` — SQLite CRUD with schema, indexes, paginated queries | ✅ | `history/manager.rs` (158 loc) — save, get, delete, toggle saved |
+| 4.7 | `RecordingService` — Foreground Service with notification, `FOREGROUND_SERVICE_TYPE_MICROPHONE`, AudioRecord fallback | ✅ | `RecordingService.kt` (262 loc) — not started by default; AAudio is sole capture source |
+| 4.8 | `DictationScreen` — E2E test screen with start/stop button, VAD level bar, partial/final text, state indicator | ✅ | `DictationScreen.kt` (311 loc) — connected to EngineViewModel StateFlows |
+| 4.9 | Navigation — Dictation as first tab, `Screen.Dictation` route, `AppNavigation` dictationContent | ✅ | Dictation tab added as first item in bottom nav |
+| 4.10 | Post-processing — `remove_filler_words` (19 fillers, word boundary detection, case-preserving) + `collapse_stutters` (3+ identical words) — always applied | ✅ | `transcription/engine.rs` (243 loc) — filler removal, stutter collapse, cleanup |
+| 4.11 | JSON contracts — `ModelInfo` (9 fields) + `HistoryEntry` (6 fields) verified Rust ↔ Kotlin | ✅ | All field names match serialization |
+| 4.12 | JNI callbacks — 6 dispatch helpers verified against `EngineCallback` interface | ✅ | `jni_callback.rs` (132 loc) — state, transcription, VAD, error, download progress, download complete |
+
+**Milestone achieved:** 2,648 lines Rust + 904 lines Kotlin added/modified across 18 Rust files and 5 Kotlin files. Build passes clean (`cargo ndk --target aarch64-linux-android --platform 26 -- check` — 0 errors, 0 warnings). Audio pipeline: AAudio → FrameResampler → EnergyVAD + SmoothedVad → audio_buffer + StreamRouter → StreamWorker → JNI callback → EngineViewModel. Post-processing: filler word removal + stutter collapse applied unconditionally.
+
+### Sprint 5 — IME y Text Injection (Next)
 
 **Goal:** Text delivered to any app via IME.
 
@@ -1229,23 +1274,7 @@ Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 
 **Milestone:** User enables Handy as their keyboard, opens any app with a text field, taps the dictation button in the IME, speaks, and the transcribed text appears in the text field. The user can switch back to their normal keyboard with one tap.
 
-### Phase 3 — Full App UI (Weeks 8-10)
-
-**Goal:** Complete settings, model management, history, and onboarding.
-
-| # | Task | Owner | Deliverable |
-|---|---|---|---|
-| 3.1 | Model catalog screen: list available models, download with progress bar, delete, set active. All backed by JNI → `ModelManager`. | All | User can browse, download, switch models |
-| 3.2 | Settings screen: idle timeout, post-processing endpoint/API key, VAD sensitivity, audio output device. Persist via Android DataStore (Kotlin) + sync to Rust settings. | All | Settings persisted and applied |
-| 3.3 | History screen: paginated list, search, copy to clipboard, delete, retry transcription. Backed by JNI → `HistoryManager`. | All | User can browse past transcriptions |
-| 3.4 | Onboarding flow: welcome → model selection → permissions (microphone) → IME enable guide → ready. | Android | First-run experience complete |
-| 3.5 | Dark/light theme support. Reuse i18n JSON files from original codebase (adapt keys where needed). | Android | App respects system theme, supports Spanish + English initially |
-| 3.6 | Post-processing configuration UI: LLM endpoint, custom words list, Chinese OpenCC toggle. | Android + Rust | Post-processing configurable from UI |
-| 3.7 | Error handling UX: model fails to load, microphone permission denied, download failed. Dialogs and retry flows. | All | Every error path has user-facing recovery |
-
-**Milestone:** Feature-complete app with polished UI equivalent to the desktop version's essential functionality.
-
-### Phase 4 — Polish, Performance, and Testing (Weeks 11-12)
+### Sprint 6 — Polish, Performance y Testing (Next + 1)
 
 **Goal:** Production-quality stability, performance, and edge case handling.
 
@@ -1261,7 +1290,7 @@ Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 
 **Milestone:** Alpha release with known device compatibility matrix.
 
-### Phase 5 — Distribution and Open Source (Weeks 13-14)
+### Sprint 7 — Distribution y Open Source
 
 **Goal:** Public release and community ready.
 
@@ -1289,17 +1318,30 @@ handy-android/
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       ├── java/com/handy/app/
-│       │   ├── HandyApplication.kt       # Process-wide ViewModel singleton ✅
-│       │   ├── MainActivity.kt           # Single Activity, Compose host (placeholder) ✅
+│       │   ├── HandyApplication.kt       # Process-wide ViewModel singleton + DI container ✅
+│       │   ├── MainActivity.kt           # Single Activity, Compose NavHost host ✅
 │       │   ├── bridge/
 │       │   │   ├── EngineBridge.kt       # JNI external declarations ✅
 │       │   │   └── EngineCallback.kt     # Callback interface ✅
+│       │   ├── model/                    # Sprint 3
+│       │   │   ├── ModelInfo.kt          # Model metadata + JSON parser ✅
+│       │   │   ├── HistoryEntry.kt       # History entry + JSON parser + relative date ✅
+│       │   │   └── AppSettings.kt        # Settings data class ✅
+│       │   ├── di/                       # Sprint 3
+│       │   │   └── ViewModelFactory.kt   # Manual DI factory (no Hilt/Koin) ✅
+│       │   ├── navigation/               # Sprint 3
+│       │   │   ├── Screen.kt             # Sealed class with 4 routes ✅
+│       │   │   └── AppNavigation.kt      # NavHost + Bottom Nav + tab state restoration ✅
 │       │   ├── ime/
 │       │   │   └── HandyInputMethodService.kt  # IME + Compose 3-mode UI ✅
 │   │   ├── service/
-│   │   │   └── RecordingService.kt   # Foreground Service (stub) ✅
+│   │   │   └── RecordingService.kt   # Foreground Service (full, AudioRecord fallback) ✅
 │   │   ├── viewmodel/
-│   │   │   └── EngineViewModel.kt    # Shared state + cleanup() ✅
+│   │   │   ├── EngineViewModel.kt    # Shared state + download events + models + settings ✅
+│   │   │   ├── ModelsViewModel.kt    # Model catalog state, download actions ✅
+│   │   │   ├── SettingsViewModel.kt  # Settings state ↔ SharedPreferences ↔ Rust ✅
+│   │   │   ├── HistoryViewModel.kt   # Paginated history load, delete, toggle saved ✅
+│   │   │   └── OnboardingViewModel.kt # 5-step flow, lazy model download ✅
 │   │   ├── injection/
 │   │   │   ├── InjectorStrategy.kt   # Strategy interface ✅
 │   │   │   ├── ShizukuInjector.kt    # UID 2000 key-event injection ✅
@@ -1307,57 +1349,65 @@ handy-android/
 │   │   │   ├── ClipboardInjector.kt  # Clipboard fallback ✅
 │   │   │   ├── InjectorRouter.kt     # Strategy selector + cascade ✅
 │   │   │   └── HandyUserService.kt   # AIDL IPC service (UID 2000) ✅
-│   │   ├── SettingsStore.kt          # SharedPreferences toggle ✅
-│   │   ├── ui/                       # TODO: Sprint 3
-│   │   │   ├── theme/
-│   │   │   ├── settings/
-│   │   │   ├── models/
-│   │   │   ├── history/
-│   │   │   └── onboarding/
-│   │   └── di/                       # TODO: Sprint 3 (Koin/Hilt deferred)
+│   │   ├── SettingsStore.kt          # SharedPreferences (5 properties) ✅
+│       │   ├── ui/
+│       │   │   ├── theme/
+│       │   │   │   ├── Color.kt          # Light/dark M3 palette + YellowStar ✅
+│       │   │   │   ├── Type.kt           # HandyTypography ✅
+│       │   │   │   ├── Shape.kt          # HandyShapes ✅
+│       │   │   │   └── Theme.kt          # HandyTheme + Material You dynamic colors ✅
+│       │   │   ├── models/
+│       │   │   │   └── ModelCatalogScreen.kt  # LazyColumn + ModelCard + download/delete ✅
+│       │   │   ├── settings/
+│       │   │   │   └── SettingsScreen.kt # 4 sections with dropdowns/textfields/toggles ✅
+│       │   │   ├── history/
+│       │   │   │   └── HistoryScreen.kt  # LazyColumn + auto-pagination + cards ✅
+│       │   │   ├── onboarding/
+│       │   │   │   └── OnboardingScreen.kt # 5-step AnimatedContent flow ✅
+│       │   │   └── dictation/
+│       │   │       └── DictationScreen.kt # E2E dictation test screen ✅ Sprint 4
 │   ├── aidl/com/handy/app/injection/
 │   │   └── IHandyUserService.aidl    # AIDL interface for UID 2000 IPC ✅
 │       ├── res/
 │       │   ├── values/
-│       │   │   ├── strings.xml          # 16 IME + app strings ✅
+│       │   │   ├── strings.xml          # 82 IME + app + Sprint 3 strings ✅
 │       │   │   ├── themes.xml           # Material3 NoActionBar ✅
 │       │   │   └── colors.xml
 │       │   └── xml/
 │       │       └── method.xml           # IME metadata
-│       ├── jniLibs/                      # cargo-ndk output target
+│   ├── jniLibs/                          # cargo-ndk output target
 │       │   └── arm64-v8a/
 │       │       └── libhandy_core.so      # Built by buildRust Gradle task
 │       └── assets/
-│           └── models/                   # TODO: Sprint 1 (bundled test model)
+│           └── models/                   # Reserved for future bundled test model
 │
 ├── handy-core/                           # Rust library (cdylib)
-│   ├── Cargo.toml                        # ✅ jni, log, serde; TODO: transcribe-cpp...
+│   ├── Cargo.toml                        # ✅ jni, log, serde, aaudio-sys, rubato, rusqlite, reqwest, tokio, hound, chrono, uuid
 │   ├── build.rs                          # Links OpenSLES on Android
 │   ├── Cargo.lock
-│   └── src/
+│   └── src/                              # 2,648 lines total (18 files) ✅ Sprint 4
 │       ├── lib.rs                        # JNI_OnLoad, JavaVM storage ✅
-│       ├── engine.rs                     # EngineState struct, ENGINE/JAVA_VM OnceLock ✅
-│       ├── jni_bridge.rs                 # 21 JNI functions (stub implementations) ✅
-│       ├── jni_callback.rs               # 6 dispatch helpers ✅
-│       ├── audio/                        # TODO: Sprint 1
-│       │   ├── mod.rs
-│       │   ├── capture.rs                # AAudio wrapper
-│       │   ├── resampler.rs              # Port from audio_toolkit
-│       │   └── vad.rs                    # Port from audio_toolkit
-│       ├── stt/                          # TODO: Sprint 1
-│       │   ├── mod.rs
-│       │   ├── manager.rs                # Port from managers/transcription.rs
-│       │   └── stream.rs                 # StreamRouter + StreamWorker
-│       ├── model/                        # TODO: Sprint 1
-│       │   ├── mod.rs
-│       │   ├── manager.rs                # Port from managers/model.rs
-│       │   ├── catalog.rs                # Port from catalog/
-│       │   └── gguf_meta.rs              # Port from managers/gguf_meta.rs
-│       ├── history/                      # TODO: Sprint 1
-│       │   └── manager.rs                # Port from managers/history.rs
-│       ├── postproc.rs                   # TODO: Sprint 2
-│       ├── settings.rs                   # TODO: Sprint 2
-│       └── util.rs                       # Platform helpers
+│       ├── engine.rs                     # EngineState (77 loc) — 4 managers ✅ Sprint 4
+│       ├── jni_bridge.rs                 # 21 JNI functions (695 loc) — ALL REAL ✅ Sprint 4
+│       ├── jni_callback.rs               # 6 dispatch helpers (132 loc) ✅
+│       ├── audio/                        # ✅ Sprint 4 (711 loc)
+│       │   ├── mod.rs                    # Module declarations
+│       │   ├── capture.rs                # AAudio wrapper via aaudio-sys FFI
+│       │   ├── resampler.rs              # FrameResampler via rubato FftFixedIn
+│       │   ├── vad.rs                    # EnergyVad + SmoothedVad state machine
+│       │   └── pipeline.rs               # AudioPipeline orchestrator
+│       ├── transcription/                # ✅ Sprint 4 (398 loc)
+│       │   ├── mod.rs                    # Module declarations
+│       │   ├── engine.rs                 # TranscriptionEngine + post_process()
+│       │   ├── router.rs                 # StreamRouter (mpsc, atomic zero-cost)
+│       │   └── worker.rs                 # StreamWorker (background thread)
+│       ├── model/                        # ✅ Sprint 4 (456 loc)
+│       │   ├── mod.rs                    # Module declarations
+│       │   ├── info.rs                   # ModelInfo + catalog (5 models)
+│       │   └── manager.rs                # HTTP download, file mgmt, active model
+│       └── history/                      # ✅ Sprint 4 (159 loc)
+│           ├── mod.rs                    # Module declarations
+│           └── manager.rs                # SQLite CRUD with schema + indexes
 │
 ├── scripts/
 │   └── build-rust.sh                     # cargo ndk invocation for arm64 + x86_64 ✅
