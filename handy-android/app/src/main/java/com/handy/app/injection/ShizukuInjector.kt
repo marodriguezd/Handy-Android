@@ -31,9 +31,23 @@ class ShizukuInjector(
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(component: ComponentName, binder: IBinder) {
-            userService = IHandyUserService.Stub.asInterface(binder)
+            userService = object : IHandyUserService.Stub() {
+                override fun getInputServiceBinder(): IBinder {
+                    val data = android.os.Parcel.obtain()
+                    val reply = android.os.Parcel.obtain()
+                    try {
+                        data.writeInterfaceToken("com.handy.app.injection.IHandyUserService")
+                        binder.transact(android.os.IBinder.FIRST_CALL_TRANSACTION, data, reply, 0)
+                        reply.readException()
+                        return reply.readStrongBinder()
+                    } finally {
+                        data.recycle()
+                        reply.recycle()
+                    }
+                }
+            }
             reconnectAttempts = 0
-            Log.i("ShizukuInjector", "HandyUserService connected")
+            Log.i("ShizukuInjector", "HandyUserService connected via IPC")
         }
 
         override fun onServiceDisconnected(component: ComponentName) {
