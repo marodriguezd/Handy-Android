@@ -34,11 +34,11 @@ impl std::error::Error for ModelError {}
 
 fn model_download_url(model_id: &str) -> Option<String> {
     let hf_name = match model_id {
-        "whisper-tiny-q5_0" => "ggml-tiny-q5_0.bin",
-        "whisper-tiny-en-q5_0" => "ggml-tiny.en-q5_0.bin",
-        "whisper-base-q5_0" => "ggml-base-q5_0.bin",
-        "whisper-small-q5_0" => "ggml-small-q5_0.bin",
-        "whisper-medium-q5_0" => "ggml-medium-q5_0.bin",
+        "whisper-tiny-q5_1" => "ggml-tiny-q5_1.bin",
+        "whisper-tiny-en-q5_1" => "ggml-tiny.en-q5_1.bin",
+        "whisper-base-q5_1" => "ggml-base-q5_1.bin",
+        "whisper-small-q5_1" => "ggml-small-q5_1.bin",
+        "whisper-medium-q5_1" => "ggml-medium-q5_1.bin",
         _ => return None,
     };
     Some(format!(
