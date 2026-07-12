@@ -14,12 +14,12 @@ android {
         versionCode = 2
         versionName = "1.0.0-alpha1"
 
-        // Sentry DSN - replace with your actual DSN
-        buildConfigField("String", "SENTRY_DSN", "\"https://examplePublicKey@o0.ingest.sentry.io/0\"")
+        // Sentry DSN — override via SENTRY_DSN env var (used in CI)
+        buildConfigField("String", "SENTRY_DSN", "\"${System.getenv("SENTRY_DSN") ?: "https://examplePublicKey@o0.ingest.sentry.io/0"}\"")
     }
 
     signingConfigs {
-        release {
+        create("release") {
             storeFile = file(System.getenv("HANDY_KEYSTORE_PATH") ?: "../handy-release.keystore")
             storePassword = System.getenv("HANDY_KEYSTORE_PASSWORD") ?: ""
             keyAlias = System.getenv("HANDY_KEY_ALIAS") ?: "handy"
@@ -30,7 +30,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.release
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -55,6 +55,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
 
     composeOptions {
@@ -65,13 +66,17 @@ android {
 val buildRust by tasks.registering(Exec::class) {
     description = "Build Rust native library via cargo-ndk for aarch64-linux-android"
     workingDir = file("${rootDir}/handy-core")
+    val isRelease = gradle.startParameter.taskNames.any {
+        it.contains("release", ignoreCase = true)
+    }
+    val buildFlag = if (isRelease) "--release" else ""
     commandLine(
         "cargo", "ndk",
         "--target", "aarch64-linux-android",
         "--platform", "26",
         "--",
         "-p", "handy-core",
-        "build", "--release"
+        "build", buildFlag
     )
 }
 
@@ -96,6 +101,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 

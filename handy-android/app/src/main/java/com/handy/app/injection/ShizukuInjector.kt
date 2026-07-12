@@ -9,15 +9,15 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.InputEvent
 import android.view.KeyEvent
-import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import moe.shizuku.api.Shizuku
-import moe.shizuku.api.ShizukuBinderWrapper
+import android.content.ServiceConnection
+import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuBinderWrapper
 
 class ShizukuInjector(
     private val context: Context,
@@ -29,7 +29,7 @@ class ShizukuInjector(
     private var reconnectAttempts = 0
     private var reconnectJob: Job? = null
 
-    private val serviceConnection = object : Shizuku.UserServiceConnection {
+    private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(component: ComponentName, binder: IBinder) {
             userService = IHandyUserService.Stub.asInterface(binder)
             reconnectAttempts = 0
@@ -55,7 +55,10 @@ class ShizukuInjector(
         if (!Shizuku.pingBinder()) return
         try {
             val component = ComponentName(context, HandyUserService::class.java)
-            Shizuku.bindUserService(component, serviceConnection)
+            val args = Shizuku.UserServiceArgs(component)
+                .daemon(true)
+                .version(1)
+            Shizuku.bindUserService(args, serviceConnection)
         } catch (e: Exception) {
             Log.e("ShizukuInjector", "Failed to bind HandyUserService", e)
         }
@@ -64,7 +67,10 @@ class ShizukuInjector(
     fun unbindService() {
         try {
             val component = ComponentName(context, HandyUserService::class.java)
-            Shizuku.unbindUserService(component, serviceConnection)
+            val args = Shizuku.UserServiceArgs(component)
+                .daemon(true)
+                .version(1)
+            Shizuku.unbindUserService(args, serviceConnection, true)
         } catch (_: Exception) {
         }
         userService = null
@@ -83,7 +89,7 @@ class ShizukuInjector(
         return try {
             Shizuku.pingBinder()
                 && Shizuku.getVersion() >= 13
-                && Shizuku.checkSelfPermission() == Shizuku.PERMISSION_GRANTED
+                && Shizuku.checkSelfPermission() == 0
                 && userService != null
         } catch (_: Exception) {
             false
@@ -128,9 +134,8 @@ class ShizukuInjector(
         }
     }
 
-    fun requestPermissionIfNeeded(activity: FragmentActivity) {
-        if (!Shizuku.isPrepared()) return
-        if (Shizuku.checkSelfPermission() == Shizuku.PERMISSION_GRANTED) return
+    fun requestPermissionIfNeeded(activity: android.app.Activity) {
+        if (Shizuku.checkSelfPermission() == 0) return
         Shizuku.requestPermission(requestPermissionCode)
     }
 }

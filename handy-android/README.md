@@ -1,5 +1,7 @@
 # Handy for Android
 
+[![Android CI](https://github.com/cjpais/Handy/actions/workflows/android-ci.yml/badge.svg)](https://github.com/cjpais/Handy/actions/workflows/android-ci.yml)
+
 Offline, on-device speech-to-text dictation engine for Android 8.0+ (API 26).
 
 ## Prerequisites
@@ -18,7 +20,7 @@ cd handy-android/handy-core
 cargo ndk --target aarch64-linux-android --platform 26 -- build --release
 
 # Build the Android app
-cd handy-android
+cd ..
 ./gradlew assembleDebug
 ```
 

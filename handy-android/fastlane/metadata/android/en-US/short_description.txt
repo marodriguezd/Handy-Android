@@ -1,0 +1,1 @@
+Offline speech-to-text dictation via Whisper AI — completely private, no internet required.

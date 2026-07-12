@@ -35,7 +35,7 @@ class HistoryViewModel : ViewModel() {
         if (!state.hasMore || state.isLoading) return
         _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
-            val json = EngineBridge.nativeGetHistory(state.entries.size.toLong(), PAGE_SIZE)
+            val json = EngineBridge.nativeGetHistory(state.entries.size, PAGE_SIZE)
             val newEntries = HistoryEntry.fromJsonArray(json)
             _uiState.update {
                 it.copy(

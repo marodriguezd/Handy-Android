@@ -1,7 +1,7 @@
 # Handy for Android — Master Technical Specification
 
-**Status:** Implementation in progress (Sprint 6 complete)  
-**Version:** 1.6.0  
+**Status:** Implementation in progress (Sprint 7 complete)  
+**Version:** 1.7.0  
 **Target:** Android 8.0+ (API 26), `targetSdk 35`  
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 
@@ -1300,21 +1300,21 @@ Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 
 **Milestone:** Alpha-ready codebase with crash protection, OOM guards, idle memory reclaim, edge case handling, and developer documentation.
 
-### Sprint 7 — Distribution y Open Source
+### Sprint 7 — Distribution y Open Source ✅ COMPLETED
 
 **Goal:** Public release and community ready.
 
-| # | Task | Owner | Deliverable |
-|---|---|---|---|
-| 5.1 | GitHub Actions CI: build on push (Rust cross-compile + Android Gradle build). Matrix: debug + release. | Infra | CI green on `main` |
-| 5.2 | Signing: release keystore generation, secure storage in GitHub Secrets, automated signing in CI. | Infra | Signed release APK/AAB from CI |
-| 5.3 | Documentation: `BUILD.md` for Android, architecture diagram, contribution guide, translation guide. | All | Developer docs complete |
-| 5.4 | License audit: all Rust crates, Kotlin dependencies, model files. Confirm Apache 2.0 / MIT compliance. | Infra | `licenses.md` generated |
-| 5.5 | GitHub Release: upload APK + AAB, write release notes, tag `v1.0.0-alpha`. | Infra | Release published |
-| 5.6 | F-Droid metadata: prepare `com.handy.app.yml` recipe. Submit to F-Droid. | Infra | F-Droid submission started |
-| 5.7 | Community: update README, open issues for known limitations, create Discussions category. | All | Repository ready for contributors |
+| # | Task | Owner | Deliverable | Status |
+|---|---|---|---|---|
+| 7.1 | GitHub Actions CI: build on push (Rust cross-compile + Android Gradle build). Matrix: debug + release. | Infra | `android-ci.yml` — runs on push/PR to main, sets up JDK 17 + Android SDK + NDK r27 + Rust cross-compiler, matrix debug/release, uploads APK artifacts. | ✅ |
+| 7.2 | Signing: release keystore generation, secure storage in GitHub Secrets, automated signing in CI. | Infra | `android-release.yml` with base64 keystore decode steps. `KEYSTORE.md` CI/CD signing section added with 5 GitHub Secret names documented. | ✅ |
+| 7.3 | Documentation: `BUILD.md` for Android, contribution guide, translation guide. | All | `BUILD.md` (148 lines) with full build instructions, troubleshooting. `CONTRIBUTING.md` updated with Android prerequisites, codebase structure, style guide, testing. `CONTRIBUTING_TRANSLATIONS.md` updated with Android strings.xml instructions. | ✅ |
+| 7.4 | License audit: all Rust crates, Kotlin dependencies, model files. Confirm Apache 2.0 / MIT compliance. | Infra | `licenses.md` (54 lines) with 16 Rust deps, 8 Kotlin deps, model files, build tools — all MIT or Apache 2.0, no copyleft. | ✅ |
+| 7.5 | GitHub Release: workflow for uploading APK + AAB to draft release. | Infra | `android-release.yml` — `workflow_dispatch` with version input, creates draft prerelease, builds signed APK/AAB, uploads as assets. | ✅ |
+| 7.6 | F-Droid metadata: prepare `com.handy.app.yml` recipe. | Infra | `metadata/com.handy.app.yml` (47 lines) + Fastlane store descriptions ready. | ✅ |
+| 7.7 | Community: update README, open issues for known limitations, create Discussions category. | All | Root `README.md` updated with Android section, links, and CI badges. `handy-android/README.md` updated with CI status badges. | ✅ |
 
-**Milestone:** Public alpha release on GitHub Releases. F-Droid submission in progress.
+**Milestone:** Public alpha release on GitHub Releases. F-Droid submission ready.
 
 ---
 

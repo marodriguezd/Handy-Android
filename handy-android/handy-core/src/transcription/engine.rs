@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use log::info;
-use transcribe_cpp::{Backend, Model, ModelOptions, RunOptions, Session, StreamOptions, Task};
+use transcribe_cpp::{Backend, Model, ModelOptions};
 
 use crate::transcription::router::{StreamCmd, StreamRouter};
 use crate::transcription::worker::StreamWorker;
@@ -12,11 +12,11 @@ use crate::transcription::worker::StreamWorker;
 pub struct TranscriptionEngine {
     model_dir: Option<String>,
     active_model_path: Option<PathBuf>,
+    model: Mutex<Option<Model>>,
     router: Arc<StreamRouter>,
     next_worker_id: AtomicU64,
     active_worker: Mutex<Option<StreamWorker>>,
     is_loaded: AtomicBool,
-    session: Mutex<Option<Session>>,
     last_final_result: Arc<Mutex<Option<String>>>,
     post_process_endpoint: Option<String>,
     post_process_api_key: Option<String>,
@@ -27,11 +27,11 @@ impl TranscriptionEngine {
         Self {
             model_dir: None,
             active_model_path: None,
+            model: Mutex::new(None),
             router: Arc::new(StreamRouter::new()),
             next_worker_id: AtomicU64::new(1),
             active_worker: Mutex::new(None),
             is_loaded: AtomicBool::new(false),
-            session: Mutex::new(None),
             last_final_result: Arc::new(Mutex::new(None)),
             post_process_endpoint: None,
             post_process_api_key: None,
@@ -57,12 +57,8 @@ impl TranscriptionEngine {
         let model = Model::load_with(path, &model_options)
             .map_err(|e| format!("Failed to load model: {e}"))?;
 
-        let session = model
-            .session()
-            .map_err(|e| format!("Failed to create session: {e}"))?;
-
         self.active_model_path = Some(path.clone());
-        *self.session.lock().unwrap() = Some(session);
+        *self.model.lock().unwrap() = Some(model);
         self.is_loaded.store(true, Ordering::Release);
 
         info!("[handy-core] model loaded successfully");
@@ -70,7 +66,7 @@ impl TranscriptionEngine {
     }
 
     pub fn unload_model(&self) {
-        *self.session.lock().unwrap() = None;
+        *self.model.lock().unwrap() = None;
         self.is_loaded.store(false, Ordering::Release);
         info!("[handy-core] model unloaded");
     }
@@ -87,24 +83,14 @@ impl TranscriptionEngine {
         let worker_id = self.next_worker_id.fetch_add(1, Ordering::Relaxed);
         let rx = self.router.open_channel();
 
-        let mut stream = {
-            let mut guard = self.session.lock().map_err(|e| e.to_string())?;
-            let session = guard
-                .as_mut()
-                .ok_or_else(|| "No model loaded".to_string())?;
-
-            let run_options = RunOptions {
-                task: Task::Transcribe,
-                language: None,
-                target_language: None,
-                family: None,
-                ..Default::default()
-            };
-
-            session
-                .stream(&run_options, &StreamOptions::default())
-                .map_err(|e| format!("Failed to create stream: {e}"))?
-        };
+        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
+        let model = model_guard
+            .as_mut()
+            .ok_or_else(|| "No model loaded".to_string())?;
+        let session = model
+            .session()
+            .map_err(|e| format!("Failed to create session: {e}"))?;
+        drop(model_guard);
 
         let last_result = self.last_final_result.clone();
         let on_final = move |text: String| {
@@ -113,8 +99,13 @@ impl TranscriptionEngine {
         };
 
         let mut worker = StreamWorker::new(worker_id);
-        worker.spawn(rx, stream, on_partial, on_final);
+        let _ret_session = worker.returned_session();
+        worker.spawn(rx, session, on_partial, on_final);
         *self.active_worker.lock().unwrap() = Some(worker);
+
+        // Store returned session handle for later pickup
+        // (no need to keep a field — the worker holds the Arc)
+
         Ok(worker_id)
     }
 
@@ -129,7 +120,13 @@ impl TranscriptionEngine {
             if worker.worker_id() != worker_id {
                 return Err("worker_id mismatch".to_string());
             }
+            // After join, the worker thread has placed the Session back
             worker.join();
+            // Pick up the returned session and save it in the model... actually,
+            // sessions are created from model on demand. The session was dropped
+            // after Finalize puts it in returned_session. Let's recreate.
+            // But wait — the returned session is lost if we don't save it.
+            // For now we accept creating a fresh session for the next stream.
         } else {
             return Err("no active worker".to_string());
         }

@@ -17,6 +17,19 @@ Handy was created to fill the gap for a truly open source, extensible speech-to-
 
 Handy isn't trying to be the best speech-to-text app—it's trying to be the most forkable one.
 
+## Handy for Android
+
+Handy for Android brings the same offline speech-to-text experience to Android devices (8.0+, API 26). It uses the same Rust engine (`transcribe-cpp` with GGUF Whisper models) wrapped in an Android Input Method Service (IME) for seamless text injection into any app.
+
+**[📱 Build & Install](handy-android/README.md)** · **[📖 Architecture](ARCHITECTURE.md)** · **[📋 Test Matrix](handy-android/TEST_MATRIX.md)**
+
+Key differences from the desktop version:
+- **IME-based injection** — dictation works in any text field, no accessibility permission needed
+- **Shizuku power-user mode** — advanced text injection via UID 2000 (optional)
+- **Foreground Service** — reliable recording via persistent notification
+- **AAudio capture** — low-latency microphone audio via native NDK API
+- **EnergyVAD** — lightweight voice activity detection (no ONNX dependency)
+
 ## How It Works
 
 1. **Press** a configurable keyboard shortcut to start/stop recording (or use push-to-talk mode)

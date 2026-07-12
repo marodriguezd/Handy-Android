@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import rikka.shizuku.Shizuku
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
@@ -160,8 +161,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 trailing = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val shizukuStatus = try {
-                            val pingOk = moe.shizuku.api.Shizuku.pingBinder()
-                            val hasPerm = moe.shizuku.api.Shizuku.checkSelfPermission() == 0
+                                    val pingOk = Shizuku.pingBinder()
+                                        val hasPerm = Shizuku.checkSelfPermission() == 0
                             val svcConnected = app.shizukuInjector.isAvailable()
                             when {
                                 !pingOk || !hasPerm -> androidx.compose.ui.graphics.Color.Red
@@ -183,8 +184,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                             onCheckedChange = { enabled ->
                                 if (enabled) {
                                     try {
-                                        val pingOk = moe.shizuku.api.Shizuku.pingBinder()
-                                        val hasPerm = moe.shizuku.api.Shizuku.checkSelfPermission() == 0
+                                        val pingOk = Shizuku.pingBinder()
+                                        val hasPerm = Shizuku.checkSelfPermission() == 0
                                         if (!pingOk || !hasPerm) {
                                             showShizukuDialog = true
                                         } else {

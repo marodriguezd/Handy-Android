@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import io.sentry.android.core.SentryAndroid
-import moe.shizuku.api.Shizuku
+import rikka.shizuku.Shizuku
 
 class HandyApplication : Application(), ComponentCallbacks2 {
 
@@ -56,9 +56,8 @@ class HandyApplication : Application(), ComponentCallbacks2 {
         SentryAndroid.init(this) { options ->
             options.dsn = BuildConfig.SENTRY_DSN
         }
-        Shizuku.initialize(this)
         Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
-            if (grantResult == Shizuku.PERMISSION_GRANTED) {
+            if (grantResult == 0) {
                 Log.i("HandyApp", "Shizuku permission granted (code=$requestCode)")
                 shizukuInjector.bindService()
             }

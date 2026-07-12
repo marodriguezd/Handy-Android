@@ -169,6 +169,25 @@ We'd love help with:
 - Portuguese (`pt`)
 - And more!
 
+## Android Translations
+
+Handy for Android uses Android string resources located in `handy-android/app/src/main/res/values/strings.xml`.
+
+### Adding Android Translations
+
+1. Create a values folder for your language code, e.g. `handy-android/app/src/main/res/values-es/` for Spanish
+2. Copy the English `strings.xml` into it
+3. Translate only the `<string>` values, keep all keys unchanged
+4. Submit a pull request with both the desktop and Android translation files if applicable
+
+### Currently Supported Android Languages
+
+| Language   | Code | Status             |
+| ---------- | ---- | ------------------ |
+| English    | `en` | Complete (source)  |
+
+We welcome contributions for Android translations!
+
 ---
 
 Thank you for making Handy accessible to more people around the world!

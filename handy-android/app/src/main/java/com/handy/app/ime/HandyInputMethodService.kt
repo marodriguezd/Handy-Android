@@ -78,7 +78,7 @@ class HandyInputMethodService : InputMethodService() {
                     },
                     onRetry = { engineViewModel.resetPartialText() },
                     onCancelDictation = { engineViewModel.cancelRecording() },
-                    onSwitchKeyboard = { switchToPreviousKeyboard() }
+                    onSwitchKeyboard = { switchInputMethod("") }
                 )
             }
         }

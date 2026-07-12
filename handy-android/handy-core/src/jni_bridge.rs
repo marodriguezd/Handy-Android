@@ -43,7 +43,7 @@ where
             if let Ok(mut env) = get_env_attached() {
                 // We need the callback from the engine. Use with_engine but don't panic again.
                 let lock = ENGINE.get().expect("ENGINE not initialized");
-                if let Ok(mut guard) = lock.lock() {
+                if let Ok(guard) = lock.lock() {
                     if let Some(ref state) = *guard {
                         jni_callback::dispatch_error(&mut env, &state.callback, 99, &msg);
                     }

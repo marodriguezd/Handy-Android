@@ -1,0 +1,21 @@
+Handy for Android is an offline, on-device speech-to-text dictation engine. It captures microphone audio, processes it through a local Whisper-family model, and injects the transcribed text into any application — without requiring an internet connection.
+
+Key features:
+• Works entirely offline — your voice stays on your device
+• On-device AI with Whisper GGUF models (tiny, small, medium, turbo, large)
+• Input Method Service (IME) for text injection into any app
+• Shizuku-based power-user injection (optional, for advanced users)
+• Voice Activity Detection for automatic silence filtering
+• Post-processing: filler word removal, stutter collapse
+• Model download and management
+• Transcription history with search
+• Material You dynamic color theming
+• Foreground Service for reliable recording
+
+Permissions:
+• Microphone — required for speech recognition
+• Notification (Android 13+) — required for Foreground Service
+• Shizuku (optional) — for advanced text injection
+
+Privacy:
+No data leaves your device. All processing is done locally using on-device AI models.

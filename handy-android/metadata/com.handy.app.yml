@@ -1,0 +1,47 @@
+Categories:
+  - Accessibility
+  - Science & Education
+License: MIT
+AuthorName: Handy Team
+AuthorEmail: contact@handy.computer
+WebSite: https://handy.computer
+SourceCode: https://github.com/cjpais/Handy
+IssueTracker: https://github.com/cjpais/Handy/issues
+
+Name: Handy
+Summary: Offline speech-to-text dictation
+Description: |+
+  Handy for Android is an offline, on-device speech-to-text dictation engine.
+  It captures microphone audio, processes it through a local Whisper-family
+  model, and injects the transcribed text into any application.
+
+  Key features:
+  * Works entirely offline
+  * On-device AI with Whisper GGUF models
+  * Input Method Service (IME)
+  * Voice Activity Detection
+  * Post-processing
+
+RepoType: git
+Repo: https://github.com/cjpais/Handy
+
+Builds:
+  - versionName: 1.0.0-alpha1
+    versionCode: 1
+    commit: v1.0.0-alpha1
+    subdir: handy-android
+    init:
+      - cargo install cargo-ndk
+      - rustup target add aarch64-linux-android
+    build:
+      - cd handy-core && cargo ndk --target aarch64-linux-android --platform 26 -- -p handy-core build --release
+      - mkdir -p ../app/src/main/jniLibs/arm64-v8a
+      - cp target/aarch64-linux-android/release/libhandy_core.so ../app/src/main/jniLibs/arm64-v8a/
+    ndk: r26
+    gradle:
+      - release
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 1.0.0-alpha1
+CurrentVersionCode: 1

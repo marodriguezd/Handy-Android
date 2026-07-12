@@ -21,11 +21,20 @@ Handy aims to be the most forkable speech-to-text app. The goal is to create bot
 
 ### Prerequisites
 
-Before you begin, ensure you have the following installed:
-
+**Desktop (Tauri):**
 - [Rust](https://rustup.rs/) (latest stable)
 - [Bun](https://bun.sh/) package manager
 - Platform-specific build tools (see [BUILD.md](BUILD.md))
+
+**Android:**
+- [Rust](https://rustup.rs/) (latest stable)
+- [Android NDK](https://developer.android.com/ndk) (r26+)
+- [cargo-ndk](https://github.com/bbqsrc/cargo-ndk): `cargo install cargo-ndk`
+- Rust target: `rustup target add aarch64-linux-android`
+- Java 17 (JDK 17)
+- Android SDK (compileSdk 35)
+
+See [handy-android/BUILD.md](handy-android/BUILD.md) for detailed Android build instructions.
 
 ### Setting Up Your Development Environment
 
@@ -87,6 +96,27 @@ Handy follows a clean architecture pattern:
 - `lib/types.ts` - Shared TypeScript types
 
 For more details, see the Architecture section in [README.md](README.md) or [AGENTS.md](AGENTS.md).
+
+**Android (Kotlin + Rust — `handy-android/`):**
+
+The Android build lives in the `handy-android/` subdirectory:
+
+- `handy-core/` — Rust engine (cdylib, 22 JNI functions) handling audio capture, VAD, transcription, model management, and history
+- `app/src/main/java/com/handy/app/` — Kotlin application code:
+  - `bridge/` — JNI bridge declarations (EngineBridge.kt, EngineCallback.kt)
+  - `viewmodel/` — ViewModels with StateFlow-based state management
+  - `ui/` — Jetpack Compose screens (Dictation, Models, Settings, History, Onboarding)
+  - `ime/` — InputMethodService for text injection
+  - `injection/` — Strategy pattern for text injection (Shizuku, IME, Clipboard)
+  - `service/` — Foreground RecordingService
+  - `model/` — Data model classes (ModelInfo, HistoryEntry, AppSettings)
+
+Key architecture rules:
+- It is a **single Activity** with Compose Navigation
+- **No DI framework** — manual factory pattern via `HandyApplication`
+- The Rust engine is a **process-wide singleton** — `nativeInit` called exactly once
+- The IME does NOT own the engine — it accesses the ViewModel via `HandyApplication`
+- **ProGuard rules** are mandatory for release builds (JNI + AIDL keep rules)
 
 ## 🐛 Reporting Bugs
 
@@ -263,6 +293,15 @@ In your PR description, please include:
 - Keep functions small and single-purpose
 - Prioritize readability over cleverness
 
+**Kotlin/Android:**
+- Follow Kotlin coding conventions (no semicolons, PascalCase for classes, camelCase for functions)
+- Use Jetpack Compose for all UI (no XML layouts beyond manifest)
+- Use Material 3 with dynamic colors (Material You) on API 31+
+- Use StateFlow + collectAsState with Lifecycle.repeatOnLifecycle for state collection
+- No `kotlinx.serialization` — use `org.json` for Rust JSON interop
+- All user-facing strings in `res/values/strings.xml` for i18n
+- Crash protection: `catch_unwind` guards on all 22 JNI entry points
+
 ### Testing Your Changes
 
 **Manual Testing:**
@@ -280,6 +319,14 @@ bun run tauri build
 ```
 
 Test the production build to ensure it works as expected.
+
+**Android Testing:**
+
+- Build debug APK: `cd handy-android && ./gradlew assembleDebug`
+- Install on device/emulator: `adb install app/build/outputs/apk/debug/app-debug.apk`
+- Test IME flow: enable Handy in Settings → System → Languages & input → On-screen keyboard
+- Test dictation: tap microphone button in IME, speak, verify text appears
+- See [handy-android/TEST_MATRIX.md](handy-android/TEST_MATRIX.md) for comprehensive test cases (142 cases)
 
 ## 📝 Documentation Contributions
 
