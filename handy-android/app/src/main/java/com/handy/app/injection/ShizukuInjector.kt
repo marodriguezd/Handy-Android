@@ -10,8 +10,11 @@ import android.util.Log
 import android.view.InputEvent
 import android.view.KeyEvent
 import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.shizuku.api.Shizuku
 import moe.shizuku.api.ShizukuBinderWrapper
@@ -23,16 +26,28 @@ class ShizukuInjector(
 
     @Volatile
     private var userService: IHandyUserService? = null
+    private var reconnectAttempts = 0
+    private var reconnectJob: Job? = null
 
     private val serviceConnection = object : Shizuku.UserServiceConnection {
         override fun onServiceConnected(component: ComponentName, binder: IBinder) {
             userService = IHandyUserService.Stub.asInterface(binder)
+            reconnectAttempts = 0
             Log.i("ShizukuInjector", "HandyUserService connected")
         }
 
         override fun onServiceDisconnected(component: ComponentName) {
             userService = null
             Log.w("ShizukuInjector", "HandyUserService disconnected")
+            reconnectJob?.cancel()
+            reconnectJob = CoroutineScope(Dispatchers.IO).launch {
+                val delay = (1000L * (1 shl reconnectAttempts.coerceAtMost(5))).coerceAtMost(30_000L)
+                delay(delay)
+                reconnectAttempts++
+                if (Shizuku.pingBinder()) {
+                    bindService()
+                }
+            }
         }
     }
 
@@ -57,7 +72,14 @@ class ShizukuInjector(
 
     override val displayName: String get() = "Shizuku (UID 2000)"
 
+    fun ensureConnected() {
+        if (userService == null && Shizuku.pingBinder()) {
+            bindService()
+        }
+    }
+
     override fun isAvailable(): Boolean {
+        ensureConnected()
         return try {
             Shizuku.pingBinder()
                 && Shizuku.getVersion() >= 13

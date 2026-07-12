@@ -2,11 +2,8 @@ package com.handy.app.ime
 
 import android.inputmethodservice.InputMethodService
 import android.view.View
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import android.view.inputmethod.InputConnection
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,38 +53,31 @@ class HandyInputMethodService : InputMethodService() {
     private val injectorRouter: InjectorRouter
         get() = (application as HandyApplication).injectorRouter
 
-    private val imeInjector = ImeInjector { currentInputConnection }
+    private val imeInjector = ImeInjector { currentInputConnection ?: lastInputConnection }
 
-    private var composeView: ComposeView? = null
-    private var scope: CoroutineScope? = null
+    private var lastInputConnection: InputConnection? = null
 
     override fun onCreate() {
         super.onCreate()
         injectorRouter.setImeInjector(imeInjector)
-        val job = Job()
-        scope = CoroutineScope(Dispatchers.Main + job)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        scope?.cancel()
     }
 
     override fun onCreateInputView(): View {
         return ComposeView(this).also { view ->
-            composeView = view
             view.setContent {
                 ImeContent(
                     state = engineViewModel.state.collectAsState().value,
                     partialText = engineViewModel.partialText.collectAsState().value,
                     finalText = engineViewModel.finalText.collectAsState().value,
                     vadLevel = engineViewModel.vadLevel.collectAsState().value,
+                    lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
                     onStartDictation = { startDictation() },
                     onStopDictation = { stopDictation() },
                     onCommitText = { text ->
-                        scope?.launch { injectorRouter.inject(text) }
+                        engineViewModel.confirmInsert(text)
                     },
                     onRetry = { engineViewModel.resetPartialText() },
+                    onCancelDictation = { engineViewModel.cancelRecording() },
                     onSwitchKeyboard = { switchToPreviousKeyboard() }
                 )
             }
@@ -95,11 +86,14 @@ class HandyInputMethodService : InputMethodService() {
 
     override fun onStartInput(attribute: android.view.inputmethod.EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
-        engineViewModel.resetPartialText()
+        lastInputConnection = currentInputConnection
+        // Clear texts without resetting state — engine may be recording mid-dictation
+        engineViewModel.clearPartialText()
     }
 
     override fun onFinishInput() {
         super.onFinishInput()
+        lastInputConnection = null
     }
 
     private fun startDictation() {
@@ -117,10 +111,12 @@ private fun ImeContent(
     partialText: String,
     finalText: String?,
     vadLevel: Float,
+    lastErrorMessage: String?,
     onStartDictation: () -> Unit,
     onStopDictation: () -> Unit,
     onCommitText: (String) -> Unit,
     onRetry: () -> Unit,
+    onCancelDictation: () -> Unit,
     onSwitchKeyboard: () -> Unit
 ) {
     Surface(
@@ -132,9 +128,13 @@ private fun ImeContent(
             1, 2, 3 -> DictatingMode(
                 partialText = partialText,
                 vadLevel = vadLevel,
-                onStopDictation = onStopDictation
+                onStopDictation = onStopDictation,
+                onCancelDictation = onCancelDictation
             )
-            4 -> ErrorMode(onRetry = onRetry)
+            4 -> ErrorMode(
+                errorMessage = lastErrorMessage,
+                onRetry = onRetry
+            )
             5 -> ConfirmMode(
                 finalText = finalText ?: partialText,
                 onCommitText = onCommitText,
@@ -191,8 +191,19 @@ private fun IdleMode(
 private fun DictatingMode(
     partialText: String,
     vadLevel: Float,
-    onStopDictation: () -> Unit
+    onStopDictation: () -> Unit,
+    onCancelDictation: () -> Unit
 ) {
+    val animatedLevel by animateFloatAsState(
+        targetValue = vadLevel,
+        label = "vadLevel"
+    )
+    val vadColor = when {
+        animatedLevel < 0.3f -> Color(0xFF4CAF50)
+        animatedLevel < 0.6f -> Color(0xFFFFEB3B)
+        else -> Color(0xFFF44336)
+    }
+
     Box(
         modifier = Modifier.fillMaxSize().padding(16.dp)
     ) {
@@ -239,12 +250,19 @@ private fun DictatingMode(
                     Box(
                         modifier = Modifier
                             .width(4.dp)
-                            .height((vadLevel * 48).dp.coerceAtMost(48.dp))
+                            .height((animatedLevel * 48).dp.coerceAtMost(48.dp))
                             .align(Alignment.BottomCenter)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.primary)
+                            .background(vadColor)
                     )
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${(animatedLevel * 100).toInt()}%",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 Spacer(modifier = Modifier.width(16.dp))
 
@@ -256,6 +274,11 @@ private fun DictatingMode(
                         .background(Color.Red)
                 ) {
                     Text(text = "■", fontSize = 28.sp, color = Color.White)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onCancelDictation) {
+                    Text(stringResource(R.string.dialog_cancel))
                 }
             }
         }
@@ -333,15 +356,25 @@ private fun ConfirmMode(
 }
 
 @Composable
-private fun ErrorMode(onRetry: () -> Unit) {
+private fun ErrorMode(
+    errorMessage: String?,
+    onRetry: () -> Unit
+) {
     Box(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = stringResource(R.string.dictation_button),
-                style = MaterialTheme.typography.bodyLarge
+                text = errorMessage ?: stringResource(R.string.ime_error_generic),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.ime_error_retry_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = onRetry) {

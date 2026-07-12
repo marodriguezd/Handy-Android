@@ -1,5 +1,6 @@
 package com.handy.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,6 +22,10 @@ import com.handy.app.viewmodel.SettingsViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (intent?.getBooleanExtra("start_dictation", false) == true) {
+            (application as HandyApplication).engineViewModel.startRecording()
+        }
 
         setContent {
             val app = remember { (application as HandyApplication) }
@@ -60,6 +65,13 @@ class MainActivity : ComponentActivity() {
                     },
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra("start_dictation", false) == true) {
+            (application as HandyApplication).engineViewModel.startRecording()
         }
     }
 }

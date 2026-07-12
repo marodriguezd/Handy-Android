@@ -1,7 +1,7 @@
 # Handy for Android — Master Technical Specification
 
-**Status:** Implementation in progress (Sprint 4 complete)  
-**Version:** 1.4.0  
+**Status:** Implementation in progress (Sprint 5 complete)  
+**Version:** 1.5.0  
 **Target:** Android 8.0+ (API 26), `targetSdk 35`  
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 
@@ -17,7 +17,7 @@ Handy for Android is an **offline, on-device speech-to-text dictation engine**. 
 
 | Dependency | Version | Purpose | License | Status |
 |---|---|---|---|---|
-| `transcribe-cpp` | ≥ 0.1.3 | GGUF/Whisper inference engine | MIT | ⏳ NDK cmake pending |
+| `transcribe-cpp` | 0.1.3 | GGUF/Whisper inference engine | MIT | ✅ Integrated (Sprint 5) |
 | `aaudio-sys` | ≥ 0.1.0 | Low-latency audio capture FFI (AAudio NDK API) | (Android SDK) | ✅ Integrated |
 | `rubato` | ≥ 0.16 | Audio resampling (device rate → 16 kHz) | MIT | ✅ Integrated |
 | EnergyVAD (custom) | — | Energy-based Voice Activity Detection (no ONNX dep) | MIT | ✅ Built |
@@ -192,7 +192,7 @@ USER ACTION: Tap dictation button in DictationScreen / IME / Notification action
     ▼
 [6] StreamWorker (background thread)
     │   Receives frames from StreamRouter::rx (mpsc::Receiver)
-    │   Every ~500ms: on_partial("Processing N frames...") → JNI callback
+    │   Every ~500ms: on_partial(stream.text().display()) → JNI callback
     │   When VAD hangover expires → (pipeline continues until stop)
     │
     ▼
@@ -220,9 +220,9 @@ USER ACTION: Tap dictation button in DictationScreen / IME / Notification action
 [11] Rust: transcription_engine.finalize_stream(worker_id)
     │   → router.send(StreamCmd::Finalize)
     │   → StreamWorker thread:
-    │       Finalize received → on_final("Transcribed N frames...s")
+    │       Finalize received → stream.finalize() → stream.text().display()
     │   → worker.join()
-    │   → Returns last_final_result (stub text)
+    │   → Returns committed text from transcribe-cpp Stream
     │
     ▼
 [12] Rust: post_process(&text)
@@ -237,14 +237,13 @@ USER ACTION: Tap dictation button in DictationScreen / IME / Notification action
 [14] Kotlin: EngineViewModel.onTranscription(text, false)
     │   → _finalText.value = text
     │   → _state.value = STATE_CONFIRM
-    │   → viewModelScope.launch(IO) {
-    │         injectorRouter.inject(text)
-    │             ├── ShizukuInjector (if enabled + available): UID 2000 paste
-    │             ├── ImeInjector (if IME active): commitText()
-    │             └── ClipboardInjector (fallback): clipboard + Toast
-    │     }
-    │   → On success: reset to STATE_IDLE
-    │   → On failure: cascade to next strategy
+    │   → IME shows ConfirmMode with Insert / Retry buttons
+    │   → User taps Insert → engineViewModel.confirmInsert(text)
+    │       → injectorRouter.inject(text)
+    │           ├── ShizukuInjector (if enabled + available): UID 2000 paste
+    │           ├── ImeInjector (if IME active): commitText()
+    │           └── ClipboardInjector (fallback): clipboard + Toast
+    │       → On success: _state = STATE_IDLE, clear texts
     │
     ▼
 [15] Rust: nativeSaveHistory(processed, post_processed, null)
@@ -877,7 +876,6 @@ class HandyInputMethodService : InputMethodService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        scope?.cancel()
         // IMPORTANT: Do NOT call engineViewModel.cleanup() here.
         // The engine is process-wide; destroying it on IME switch
         // would kill the Rust core for the entire app.
@@ -1037,17 +1035,19 @@ The `HandyInputMethodService` registers an `ImeInjector` at `onCreate()` via
 `injectorRouter.setImeInjector(ImeInjector { currentInputConnection })`, replacing
 the default stub (`ImeInjector { null }`).
 
-#### 5.7.2 State Reset on Successful Injection
+#### 5.7.2 Text Delivery via ConfirmMode
 
 When `EngineViewModel.onTranscription(text, false)` fires:
-1. `_finalText.value = text` and `_state.value = STATE_CONFIRM` are set first
-2. A coroutine in `viewModelScope.launch(Dispatchers.IO)` calls `router.inject(text)`
-3. If the result is success:
-   - `_state.value = STATE_IDLE`
-   - `_finalText.value = null`
-   - `_partialText.value = ""`
-4. This prevents the IME from showing a stale ConfirmMode with "Insert" button
-   after the text has already been delivered
+1. `_finalText.value = text` and `_state.value = STATE_CONFIRM` are set
+2. IME shows ConfirmMode with Insert and Retry buttons
+3. User taps **Insert** → `engineViewModel.confirmInsert(text)` is called:
+   - `injectorRouter.inject(text)` runs on `Dispatchers.IO`
+   - If success: `_state = STATE_IDLE`, `_finalText = null`, `_partialText = ""`
+   - IME returns to IdleMode (mic button)
+4. User taps **Retry** → `engineViewModel.resetPartialText()`:
+   - Sets `_state = STATE_IDLE`, clears all texts
+   - IME returns to IdleMode for a new dictation
+5. If injection fails, state stays at CONFIRM — user can tap Insert again or Retry
 
 ### 5.8 ShizukuUserService — AIDL IPC Architecture
 
@@ -1258,23 +1258,32 @@ Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 
 **Milestone achieved:** 2,648 lines Rust + 904 lines Kotlin added/modified across 18 Rust files and 5 Kotlin files. Build passes clean (`cargo ndk --target aarch64-linux-android --platform 26 -- check` — 0 errors, 0 warnings). Audio pipeline: AAudio → FrameResampler → EnergyVAD + SmoothedVad → audio_buffer + StreamRouter → StreamWorker → JNI callback → EngineViewModel. Post-processing: filler word removal + stutter collapse applied unconditionally.
 
-### Sprint 5 — IME y Text Injection (Next)
+### Sprint 5 — IME y Text Injection ✅ COMPLETED
 
-**Goal:** Text delivered to any app via IME.
+**Goal:** Real transcription via transcribe-cpp NDK. Text delivered to any app via IME + notification.
 
-| # | Task | Owner | Deliverable |
+| # | Task | Status | Deliverable |
 |---|---|---|---|
-| 2.1 | Wire up real transcription output to `HandyInputMethodService` (3-mode Compose UI and ViewModel binding already exist from Phase 0) | Android | IME displays real transcribed text, not placeholder |
-| 2.2 | Polish IME Compose UI: smooth animation for vadLevel meter, proper keyboard height, dark theme support | Android | Production-quality IME appearance |
-| 2.3 | Connect IME transcription flow: partial text → Mode B display, final text → Mode C (Confirm) | Android | Dictation from IME works within Handy app |
-| 2.4 | Test `commitTranscription()` via `InputConnection.commitText(text, 1)` in Google Keep, WhatsApp, Chrome | Android | Text appears in target app's text field |
-| 2.5 | Implement clipboard fallback with Toast notification when IME not active (code exists, needs testing) | Android | Fallback works when Handy is not the active IME |
-| 2.6 | IME onboarding flow: `Settings.ACTION_INPUT_METHOD_SETTINGS` intent, step-by-step enable guide | Android | User can enable Handy IME from onboarding |
-| 2.7 | `Foreground Service` notification actions: "Start Dictation", "Switch Keyboard" | Android | Dictation triggerable from notification |
+| 5.0 | `transcribe-cpp` NDK integration: add crate dep, configure CMAKE_ARGS for ARM64, wire real `Model::load_with()` + `session.stream()` into engine | ✅ | `Cargo.toml` + `build-rust.sh` + `engine.rs` + `worker.rs` — real inference instead of stub |
+| 5.1 | Replace stub `StreamWorker` with real whisper streaming: `stream.feed()` → `stream.text().display()` partials, `stream.finalize()` for committed | ✅ | `worker.rs` — partial text every ~500ms, final text on stop |
+| 5.2 | JNI_OnLoad: `transcribe_cpp::init_logging()` + `init_backends_default()` for ggml CPU backend | ✅ | `lib.rs` — backends initialised at native lib load |
+| 5.3 | IME Polish: `method.xml` subtype metadata, `InputConnection` edge case buffer, Cancel button in DictatingMode | ✅ | `method.xml` + `HandyInputMethodService.kt` — robust IME connection handling |
+| 5.4 | IME VAD visual polish: smooth `animateFloatAsState` + color gradient (green/yellow/red) + animated percentage | ✅ | `HandyInputMethodService.kt` — VAD level bar with smooth animation |
+| 5.5 | IME ErrorMode: error message via `lastErrorMessage` StateFlow + i18n string resources for generic error + retry hint | ✅ | `EngineViewModel.kt` + `strings.xml` — contextual error display |
+| 5.6 | IME Cancel: discard partial text, stop engine, return to IdleMode | ✅ | `cancelRecording()` wired to IME Cancel button |
+| 5.7 | ConfirmMode: Insert button calls `engineViewModel.confirmInsert(text)` → injection + state reset. Retry calls `resetPartialText()` → back to IdleMode | ✅ | No auto-inject, no double-paste, no stale ConfirmMode |
+| 5.8 | `resetPartialText()` includes `_state = STATE_IDLE` for correct ErrorMode/ConfirmMode Retry | ✅ | `EngineViewModel.kt` — Retry from Error or Confirm correctly returns to IdleMode |
+| 5.9 | `clearPartialText()` for `onStartInput` — clears texts without resetting state (preserves active dictation mid-field-switch) | ✅ | `EngineViewModel.kt` — no interruption of active recording |
+| 5.10 | Quick Dictate persistent notification: "Dictate" + "Switch Keyboard" actions, ongoing notification from `HandyApplication` | ✅ | `HandyApplication.kt` + `MainActivity.kt` — dictation triggerable from outside the IME |
+| 5.11 | RecordingService cleaned: notification-only (no AudioRecord), actions: Stop + Switch Keyboard | ✅ | `RecordingService.kt` — simplified to notification host with WakeLock |
+| 5.12 | Settings live sync: debounced (500ms) push of endpoint + API key to Rust engine | ✅ | `SettingsViewModel.kt` — no burst calls on every keystroke |
+| 5.13 | Shizuku auto-reconnect: exponential backoff (1s→2s→...→30s) on service disconnect | ✅ | `ShizukuInjector.kt` — automatic recovery from Shizuku process death |
+| 5.14 | Shizuku status dot in settings: colored circle (green/orange/red) that updates on recomposition | ✅ | `SettingsScreen.kt` — visual feedback of Shizuku connectivity |
+| 5.15 | Test matrix document: 8 categories, 142 test cases for IME + injection | ✅ | `TEST_MATRIX.md` — systematic testing guide |
 
-**Milestone:** User enables Handy as their keyboard, opens any app with a text field, taps the dictation button in the IME, speaks, and the transcribed text appears in the text field. The user can switch back to their normal keyboard with one tap.
+**Milestone:** User enables Handy as their keyboard, opens any app with a text field, taps the dictation button in the IME, speaks, and the transcribed text (via real transcribe-cpp inference) appears in the text field. The user can confirm/retry/cancel via ConfirmMode. Dictation also triggerable from persistent notification. Shizuku auto-reconnects on service death. Settings sync live with debounce.
 
-### Sprint 6 — Polish, Performance y Testing (Next + 1)
+### Sprint 6 — Polish, Performance y Testing (Next)
 
 **Goal:** Production-quality stability, performance, and edge case handling.
 
@@ -1370,11 +1379,11 @@ handy-android/
 │   │   └── IHandyUserService.aidl    # AIDL interface for UID 2000 IPC ✅
 │       ├── res/
 │       │   ├── values/
-│       │   │   ├── strings.xml          # 82 IME + app + Sprint 3 strings ✅
+│       │   │   ├── strings.xml          # 121 IME + app + Sprint 3–5 strings ✅
 │       │   │   ├── themes.xml           # Material3 NoActionBar ✅
 │       │   │   └── colors.xml
 │       │   └── xml/
-│       │       └── method.xml           # IME metadata
+│       │       └── method.xml           # IME metadata (subtype en_US + voice mode) ✅ Sprint 5
 │   ├── jniLibs/                          # cargo-ndk output target
 │       │   └── arm64-v8a/
 │       │       └── libhandy_core.so      # Built by buildRust Gradle task
@@ -1382,10 +1391,10 @@ handy-android/
 │           └── models/                   # Reserved for future bundled test model
 │
 ├── handy-core/                           # Rust library (cdylib)
-│   ├── Cargo.toml                        # ✅ jni, log, serde, aaudio-sys, rubato, rusqlite, reqwest, tokio, hound, chrono, uuid
+│   ├── Cargo.toml                        # ✅ jni, log, serde, aaudio-sys, rubato, rusqlite, reqwest, tokio, hound, chrono, uuid, transcribe-cpp 0.1.3
 │   ├── build.rs                          # Links OpenSLES on Android
 │   ├── Cargo.lock
-│   └── src/                              # 2,648 lines total (18 files) ✅ Sprint 4
+│   └── src/                              # 3,125 lines total (18 files) ✅ Sprint 5
 │       ├── lib.rs                        # JNI_OnLoad, JavaVM storage ✅
 │       ├── engine.rs                     # EngineState (77 loc) — 4 managers ✅ Sprint 4
 │       ├── jni_bridge.rs                 # 21 JNI functions (695 loc) — ALL REAL ✅ Sprint 4

@@ -8,6 +8,7 @@ import com.handy.app.bridge.EngineCallback
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.model.AppSettings
 import com.handy.app.model.ModelInfo
+import com.handy.app.service.RecordingService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +44,9 @@ class EngineViewModel(
 
     private val _vadLevel = MutableStateFlow(0f)
     val vadLevel: StateFlow<Float> = _vadLevel.asStateFlow()
+
+    private val _lastErrorMessage = MutableStateFlow<String?>(null)
+    val lastErrorMessage: StateFlow<String?> = _lastErrorMessage.asStateFlow()
 
     // ── Model Download Events ─────────────────────────────────
 
@@ -92,6 +96,7 @@ class EngineViewModel(
         _finalText.value = null
         _partialText.value = ""
         _state.value = STATE_LISTENING
+        RecordingService.start(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
             EngineBridge.nativeLoadModel()
             EngineBridge.nativeStartRecording(sampleRate = 16000, channelCount = 1)
@@ -100,12 +105,14 @@ class EngineViewModel(
 
     fun stopRecording() {
         _state.value = STATE_TRANSCRIBING
+        RecordingService.stop(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
             EngineBridge.nativeFinalizeStream()
         }
     }
 
     fun cancelRecording() {
+        RecordingService.stop(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
             EngineBridge.nativeCancelRecording()
         }
@@ -115,8 +122,28 @@ class EngineViewModel(
     }
 
     fun resetPartialText() {
+        _state.value = STATE_IDLE
         _partialText.value = ""
         _finalText.value = null
+        _lastErrorMessage.value = null
+    }
+
+    /** Clears texts only — does NOT reset state. Used when IME starts in a new field mid-dictation. */
+    fun clearPartialText() {
+        _partialText.value = ""
+        _finalText.value = null
+        _lastErrorMessage.value = null
+    }
+
+    fun confirmInsert(text: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = injectorRouter.inject(text)
+            if (result.isSuccess) {
+                _state.value = STATE_IDLE
+                _finalText.value = null
+                _partialText.value = ""
+            }
+        }
     }
 
     fun testInject(text: String) {
@@ -163,14 +190,6 @@ class EngineViewModel(
         } else {
             _finalText.value = text
             _state.value = STATE_CONFIRM
-            viewModelScope.launch(Dispatchers.IO) {
-                val result = injectorRouter.inject(text)
-                if (result.isSuccess) {
-                    _state.value = STATE_IDLE
-                    _finalText.value = null
-                    _partialText.value = ""
-                }
-            }
         }
     }
 
@@ -179,6 +198,7 @@ class EngineViewModel(
     }
 
     override fun onError(code: Int, message: String) {
+        _lastErrorMessage.value = message
         _state.value = STATE_ERROR
     }
 

@@ -4,16 +4,21 @@ import android.app.Application
 import androidx.lifecycle.ViewModel
 import com.handy.app.SettingsStore
 import com.handy.app.model.AppSettings
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val app: Application,
     private val settingsStore: SettingsStore,
     private val engineViewModel: EngineViewModel,
 ) : ViewModel() {
+
+    private var debounceJob: Job? = null
 
     data class UiState(
         val idleTimeout: Int = 30,
@@ -49,13 +54,21 @@ class SettingsViewModel(
     fun setPostProcessEndpoint(endpoint: String) {
         settingsStore.postProcessEndpoint = endpoint
         _uiState.update { it.copy(postProcessEndpoint = endpoint) }
-        engineViewModel.applySettings(buildSettings())
+        debounceApplySettings()
     }
 
     fun setPostProcessApiKey(apiKey: String) {
         settingsStore.postProcessApiKey = apiKey
         _uiState.update { it.copy(postProcessApiKey = apiKey) }
-        engineViewModel.applySettings(buildSettings())
+        debounceApplySettings()
+    }
+
+    private fun debounceApplySettings() {
+        debounceJob?.cancel()
+        debounceJob = viewModelScope.launch {
+            delay(500)
+            engineViewModel.applySettings(buildSettings())
+        }
     }
 
     fun toggleApiKeyVisibility() {

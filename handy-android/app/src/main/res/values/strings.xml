@@ -47,6 +47,13 @@
     <string name="settings_shizuku_dialog_title">Shizuku Required</string>
     <string name="settings_shizuku_dialog_message">Shizuku injection requires the Shizuku app to be installed and running. Please install Shizuku from the official source, enable it in developer settings, and grant permission.</string>
     <string name="settings_switch_keyboard">Switch Keyboard</string>
+
+    <!-- Quick Dictate Notification -->
+    <string name="quick_dictate_channel_name">Quick Dictate</string>
+    <string name="quick_dictate_channel_description">Quick access to start dictation</string>
+    <string name="quick_dictate_notification_title">Handy Dictation</string>
+    <string name="quick_dictate_notification_text">Tap to start dictation</string>
+    <string name="quick_dictate_action">Dictate</string>
     <string name="settings_switch">Switch</string>
     <string name="settings_postproc">Post-Processing</string>
     <string name="settings_llm_endpoint">LLM Endpoint</string>
@@ -107,4 +114,8 @@
     <string name="dialog_cancel">Cancel</string>
     <string name="dialog_ok">OK</string>
     <string name="dialog_delete">Delete</string>
+
+    <!-- IME Error Mode -->
+    <string name="ime_error_generic">An error occurred</string>
+    <string name="ime_error_retry_hint">Tap Retry to try again</string>
 </resources>

@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use log::info;
+use transcribe_cpp::{Backend, Model, ModelOptions, RunOptions, Session, StreamOptions, Task};
 
 use crate::transcription::router::{StreamCmd, StreamRouter};
 use crate::transcription::worker::StreamWorker;
@@ -14,6 +15,7 @@ pub struct TranscriptionEngine {
     next_worker_id: AtomicU64,
     active_worker: Mutex<Option<StreamWorker>>,
     is_loaded: AtomicBool,
+    session: Mutex<Option<Session>>,
     last_final_result: Arc<Mutex<Option<String>>>,
     post_process_endpoint: Option<String>,
     post_process_api_key: Option<String>,
@@ -28,6 +30,7 @@ impl TranscriptionEngine {
             next_worker_id: AtomicU64::new(1),
             active_worker: Mutex::new(None),
             is_loaded: AtomicBool::new(false),
+            session: Mutex::new(None),
             last_final_result: Arc::new(Mutex::new(None)),
             post_process_endpoint: None,
             post_process_api_key: None,
@@ -44,13 +47,29 @@ impl TranscriptionEngine {
 
     pub fn load_model(&mut self, path: &PathBuf) -> Result<(), String> {
         info!("[handy-core] loading model from: {:?}", path);
+
+        let model_options = ModelOptions {
+            backend: Backend::Cpu,
+            gpu_device: -1,
+        };
+
+        let model = Model::load_with(path, &model_options)
+            .map_err(|e| format!("Failed to load model: {e}"))?;
+
+        let session = model
+            .session()
+            .map_err(|e| format!("Failed to create session: {e}"))?;
+
         self.active_model_path = Some(path.clone());
+        *self.session.lock().unwrap() = Some(session);
         self.is_loaded.store(true, Ordering::Release);
-        info!("[handy-core] model loaded (stub)");
+
+        info!("[handy-core] model loaded successfully");
         Ok(())
     }
 
     pub fn unload_model(&self) {
+        *self.session.lock().unwrap() = None;
         self.is_loaded.store(false, Ordering::Release);
         info!("[handy-core] model unloaded");
     }
@@ -67,6 +86,25 @@ impl TranscriptionEngine {
         let worker_id = self.next_worker_id.fetch_add(1, Ordering::Relaxed);
         let rx = self.router.open_channel();
 
+        let mut stream = {
+            let mut guard = self.session.lock().map_err(|e| e.to_string())?;
+            let session = guard
+                .as_mut()
+                .ok_or_else(|| "No model loaded".to_string())?;
+
+            let run_options = RunOptions {
+                task: Task::Transcribe,
+                language: None,
+                target_language: None,
+                family: None,
+                ..Default::default()
+            };
+
+            session
+                .stream(&run_options, &StreamOptions::default())
+                .map_err(|e| format!("Failed to create stream: {e}"))?
+        };
+
         let last_result = self.last_final_result.clone();
         let on_final = move |text: String| {
             *last_result.lock().unwrap() = Some(text.clone());
@@ -74,7 +112,7 @@ impl TranscriptionEngine {
         };
 
         let mut worker = StreamWorker::new(worker_id);
-        worker.spawn(rx, on_partial, on_final);
+        worker.spawn(rx, stream, on_partial, on_final);
         *self.active_worker.lock().unwrap() = Some(worker);
         Ok(worker_id)
     }
@@ -138,26 +176,21 @@ pub fn remove_filler_words(text: &str) -> String {
             let lower = result.to_lowercase();
             let filler_lower = filler.to_lowercase();
 
-            // Find all occurrences of the filler word (case-insensitive, with word boundaries)
             let mut pos = 0;
             let mut found = false;
             let bytes = lower.as_bytes();
             let filler_bytes = filler_lower.as_bytes();
 
             while pos + filler_bytes.len() <= bytes.len() {
-                // Check if filler matches at this position
                 if &bytes[pos..pos + filler_bytes.len()] == filler_bytes {
-                    // Check word boundary BEFORE
                     let boundary_before = pos == 0
                         || bytes[pos - 1].is_ascii_whitespace()
                         || bytes[pos - 1].is_ascii_punctuation();
-                    // Check word boundary AFTER
                     let boundary_after = pos + filler_bytes.len() >= bytes.len()
                         || bytes[pos + filler_bytes.len()].is_ascii_whitespace()
                         || bytes[pos + filler_bytes.len()].is_ascii_punctuation();
 
                     if boundary_before && boundary_after {
-                        // Remove the filler word from result
                         result.drain(pos..pos + filler_bytes.len());
                         found = true;
                         break;
@@ -172,7 +205,6 @@ pub fn remove_filler_words(text: &str) -> String {
         }
     }
 
-    // Clean up: collapse multiple spaces
     let mut cleaned = String::new();
     let mut prev_space = false;
     for c in result.chars() {
@@ -188,7 +220,6 @@ pub fn remove_filler_words(text: &str) -> String {
     }
     cleaned = cleaned.trim().to_string();
 
-    // Remove spaces before punctuation (e.g. "that , you" -> "that, you")
     let bytes: Vec<u8> = cleaned.bytes().collect();
     let mut filtered: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -202,7 +233,6 @@ pub fn remove_filler_words(text: &str) -> String {
     }
     cleaned = String::from_utf8(filtered).unwrap_or(cleaned);
 
-    // Trim leading/trailing non-alphanumeric characters (e.g. ", hello" -> "hello")
     let start = cleaned.find(|c: char| c.is_alphanumeric());
     let end = cleaned.rfind(|c: char| c.is_alphanumeric());
     match (start, end) {

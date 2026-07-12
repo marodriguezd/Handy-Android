@@ -14,6 +14,13 @@ use log::info;
 #[no_mangle]
 pub extern "system" fn JNI_OnLoad(vm: jni::JavaVM, _: *mut std::ffi::c_void) -> jni::sys::jint {
     let _ = JAVA_VM.set(vm);
+
+    // Initialize transcribe-cpp native backends (loads ggml CPU backend)
+    transcribe_cpp::init_logging();
+    if let Err(e) = transcribe_cpp::init_backends_default() {
+        log::warn!("transcribe-cpp backend init failed (CPU-only fallback): {e}");
+    }
+
     info!("handy-core loaded");
     jni::sys::JNI_VERSION_1_6
 }

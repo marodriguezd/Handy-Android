@@ -1,13 +1,19 @@
 package com.handy.app.ui.settings
 
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -148,26 +155,47 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 title = stringResource(R.string.settings_shizuku),
                 subtitle = stringResource(R.string.settings_shizuku_description),
                 trailing = {
-                    Switch(
-                        checked = uiState.shizukuEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                try {
-                                    val pingOk = moe.shizuku.api.Shizuku.pingBinder()
-                                    val hasPerm = moe.shizuku.api.Shizuku.checkSelfPermission() == 0
-                                    if (!pingOk || !hasPerm) {
-                                        showShizukuDialog = true
-                                    } else {
-                                        viewModel.setShizukuEnabled(true)
-                                    }
-                                } catch (_: Exception) {
-                                    showShizukuDialog = true
-                                }
-                            } else {
-                                viewModel.setShizukuEnabled(false)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val shizukuStatus = try {
+                            val pingOk = moe.shizuku.api.Shizuku.pingBinder()
+                            val hasPerm = moe.shizuku.api.Shizuku.checkSelfPermission() == 0
+                            val svcConnected = app.shizukuInjector.isAvailable()
+                            when {
+                                !pingOk || !hasPerm -> androidx.compose.ui.graphics.Color.Red
+                                svcConnected -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                                else -> androidx.compose.ui.graphics.Color(0xFFFF9800)
                             }
-                        },
-                    )
+                        } catch (_: Exception) {
+                            androidx.compose.ui.graphics.Color.Red
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(shizukuStatus)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = uiState.shizukuEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    try {
+                                        val pingOk = moe.shizuku.api.Shizuku.pingBinder()
+                                        val hasPerm = moe.shizuku.api.Shizuku.checkSelfPermission() == 0
+                                        if (!pingOk || !hasPerm) {
+                                            showShizukuDialog = true
+                                        } else {
+                                            viewModel.setShizukuEnabled(true)
+                                        }
+                                    } catch (_: Exception) {
+                                        showShizukuDialog = true
+                                    }
+                                } else {
+                                    viewModel.setShizukuEnabled(false)
+                                }
+                            },
+                        )
+                    }
                 },
             )
 

@@ -12,6 +12,9 @@ if ! command -v cargo-ndk &>/dev/null; then
     exit 1
 fi
 
+# Set CMake args for NDK cross-compilation (used by transcribe-cpp crate)
+export CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME:-$NDK}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24"
+
 echo "Building for aarch64-linux-android..."
 (cd "$CORE_DIR" && cargo ndk --target aarch64-linux-android --platform 26 -- -p handy-core build --release)
 

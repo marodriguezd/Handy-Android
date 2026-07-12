@@ -43,6 +43,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # UUID for unique IDs
 uuid = { version = "1", features = ["v4"] }
 
+# Speech-to-text inference (GGML/Whisper via whisper.cpp)
+transcribe-cpp = { version = "0.1.3", default-features = false }
+
 [profile.release]
 lto = true
 codegen-units = 1
