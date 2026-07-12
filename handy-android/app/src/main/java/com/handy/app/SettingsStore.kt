@@ -25,4 +25,8 @@ class SettingsStore(context: Context) {
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", false)
         set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
+    var batteryOptimizationExempt: Boolean
+        get() = prefs.getBoolean("battery_optimization_exempt", false)
+        set(value) = prefs.edit().putBoolean("battery_optimization_exempt", value).apply()
 }

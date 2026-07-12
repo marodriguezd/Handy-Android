@@ -5,6 +5,7 @@ pub mod audio;
 pub mod transcription;
 pub mod model;
 pub mod history;
+pub mod idle_watcher;
 
 use engine::JAVA_VM;
 use log::info;

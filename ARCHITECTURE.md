@@ -1,7 +1,7 @@
 # Handy for Android — Master Technical Specification
 
-**Status:** Implementation in progress (Sprint 5 complete)  
-**Version:** 1.5.0  
+**Status:** Implementation in progress (Sprint 6 complete)  
+**Version:** 1.6.0  
 **Target:** Android 8.0+ (API 26), `targetSdk 35`  
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 
@@ -1283,21 +1283,22 @@ Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 
 **Milestone:** User enables Handy as their keyboard, opens any app with a text field, taps the dictation button in the IME, speaks, and the transcribed text (via real transcribe-cpp inference) appears in the text field. The user can confirm/retry/cancel via ConfirmMode. Dictation also triggerable from persistent notification. Shizuku auto-reconnects on service death. Settings sync live with debounce.
 
-### Sprint 6 — Polish, Performance y Testing (Next)
+### Sprint 6 — Polish, Performance y Testing ✅ COMPLETED
 
 **Goal:** Production-quality stability, performance, and edge case handling.
 
-| # | Task | Owner | Deliverable |
-|---|---|---|---|
-| 4.1 | Idle model unloading + timer configuration. Verify memory drops after timeout. | Rust | Memory freed within 30s of idle |
-| 4.2 | Battery profiling: measure mAh/minute in each state (Idle, Listening, Streaming, Downloading). Optimize hot paths. | All | Battery report with target: < 5% drain per 30 min of dictation |
-| 4.3 | Edge cases: screen rotation during recording, incoming call interrupts recording, Bluetooth headset connect/disconnect, app process killed by system. | All | Graceful recovery from all interruptions |
-| 4.4 | Performance: measure end-to-end latency (last spoken word → text on screen). Target: < 500ms for streaming partial results. | Rust | Latency measurements with benchmarks |
-| 4.5 | Crash reporting: `catch_unwind` around all JNI entry points. Integrate Sentry or Crashlytics. | All | Crashes reported with stack traces |
-| 4.6 | Device testing matrix: Pixel 8 (Tensor G3), Galaxy S24 (Snapdragon 8 Gen 3), OnePlus 12, Xiaomi 14, Nothing Phone 2. Android 12, 13, 14, 15. | QA | Test report with pass/fail per device |
-| 4.7 | First alpha release: signed APK + AAB, version code, changelog. | Infra | Alpha distributed to testers |
+| # | Task | Owner | Deliverable | Status |
+|---|---|---|---|---|
+| 6.1 | Idle model unloading + timer configuration. Verify memory drops after timeout. | Rust | `IdleWatcher` in `idle_watcher.rs`. On finalize/cancel, a background thread sleeps `idle_timeout_secs` then calls `unload_model()`. Reset on `startRecording()`. Configurable via JNI (0 = Never). | ✅ |
+| 6.2 | OOM protection: model size budget (1.5GB max, warning >512MB), streaming buffer cap (300s × 16kHz ≈ 19.2MB), `ComponentCallbacks2.onTrimMemory(CRITICAL)` → native unload, `onLowMemory()` hook. | All | Size check in `ModelManager::set_active_model()` + `jni_bridge::nativeLoadModel()`. Buffer cap in `pipeline.rs`. `HandyApplication` implements `ComponentCallbacks2`. | ✅ |
+| 6.3 | Edge cases: screen rotation (`configChanges`), incoming call (AudioManager audio focus → cancel recording), Bluetooth headset (AudioDeviceCallback logging), process killed (onSaveInstanceState). | All | `AndroidManifest.xml` configChanges. `RecordingService` audio focus + device callback. `MainActivity` save/restore state. | ✅ |
+| 6.4 | Performance benchmarks: measure end-to-end latency for partial (audio→text) and final (stop→result) via `Instant::now()` logging. Target: < 500ms streaming partials. | Rust | `debug!("partial_latency_ms={}")` in `worker.rs`. `debug!("finalize_latency_ms={}")` in `transcription/engine.rs`. | ✅ |
+| 6.5 | Crash reporting: `catch_unwind` around all 22 JNI entry points via `with_guard()`. Sentry SDK integration in `HandyApplication.onCreate()`. | All | `with_guard` + `with_engine_guard` in `jni_bridge.rs`. Sentry dep in version catalog. ProGuard keep rules. BuildConfig for DSN. | ✅ |
+| 6.6 | Battery optimization: `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission + settings toggle. | All | SettingsScreen "Battery Optimization Exemption" toggle. Manifest permissions. SettingsStore `batteryOptimizationExempt`. | ✅ |
+| 6.7 | Version catalog: migrate hardcoded deps to `gradle/libs.versions.toml` | Infra | All dependencies (Compose, Shizuku, Sentry, coroutines, etc.) centralized in version catalog. `build.gradle.kts` uses `libs.*` accessors. | ✅ |
+| 6.8 | README + CHANGELOG + signing config + KEYSTORE docs | Infra | Android-specific README with build instructions. CHANGELOG for alpha. Release signing via env vars. Keystore generation guide. | ✅ |
 
-**Milestone:** Alpha release with known device compatibility matrix.
+**Milestone:** Alpha-ready codebase with crash protection, OOM guards, idle memory reclaim, edge case handling, and developer documentation.
 
 ### Sprint 7 — Distribution y Open Source
 

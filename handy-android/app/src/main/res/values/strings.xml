@@ -118,4 +118,9 @@
     <!-- IME Error Mode -->
     <string name="ime_error_generic">An error occurred</string>
     <string name="ime_error_retry_hint">Tap Retry to try again</string>
+
+    <!-- Battery Optimization -->
+    <string name="settings_battery">Battery</string>
+    <string name="settings_battery_exemption">Battery Optimization Exemption</string>
+    <string name="settings_battery_exemption_description">Prevent Doze from killing the recording service</string>
 </resources>

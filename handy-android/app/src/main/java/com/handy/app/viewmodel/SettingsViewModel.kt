@@ -26,6 +26,7 @@ class SettingsViewModel(
         val postProcessEndpoint: String = "",
         val postProcessApiKey: String = "",
         val isApiKeyVisible: Boolean = false,
+        val batteryOptimizationExempt: Boolean = false,
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -37,6 +38,7 @@ class SettingsViewModel(
             shizukuEnabled = settingsStore.shizukuEnabled,
             postProcessEndpoint = settingsStore.postProcessEndpoint,
             postProcessApiKey = settingsStore.postProcessApiKey,
+            batteryOptimizationExempt = settingsStore.batteryOptimizationExempt,
         )
     }
 
@@ -75,10 +77,16 @@ class SettingsViewModel(
         _uiState.update { it.copy(isApiKeyVisible = !it.isApiKeyVisible) }
     }
 
+    fun setBatteryOptimizationExempt(exempt: Boolean) {
+        settingsStore.batteryOptimizationExempt = exempt
+        _uiState.update { it.copy(batteryOptimizationExempt = exempt) }
+    }
+
     private fun buildSettings() = AppSettings(
         idleTimeout = _uiState.value.idleTimeout,
         shizukuEnabled = _uiState.value.shizukuEnabled,
         postProcessEndpoint = _uiState.value.postProcessEndpoint,
         postProcessApiKey = _uiState.value.postProcessApiKey,
+        batteryOptimizationExempt = _uiState.value.batteryOptimizationExempt,
     )
 }

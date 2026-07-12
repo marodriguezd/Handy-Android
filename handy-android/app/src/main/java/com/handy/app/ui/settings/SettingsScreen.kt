@@ -1,5 +1,8 @@
 package com.handy.app.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -210,6 +213,37 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     ) {
                         Text(stringResource(R.string.settings_switch))
                     }
+                },
+            )
+
+            HorizontalDivider()
+
+            // ── Section: Battery Optimization ──────────────────────
+            SectionHeader(stringResource(R.string.settings_battery))
+
+            SettingsRow(
+                title = stringResource(R.string.settings_battery_exemption),
+                subtitle = stringResource(R.string.settings_battery_exemption_description),
+                trailing = {
+                    Switch(
+                        checked = uiState.batteryOptimizationExempt,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                val intent = Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                                ).apply {
+                                    setData(Uri.parse("package:${app.packageName}"))
+                                }
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                try {
+                                    app.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.util.Log.w("HandySettings", "Battery opt intent failed: $e")
+                                }
+                            }
+                            viewModel.setBatteryOptimizationExempt(enabled)
+                        },
+                    )
                 },
             )
 

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use log::info;
 use transcribe_cpp::{Backend, Model, ModelOptions, RunOptions, Session, StreamOptions, Task};
@@ -118,6 +119,7 @@ impl TranscriptionEngine {
     }
 
     pub fn finalize_stream(&self, worker_id: u64) -> Result<String, String> {
+        let t0 = Instant::now();
         self.router
             .send(StreamCmd::Finalize)
             .map_err(|_| "failed to send Finalize: no active stream".to_string())?;
@@ -131,6 +133,8 @@ impl TranscriptionEngine {
         } else {
             return Err("no active worker".to_string());
         }
+
+        log::debug!("finalize_stream total_latency_ms={}", t0.elapsed().as_millis());
 
         self.last_final_result
             .lock()

@@ -4,6 +4,7 @@ use jni::objects::{JByteBuffer, JClass, JObject, JString};
 use jni::sys::{jboolean, jint, jlong, jstring};
 use jni::JNIEnv;
 use log::{info, warn};
+use std::panic::{self, AssertUnwindSafe};
 
 fn with_engine<F, R>(f: F) -> R
 where
@@ -15,9 +16,72 @@ where
     f(state)
 }
 
-fn get_env_attached() -> Result<jni::JNIEnv<'static>, jni::errors::Error> {
+/// Wraps a JNI entry point with catch_unwind.
+/// If the closure panics, the panic message is dispatched via onError.
+fn with_guard<F, R>(env: &mut jni::JNIEnv, entry: &str, f: F) -> R
+where
+    F: FnOnce(&mut jni::JNIEnv) -> R + std::panic::UnwindSafe,
+    R: Default,
+{
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        // Try to get attached env for error dispatch
+        let attached = get_env_attached();
+        f(env)
+    }));
+    match result {
+        Ok(r) => r,
+        Err(panic_val) => {
+            let msg = if let Some(s) = panic_val.downcast_ref::<&str>() {
+                format!("{entry}: {s}")
+            } else if let Some(s) = panic_val.downcast_ref::<String>() {
+                format!("{entry}: {s}")
+            } else {
+                format!("{entry}: unknown panic")
+            };
+            warn!("{msg}");
+            // Try to dispatch error to Kotlin via callback
+            if let Ok(mut env) = get_env_attached() {
+                // We need the callback from the engine. Use with_engine but don't panic again.
+                let lock = ENGINE.get().expect("ENGINE not initialized");
+                if let Ok(mut guard) = lock.lock() {
+                    if let Some(ref state) = *guard {
+                        jni_callback::dispatch_error(&mut env, &state.callback, 99, &msg);
+                    }
+                }
+            }
+            R::default()
+        }
+    }
+}
+
+pub(crate) fn get_env_attached() -> Result<jni::JNIEnv<'static>, jni::errors::Error> {
     let jvm = JAVA_VM.get().expect("JAVA_VM not initialized");
     jvm.attach_current_thread_as_daemon()
+}
+
+/// Helper that calls with_engine inside a panic-safe guard.
+pub(crate) fn with_engine_guard<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut EngineState) -> R + std::panic::UnwindSafe,
+    R: Default,
+{
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        with_engine(f)
+    }));
+    match result {
+        Ok(r) => r,
+        Err(panic_val) => {
+            let msg = if let Some(s) = panic_val.downcast_ref::<&str>() {
+                format!("engine guard: {s}")
+            } else if let Some(s) = panic_val.downcast_ref::<String>() {
+                format!("engine guard: {s}")
+            } else {
+                "engine guard: unknown panic".to_string()
+            };
+            warn!("{msg}");
+            R::default()
+        }
+    }
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────
@@ -30,212 +94,231 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeInit<'local>
     config_dir: JString<'local>,
     callback: JObject<'local>,
 ) {
-    let model_dir: String = match env.get_string(&model_dir) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_dir: {e}"));
-            return;
-        }
-    };
-    let config_dir: String = match env.get_string(&config_dir) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid config_dir: {e}"));
-            return;
-        }
-    };
-    let callback_ref = match env.new_global_ref(&callback) {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create GlobalRef: {e}"));
-            return;
-        }
-    };
-
-    ensure_engine_init();
-    {
-        let lock = ENGINE.get().expect("ENGINE not initialized");
-        let mut guard = lock.lock().expect("ENGINE lock poisoned");
-        *guard = Some(EngineState::new(model_dir, config_dir, callback_ref));
-    }
-
-    // Set up VAD and audio callbacks
-    with_engine(|state| {
-        let cb = state.callback.clone();
-        state.audio_pipeline.set_vad_callback(move |level: f32| {
-            if let Ok(mut env) = get_env_attached() {
-                jni_callback::dispatch_vad_level(&mut env, &cb, level);
+    with_guard(&mut env, "nativeInit", |env| {
+        let model_dir: String = match env.get_string(&model_dir) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_dir: {e}"));
+                return;
             }
-        });
+        };
+        let config_dir: String = match env.get_string(&config_dir) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid config_dir: {e}"));
+                return;
+            }
+        };
+        let callback_ref = match env.new_global_ref(&callback) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = env.throw_new("java/lang/RuntimeException", format!("Failed to create GlobalRef: {e}"));
+                return;
+            }
+        };
 
-        let router = state.transcription_engine.router();
-        state.audio_pipeline.set_audio_callback(move |frame: Vec<f32>| {
-            router.feed(frame);
-        });
-    });
+        ensure_engine_init();
+        {
+            let lock = ENGINE.get().expect("ENGINE not initialized");
+            let mut guard = lock.lock().expect("ENGINE lock poisoned");
+            *guard = Some(EngineState::new(model_dir, config_dir, callback_ref));
+        }
 
-    info!("Handy engine initialized");
-
-    // Dispatch initial state: Idle
-    if let Ok(mut attached_env) = get_env_attached() {
         with_engine(|state| {
-            jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 0);
+            let cb = state.callback.clone();
+            state.audio_pipeline.set_vad_callback(move |level: f32| {
+                if let Ok(mut env) = get_env_attached() {
+                    jni_callback::dispatch_vad_level(&mut env, &cb, level);
+                }
+            });
+
+            let router = state.transcription_engine.router();
+            state.audio_pipeline.set_audio_callback(move |frame: Vec<f32>| {
+                router.feed(frame);
+            });
         });
-    }
+
+        info!("Handy engine initialized");
+
+        if let Ok(mut attached_env) = get_env_attached() {
+            with_engine(|state| {
+                jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 0);
+            });
+        }
+    });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDestroy<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) {
-    with_engine(|state| {
-        if state.is_recording {
-            let _ = state.audio_pipeline.cancel();
-            state.transcription_engine.cancel_stream();
-            state.is_recording = false;
+    with_guard(&mut _env, "nativeDestroy", |_env| {
+        with_engine(|state| {
+            state.idle_watcher.stop();
+            if state.is_recording {
+                let _ = state.audio_pipeline.cancel();
+                state.transcription_engine.cancel_stream();
+                state.is_recording = false;
+            }
+            state.transcription_engine.unload_model();
+            state.model_loaded = false;
+        });
+
+        {
+            let lock = ENGINE.get().expect("ENGINE not initialized");
+            let mut guard = lock.lock().expect("ENGINE lock poisoned");
+            *guard = None;
         }
-        state.transcription_engine.unload_model();
-        state.model_loaded = false;
+
+        info!("Handy engine destroyed");
     });
-
-    {
-        let lock = ENGINE.get().expect("ENGINE not initialized");
-        let mut guard = lock.lock().expect("ENGINE lock poisoned");
-        *guard = None;
-    }
-
-    info!("Handy engine destroyed");
 }
 
 // ── Engine Control ─────────────────────────────────────────────
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeLoadModel<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) {
-    let mut attached_env = match get_env_attached() {
-        Ok(e) => e,
-        Err(e) => {
-            warn!("nativeLoadModel: failed to attach JVM: {e}");
-            return;
-        }
-    };
-
-    with_engine(|state| {
-        // Dispatch state 1 (Loading)
-        jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 1);
-
-        let path = match state.model_manager.active_model_path() {
-            Some(p) => p,
-            None => {
-                jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, "No active model selected");
+    with_guard(&mut _env, "nativeLoadModel", |_env| {
+        let mut attached_env = match get_env_attached() {
+            Ok(e) => e,
+            Err(e) => {
+                warn!("nativeLoadModel: failed to attach JVM: {e}");
                 return;
             }
         };
 
-        if let Err(e) = state.transcription_engine.load_model(&path) {
-            jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, &e);
-            return;
-        }
+        with_engine(|state| {
+            jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 1);
 
-        state.model_loaded = true;
-        info!("Model loaded from: {:?}", path);
+            let path = match state.model_manager.active_model_path() {
+                Some(p) => p,
+                None => {
+                    jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, "No active model selected");
+                    return;
+                }
+            };
 
-        // Dispatch state 0 (Idle) on success
-        jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 0);
+            // OOM: Check model file size before loading
+            if let Ok(meta) = std::fs::metadata(&path) {
+                let size_mb = meta.len() / (1024 * 1024);
+                if size_mb > 1500 {
+                    jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, &format!("Model too large: {}MB (max 1500MB)", size_mb));
+                    return;
+                }
+                if size_mb > 512 {
+                    log::warn!("Loading large model: {}MB - may cause OOM on low-end devices", size_mb);
+                }
+            }
+
+            if let Err(e) = state.transcription_engine.load_model(&path) {
+                jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, &e);
+                return;
+            }
+
+            state.model_loaded = true;
+            info!("Model loaded from: {:?}", path);
+            jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 0);
+        });
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeUnloadModel<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) {
-    let mut attached_env = match get_env_attached() {
-        Ok(e) => e,
-        Err(e) => {
-            warn!("nativeUnloadModel: failed to attach JVM: {e}");
-            return;
-        }
-    };
+    with_guard(&mut _env, "nativeUnloadModel", |_env| {
+        let mut attached_env = match get_env_attached() {
+            Ok(e) => e,
+            Err(e) => {
+                warn!("nativeUnloadModel: failed to attach JVM: {e}");
+                return;
+            }
+        };
 
-    with_engine(|state| {
-        state.transcription_engine.unload_model();
-        state.model_loaded = false;
-        info!("Model unloaded");
-        jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 0);
+        with_engine(|state| {
+            state.idle_watcher.stop();
+            state.transcription_engine.unload_model();
+            state.model_loaded = false;
+            info!("Model unloaded");
+            jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 0);
+        });
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeIsModelLoaded<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jboolean {
-    let loaded = with_engine(|state| state.model_loaded);
-    loaded as jboolean
+    with_guard(&mut _env, "nativeIsModelLoaded", |_env| {
+        with_engine(|state| state.model_loaded) as jboolean
+    })
 }
 
 // ── Recording / Transcription ──────────────────────────────────
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeStartRecording<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
     sample_rate: jint,
     _channel_count: jint,
 ) {
-    let sample_rate = sample_rate as u32;
-    info!("nativeStartRecording: sample_rate={}", sample_rate);
+    with_guard(&mut _env, "nativeStartRecording", |_env| {
+        let sample_rate = sample_rate as u32;
+        info!("nativeStartRecording: sample_rate={}", sample_rate);
 
-    let mut attached_env = match get_env_attached() {
-        Ok(e) => e,
-        Err(e) => {
-            warn!("nativeStartRecording: failed to attach JVM: {e}");
-            return;
-        }
-    };
-
-    with_engine(|state| {
-        let cb_partial = state.callback.clone();
-        let on_partial = move |text: String| {
-            if let Ok(mut env) = get_env_attached() {
-                jni_callback::dispatch_transcription(&mut env, &cb_partial, &text, true);
-            }
-        };
-
-        let cb_final = state.callback.clone();
-        let on_final = move |text: String| {
-            if let Ok(mut env) = get_env_attached() {
-                jni_callback::dispatch_transcription(&mut env, &cb_final, &text, false);
-            }
-        };
-
-        // Start the transcription stream
-        match state.transcription_engine.start_stream(on_partial, on_final) {
-            Ok(worker_id) => {
-                state.worker_id = Some(worker_id);
-            }
+        let mut attached_env = match get_env_attached() {
+            Ok(e) => e,
             Err(e) => {
+                warn!("nativeStartRecording: failed to attach JVM: {e}");
+                return;
+            }
+        };
+
+        with_engine(|state| {
+            // Stop idle watcher (recording is active now)
+            state.idle_watcher.stop();
+
+            let cb_partial = state.callback.clone();
+            let on_partial = move |text: String| {
+                if let Ok(mut env) = get_env_attached() {
+                    jni_callback::dispatch_transcription(&mut env, &cb_partial, &text, true);
+                }
+            };
+
+            let cb_final = state.callback.clone();
+            let on_final = move |text: String| {
+                if let Ok(mut env) = get_env_attached() {
+                    jni_callback::dispatch_transcription(&mut env, &cb_final, &text, false);
+                }
+            };
+
+            match state.transcription_engine.start_stream(on_partial, on_final) {
+                Ok(worker_id) => {
+                    state.worker_id = Some(worker_id);
+                }
+                Err(e) => {
+                    jni_callback::dispatch_error(&mut attached_env, &state.callback, 2, &e);
+                    return;
+                }
+            }
+
+            if let Err(e) = state.audio_pipeline.start(sample_rate) {
+                state.transcription_engine.cancel_stream();
                 jni_callback::dispatch_error(&mut attached_env, &state.callback, 2, &e);
                 return;
             }
-        }
 
-        // Start the audio pipeline
-        if let Err(e) = state.audio_pipeline.start(sample_rate) {
-            state.transcription_engine.cancel_stream();
-            jni_callback::dispatch_error(&mut attached_env, &state.callback, 2, &e);
-            return;
-        }
-
-        state.is_recording = true;
-        info!("Recording started with worker_id={}", state.worker_id.unwrap_or(0));
-
-        // Dispatch state 2 (Listening)
-        jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 2);
+            state.is_recording = true;
+            info!("Recording started with worker_id={}", state.worker_id.unwrap_or(0));
+            jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 2);
+        });
     });
 }
 
@@ -246,176 +329,181 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativePushAudio<'l
     buffer: JObject<'local>,
     frame_count: jint,
 ) {
-    let jbuf: &JByteBuffer = &buffer.into();
-    let ptr = match env.get_direct_buffer_address(jbuf) {
-        Ok(p) => p,
-        Err(e) => {
+    with_guard(&mut env, "nativePushAudio", |env| {
+        let jbuf: &JByteBuffer = &buffer.into();
+        let ptr = match env.get_direct_buffer_address(jbuf) {
+            Ok(p) => p,
+            Err(e) => {
+                let _ = env.throw_new(
+                    "java/lang/IllegalArgumentException",
+                    format!("Buffer must be a direct ByteBuffer: {e}"),
+                );
+                return;
+            }
+        };
+
+        if ptr.is_null() {
             let _ = env.throw_new(
                 "java/lang/IllegalArgumentException",
-                format!("Buffer must be a direct ByteBuffer: {e}"),
+                "get_direct_buffer_address returned null",
             );
             return;
         }
-    };
 
-    if ptr.is_null() {
-        let _ = env.throw_new(
-            "java/lang/IllegalArgumentException",
-            "get_direct_buffer_address returned null",
-        );
-        return;
-    }
-
-    let capacity = match env.get_direct_buffer_capacity(jbuf) {
-        Ok(c) => c as i64,
-        Err(e) => {
-            warn!("nativePushAudio: get_direct_buffer_capacity failed: {e}");
-            -1i64
-        }
-    };
-
-    let byte_count = (frame_count as i64) * 4;
-    if capacity >= 0 && byte_count > capacity {
-        let _ = env.throw_new(
-            "java/lang/IllegalArgumentException",
-            format!(
-                "frame_count {} exceeds buffer capacity {}",
-                frame_count, capacity
-            ),
-        );
-        return;
-    }
-
-    unsafe {
-        let samples: &[f32] = std::slice::from_raw_parts(ptr as *const f32, frame_count as usize);
-        with_engine(|state| {
-            if let Err(e) = state.audio_pipeline.push_audio(samples, frame_count as usize) {
-                warn!("nativePushAudio: push_audio failed: {e}");
+        let capacity = match env.get_direct_buffer_capacity(jbuf) {
+            Ok(c) => c as i64,
+            Err(e) => {
+                warn!("nativePushAudio: get_direct_buffer_capacity failed: {e}");
+                -1i64
             }
-        });
-    }
+        };
+
+        let byte_count = (frame_count as i64) * 4;
+        if capacity >= 0 && byte_count > capacity {
+            let _ = env.throw_new(
+                "java/lang/IllegalArgumentException",
+                format!(
+                    "frame_count {} exceeds buffer capacity {}",
+                    frame_count, capacity
+                ),
+            );
+            return;
+        }
+
+        unsafe {
+            let samples: &[f32] = std::slice::from_raw_parts(ptr as *const f32, frame_count as usize);
+            with_engine(|state| {
+                if let Err(e) = state.audio_pipeline.push_audio(samples, frame_count as usize) {
+                    warn!("nativePushAudio: push_audio failed: {e}");
+                }
+            });
+        }
+    });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStream<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) {
-    info!("nativeFinalizeStream");
+    with_guard(&mut _env, "nativeFinalizeStream", |_env| {
+        info!("nativeFinalizeStream");
 
-    let mut env = match get_env_attached() {
-        Ok(e) => e,
-        Err(e) => {
-            warn!("nativeFinalizeStream: failed to attach JVM: {e}");
-            return;
-        }
-    };
-
-    with_engine(|state| {
-        // Stop pipeline and get accumulated audio
-        let accumulated = match state.audio_pipeline.stop() {
-            Ok(a) => a,
+        let mut env = match get_env_attached() {
+            Ok(e) => e,
             Err(e) => {
-                warn!("nativeFinalizeStream: pipeline stop failed: {e}");
-                Vec::new()
+                warn!("nativeFinalizeStream: failed to attach JVM: {e}");
+                return;
             }
         };
 
-        // Feed accumulated audio to router if not empty
-        if !accumulated.is_empty() {
-            state.transcription_engine.router().feed(accumulated);
-        }
-
-        // Finalize the stream
-        if let Some(worker_id) = state.worker_id.take() {
-            match state.transcription_engine.finalize_stream(worker_id) {
-                Ok(text) => {
-                    info!("Final transcription: {}", text);
-                    let processed = crate::transcription::engine::post_process(&text);
-                    jni_callback::dispatch_transcription(
-                        &mut env,
-                        &state.callback,
-                        &processed,
-                        false,
-                    );
-                }
+        with_engine(|state| {
+            let accumulated = match state.audio_pipeline.stop() {
+                Ok(a) => a,
                 Err(e) => {
-                    warn!("nativeFinalizeStream: finalize failed: {e}");
-                    jni_callback::dispatch_error(&mut env, &state.callback, 3, &e);
+                    warn!("nativeFinalizeStream: pipeline stop failed: {e}");
+                    Vec::new()
                 }
+            };
+
+            if !accumulated.is_empty() {
+                state.transcription_engine.router().feed(accumulated);
             }
-        } else {
-            warn!("nativeFinalizeStream: no active worker");
-            jni_callback::dispatch_error(&mut env, &state.callback, 3, "No active stream");
-        }
 
-        state.is_recording = false;
+            if let Some(worker_id) = state.worker_id.take() {
+                match state.transcription_engine.finalize_stream(worker_id) {
+                    Ok(text) => {
+                        info!("Final transcription: {}", text);
+                        let processed = crate::transcription::engine::post_process(&text);
+                        jni_callback::dispatch_transcription(&mut env, &state.callback, &processed, false);
+                    }
+                    Err(e) => {
+                        warn!("nativeFinalizeStream: finalize failed: {e}");
+                        jni_callback::dispatch_error(&mut env, &state.callback, 3, &e);
+                    }
+                }
+            } else {
+                warn!("nativeFinalizeStream: no active worker");
+                jni_callback::dispatch_error(&mut env, &state.callback, 3, "No active stream");
+            }
 
-        // Dispatch state 0 (Idle)
-        jni_callback::dispatch_state_change(&mut env, &state.callback, 0);
+            state.is_recording = false;
+
+            // Start idle watcher
+            state.idle_watcher.start();
+
+            jni_callback::dispatch_state_change(&mut env, &state.callback, 0);
+        });
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeCancelRecording<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) {
-    info!("nativeCancelRecording");
+    with_guard(&mut _env, "nativeCancelRecording", |_env| {
+        info!("nativeCancelRecording");
 
-    let mut env = match get_env_attached() {
-        Ok(e) => e,
-        Err(e) => {
-            warn!("nativeCancelRecording: failed to attach JVM: {e}");
-            return;
-        }
-    };
+        let mut env = match get_env_attached() {
+            Ok(e) => e,
+            Err(e) => {
+                warn!("nativeCancelRecording: failed to attach JVM: {e}");
+                return;
+            }
+        };
 
-    with_engine(|state| {
-        let _ = state.audio_pipeline.cancel();
-        state.transcription_engine.cancel_stream();
-        state.worker_id = None;
-        state.is_recording = false;
+        with_engine(|state| {
+            let _ = state.audio_pipeline.cancel();
+            state.transcription_engine.cancel_stream();
+            state.worker_id = None;
+            state.is_recording = false;
 
-        // Dispatch state 0 (Idle)
-        jni_callback::dispatch_state_change(&mut env, &state.callback, 0);
+            // Start idle watcher
+            state.idle_watcher.start();
+
+            jni_callback::dispatch_state_change(&mut env, &state.callback, 0);
+        });
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeIsRecording<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jboolean {
-    let recording = with_engine(|state| state.is_recording);
-    recording as jboolean
+    with_guard(&mut _env, "nativeIsRecording", |_env| {
+        with_engine(|state| state.is_recording) as jboolean
+    })
 }
 
 // ── Model Management ───────────────────────────────────────────
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeGetAvailableModels<'local>(
-    env: JNIEnv<'local>,
+    mut env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jstring {
-    let models = with_engine(|state| state.model_manager.list_models());
+    with_guard(&mut env, "nativeGetAvailableModels", |env| {
+        let models = with_engine(|state| state.model_manager.list_models());
 
-    let json = match serde_json::to_string(&models) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!("nativeGetAvailableModels: serde_json failed: {e}");
-            return std::ptr::null_mut();
-        }
-    };
+        let json = match serde_json::to_string(&models) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("nativeGetAvailableModels: serde_json failed: {e}");
+                return std::ptr::null_mut();
+            }
+        };
 
-    let output = match env.new_string(json) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!("nativeGetAvailableModels: failed to create string: {e}");
-            return std::ptr::null_mut();
-        }
-    };
-    output.into_raw()
+        let output = match env.new_string(json) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("nativeGetAvailableModels: failed to create string: {e}");
+                return std::ptr::null_mut();
+            }
+        };
+        output.into_raw()
+    })
 }
 
 #[no_mangle]
@@ -424,61 +512,65 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDownloadMode
     _class: JClass<'local>,
     model_id: JString<'local>,
 ) {
-    let model_id: String = match env.get_string(&model_id) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_id: {e}"));
-            return;
-        }
-    };
-
-    let mid = model_id.clone();
-    info!("nativeDownloadModel: {model_id}");
-
-    with_engine(|state| {
-        let cb = state.callback.clone();
-        let progress_cb = move |id: String, sofar: u64, total: u64| {
-            if let Ok(mut env) = get_env_attached() {
-                jni_callback::dispatch_download_progress(
-                    &mut env,
-                    &cb,
-                    &id,
-                    sofar as i64,
-                    total as i64,
-                );
+    with_guard(&mut env, "nativeDownloadModel", |env| {
+        let model_id: String = match env.get_string(&model_id) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_id: {e}"));
+                return;
             }
         };
 
-        let cb2 = state.callback.clone();
-        let complete_cb = move |id: String, success: bool, error: Option<String>| {
-            if let Ok(mut env) = get_env_attached() {
-                jni_callback::dispatch_download_complete(
-                    &mut env,
-                    &cb2,
-                    &id,
-                    success,
-                    error.as_deref(),
-                );
-                if success {
-                    let _ = env.call_method(cb2.as_obj(), "refreshModels", "()V", &[]);
+        let mid = model_id.clone();
+        info!("nativeDownloadModel: {model_id}");
+
+        with_engine(|state| {
+            let cb = state.callback.clone();
+            let progress_cb = move |id: String, sofar: u64, total: u64| {
+                if let Ok(mut env) = get_env_attached() {
+                    jni_callback::dispatch_download_progress(
+                        &mut env,
+                        &cb,
+                        &id,
+                        sofar as i64,
+                        total as i64,
+                    );
                 }
-            }
-        };
+            };
 
-        state
-            .model_manager
-            .download_model(&mid, progress_cb, complete_cb);
+            let cb2 = state.callback.clone();
+            let complete_cb = move |id: String, success: bool, error: Option<String>| {
+                if let Ok(mut env) = get_env_attached() {
+                    jni_callback::dispatch_download_complete(
+                        &mut env,
+                        &cb2,
+                        &id,
+                        success,
+                        error.as_deref(),
+                    );
+                    if success {
+                        let _ = env.call_method(cb2.as_obj(), "refreshModels", "()V", &[]);
+                    }
+                }
+            };
+
+            state
+                .model_manager
+                .download_model(&mid, progress_cb, complete_cb);
+        });
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeCancelDownload<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) {
-    info!("nativeCancelDownload");
-    with_engine(|state| {
-        state.model_manager.cancel_download();
+    with_guard(&mut _env, "nativeCancelDownload", |_env| {
+        info!("nativeCancelDownload");
+        with_engine(|state| {
+            state.model_manager.cancel_download();
+        });
     });
 }
 
@@ -488,18 +580,20 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDeleteModel<
     _class: JClass<'local>,
     model_id: JString<'local>,
 ) {
-    let model_id: String = match env.get_string(&model_id) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_id: {e}"));
-            return;
-        }
-    };
-    info!("nativeDeleteModel: {model_id}");
-    with_engine(|state| {
-        if let Err(e) = state.model_manager.delete_model(&model_id) {
-            warn!("nativeDeleteModel: delete failed: {e}");
-        }
+    with_guard(&mut env, "nativeDeleteModel", |env| {
+        let model_id: String = match env.get_string(&model_id) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_id: {e}"));
+                return;
+            }
+        };
+        info!("nativeDeleteModel: {model_id}");
+        with_engine(|state| {
+            if let Err(e) = state.model_manager.delete_model(&model_id) {
+                warn!("nativeDeleteModel: delete failed: {e}");
+            }
+        });
     });
 }
 
@@ -509,18 +603,20 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetActiveMod
     _class: JClass<'local>,
     model_id: JString<'local>,
 ) {
-    let model_id: String = match env.get_string(&model_id) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_id: {e}"));
-            return;
-        }
-    };
-    info!("nativeSetActiveModel: {model_id}");
-    with_engine(|state| {
-        if let Err(e) = state.model_manager.set_active_model(&model_id) {
-            warn!("nativeSetActiveModel: set_active failed: {e}");
-        }
+    with_guard(&mut env, "nativeSetActiveModel", |env| {
+        let model_id: String = match env.get_string(&model_id) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid model_id: {e}"));
+                return;
+            }
+        };
+        info!("nativeSetActiveModel: {model_id}");
+        with_engine(|state| {
+            if let Err(e) = state.model_manager.set_active_model(&model_id) {
+                warn!("nativeSetActiveModel: set_active failed: {e}");
+            }
+        });
     });
 }
 
@@ -528,14 +624,17 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetActiveMod
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetIdleTimeout<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
     idle_timeout_seconds: jint,
 ) {
-    with_engine(|state| {
-        state.set_idle_timeout(idle_timeout_seconds as u32);
+    with_guard(&mut _env, "nativeSetIdleTimeout", |_env| {
+        with_engine(|state| {
+            state.set_idle_timeout(idle_timeout_seconds as u32);
+            state.idle_watcher.set_timeout(idle_timeout_seconds as u32);
+        });
+        info!("Idle timeout set to {}s", idle_timeout_seconds);
     });
-    info!("Idle timeout set to {idle_timeout_seconds}s");
 }
 
 #[no_mangle]
@@ -544,20 +643,22 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetPostProce
     _class: JClass<'local>,
     endpoint: JString<'local>,
 ) {
-    let endpoint: String = match env.get_string(&endpoint) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid endpoint: {e}"));
-            return;
-        }
-    };
-    let ep = if endpoint.is_empty() {
-        None
-    } else {
-        Some(endpoint)
-    };
-    with_engine(|state| {
-        state.set_post_process_endpoint(ep);
+    with_guard(&mut env, "nativeSetPostProcessEndpoint", |env| {
+        let endpoint: String = match env.get_string(&endpoint) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid endpoint: {e}"));
+                return;
+            }
+        };
+        let ep = if endpoint.is_empty() {
+            None
+        } else {
+            Some(endpoint)
+        };
+        with_engine(|state| {
+            state.set_post_process_endpoint(ep);
+        });
     });
 }
 
@@ -567,20 +668,22 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetPostProce
     _class: JClass<'local>,
     api_key: JString<'local>,
 ) {
-    let api_key: String = match env.get_string(&api_key) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid api_key: {e}"));
-            return;
-        }
-    };
-    let key = if api_key.is_empty() {
-        None
-    } else {
-        Some(api_key)
-    };
-    with_engine(|state| {
-        state.set_post_process_api_key(key);
+    with_guard(&mut env, "nativeSetPostProcessApiKey", |env| {
+        let api_key: String = match env.get_string(&api_key) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid api_key: {e}"));
+                return;
+            }
+        };
+        let key = if api_key.is_empty() {
+            None
+        } else {
+            Some(api_key)
+        };
+        with_engine(|state| {
+            state.set_post_process_api_key(key);
+        });
     });
 }
 
@@ -594,102 +697,110 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSaveHistory<
     post_processed_text: JObject<'local>,
     wav_path: JObject<'local>,
 ) {
-    let text: String = match env.get_string(&transcription_text) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid text: {e}"));
-            return;
-        }
-    };
-
-    let post_processed: Option<String> = if post_processed_text.is_null() {
-        None
-    } else {
-        match env.get_string(&JString::from(post_processed_text)) {
-            Ok(s) => Some(s.into()),
+    with_guard(&mut env, "nativeSaveHistory", |env| {
+        let text: String = match env.get_string(&transcription_text) {
+            Ok(s) => s.into(),
             Err(e) => {
-                warn!("nativeSaveHistory: invalid post_processed_text: {e}");
-                None
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid text: {e}"));
+                return;
             }
-        }
-    };
+        };
 
-    let wav_path: Option<String> = if wav_path.is_null() {
-        None
-    } else {
-        match env.get_string(&JString::from(wav_path)) {
-            Ok(s) => Some(s.into()),
-            Err(e) => {
-                warn!("nativeSaveHistory: invalid wav_path: {e}");
-                None
+        let post_processed: Option<String> = if post_processed_text.is_null() {
+            None
+        } else {
+            match env.get_string(&JString::from(post_processed_text)) {
+                Ok(s) => Some(s.into()),
+                Err(e) => {
+                    warn!("nativeSaveHistory: invalid post_processed_text: {e}");
+                    None
+                }
             }
-        }
-    };
+        };
 
-    with_engine(|state| {
-        match state
-            .history_manager
-            .save_entry(&text, post_processed.as_deref(), wav_path.as_deref())
-        {
-            Ok(id) => info!("Saved history entry {id}"),
-            Err(e) => warn!("nativeSaveHistory: save failed: {e}"),
-        }
+        let wav_path: Option<String> = if wav_path.is_null() {
+            None
+        } else {
+            match env.get_string(&JString::from(wav_path)) {
+                Ok(s) => Some(s.into()),
+                Err(e) => {
+                    warn!("nativeSaveHistory: invalid wav_path: {e}");
+                    None
+                }
+            }
+        };
+
+        with_engine(|state| {
+            match state
+                .history_manager
+                .save_entry(&text, post_processed.as_deref(), wav_path.as_deref())
+            {
+                Ok(id) => info!("Saved history entry {id}"),
+                Err(e) => warn!("nativeSaveHistory: save failed: {e}"),
+            }
+        });
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeGetHistory<'local>(
-    env: JNIEnv<'local>,
+    mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     offset: jint,
     limit: jint,
 ) -> jstring {
-    let entries = with_engine(|state| {
-        state
-            .history_manager
-            .get_entries(offset as i64, limit as i64)
-    });
+    with_guard(&mut env, "nativeGetHistory", |env| {
+        let entries = with_engine(|state| {
+            state
+                .history_manager
+                .get_entries(offset as i64, limit as i64)
+        });
 
-    let json = match entries {
-        Ok(e) => serde_json::to_string(&e).unwrap_or_else(|_| "[]".to_string()),
-        Err(e) => {
-            warn!("nativeGetHistory: query failed: {e}");
-            "[]".to_string()
-        }
-    };
+        let json = match entries {
+            Ok(e) => serde_json::to_string(&e).unwrap_or_else(|_| "[]".to_string()),
+            Err(e) => {
+                warn!("nativeGetHistory: query failed: {e}");
+                "[]".to_string()
+            }
+        };
 
-    let output = match env.new_string(json) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!("nativeGetHistory: failed to create string: {e}");
-            return std::ptr::null_mut();
-        }
-    };
-    output.into_raw()
+        let output = match env.new_string(json) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("nativeGetHistory: failed to create string: {e}");
+                return std::ptr::null_mut();
+            }
+        };
+        output.into_raw()
+    })
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDeleteHistoryEntry<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
     entry_id: jlong,
 ) {
-    with_engine(|state| {
-        if let Err(e) = state.history_manager.delete_entry(entry_id as i64) {
-            warn!("nativeDeleteHistoryEntry: delete failed: {e}");
-        }
+    with_guard(&mut _env, "nativeDeleteHistoryEntry", |_env| {
+        with_engine(|state| {
+            if let Err(e) = state.history_manager.delete_entry(entry_id as i64) {
+                warn!("nativeDeleteHistoryEntry: delete failed: {e}");
+            }
+        });
     });
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeToggleHistorySaved<'local>(
-    _env: JNIEnv<'local>,
+    mut _env: JNIEnv<'local>,
     _class: JClass<'local>,
     entry_id: jlong,
 ) {
-    with_engine(|state| {
-        if let Err(e) = state.history_manager.toggle_saved(entry_id as i64) {
-            warn!("nativeToggleHistorySaved: toggle failed: {e}");
-        }
+    with_guard(&mut _env, "nativeToggleHistorySaved", |_env| {
+        with_engine(|state| {
+            if let Err(e) = state.history_manager.toggle_saved(entry_id as i64) {
+                warn!("nativeToggleHistorySaved: toggle failed: {e}");
+            }
+        });
     });
 }

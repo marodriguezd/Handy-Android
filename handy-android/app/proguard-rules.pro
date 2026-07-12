@@ -44,3 +44,8 @@
 # Keep source file and line numbers for crash reports
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# ── Sentry ──────────────────────────────────────────────────────────
+-keep class io.sentry.** { *; }
+-dontwarn io.sentry.**
+-keepattributes *Annotation*

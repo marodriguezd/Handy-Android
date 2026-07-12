@@ -20,6 +20,13 @@ import com.handy.app.viewmodel.OnboardingViewModel
 import com.handy.app.viewmodel.SettingsViewModel
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        private const val SAVED_IS_DICTATING = "is_dictating"
+    }
+
+    private var savedIsDictating: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -72,6 +79,22 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra("start_dictation", false) == true) {
             (application as HandyApplication).engineViewModel.startRecording()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val app = application as HandyApplication
+        savedIsDictating = app.engineViewModel.state.value == com.handy.app.viewmodel.EngineViewModel.STATE_LISTENING
+        outState.putBoolean(SAVED_IS_DICTATING, savedIsDictating)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        savedIsDictating = savedInstanceState.getBoolean(SAVED_IS_DICTATING, false)
+        if (savedIsDictating) {
+            // Recording was interrupted by rotation/etc - user must restart
+            android.util.Log.w("HandyMain", "Recording state lost during config change")
         }
     }
 }

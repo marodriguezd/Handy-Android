@@ -5,4 +5,5 @@ data class AppSettings(
     val shizukuEnabled: Boolean = false,
     val postProcessEndpoint: String = "",
     val postProcessApiKey: String = "",
+    val batteryOptimizationExempt: Boolean = false,
 )

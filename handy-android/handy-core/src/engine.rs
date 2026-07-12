@@ -20,6 +20,7 @@ pub struct EngineState {
     pub transcription_engine: TranscriptionEngine,
     pub model_manager: ModelManager,
     pub history_manager: HistoryManager,
+    pub idle_watcher: crate::idle_watcher::IdleWatcher,
     pub worker_id: Option<u64>,
 }
 
@@ -44,6 +45,7 @@ impl EngineState {
             transcription_engine: TranscriptionEngine::new(),
             model_manager: ModelManager::new(&model_dir),
             history_manager,
+            idle_watcher: crate::idle_watcher::IdleWatcher::new(),
             worker_id: None,
         }
     }

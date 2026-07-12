@@ -4,7 +4,9 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ComponentCallbacks2
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -13,9 +15,13 @@ import com.handy.app.injection.ClipboardInjector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.injection.ShizukuInjector
 import com.handy.app.viewmodel.EngineViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import moe.shizuku.api.Shizuku
 
-class HandyApplication : Application() {
+class HandyApplication : Application(), ComponentCallbacks2 {
 
     companion object {
         const val QUICK_DICTATE_NOTIFICATION_ID = 1002
@@ -40,6 +46,8 @@ class HandyApplication : Application() {
     val engineViewModel: EngineViewModel by lazy {
         EngineViewModel(this, injectorRouter)
     }
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onCreate() {
         super.onCreate()
@@ -113,5 +121,24 @@ class HandyApplication : Application() {
 
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(QUICK_DICTATE_NOTIFICATION_ID, notification)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            Log.w("HandyApp", "TRIM_MEMORY_RUNNING_CRITICAL - unloading model")
+            appScope.launch(Dispatchers.IO) {
+                EngineBridge.nativeUnloadModel()
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {}
+
+    override fun onLowMemory() {
+        Log.w("HandyApp", "onLowMemory - unloading model")
+        appScope.launch(Dispatchers.IO) {
+            EngineBridge.nativeUnloadModel()
+        }
     }
 }

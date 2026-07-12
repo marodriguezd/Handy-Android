@@ -18,6 +18,11 @@ struct PipelineInner {
 
 impl PipelineInner {
     fn process_samples(&mut self, samples: &[f32]) {
+        const MAX_BUFFER_SAMPLES: usize = 300 * 16000; // ~19.2MB float32
+        if self.audio_buffer.len() > MAX_BUFFER_SAMPLES {
+            log::warn!("Audio buffer exceeded max ({} samples), truncating", MAX_BUFFER_SAMPLES);
+            self.audio_buffer.clear();
+        }
         self.resampler.push(samples, &mut |frame| {
             let vad_result = self.smoothed_vad.push_frame(frame);
             match vad_result {

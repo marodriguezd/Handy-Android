@@ -7,12 +7,20 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.handy.app.HandyApplication
 import com.handy.app.R
 
 class RecordingService : Service() {
@@ -39,12 +47,16 @@ class RecordingService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "RecordingService created")
         createNotificationChannel()
         acquireWakeLock()
+        setupAudioFocus()
+        registerAudioDeviceCallback()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -74,6 +86,8 @@ class RecordingService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "RecordingService destroyed")
         releaseWakeLock()
+        abandonAudioFocus()
+        unregisterAudioDeviceCallback()
         super.onDestroy()
     }
 
@@ -152,5 +166,81 @@ class RecordingService : Service() {
             }
         }
         wakeLock = null
+    }
+
+    // ── Audio Focus (incoming call handling) ──────────────────────
+
+    private fun setupAudioFocus() {
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val focusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+            when (focusChange) {
+                AudioManager.AUDIOFOCUS_LOSS -> {
+                    Log.d(TAG, "Audio focus lost - cancelling recording")
+                    (application as HandyApplication).engineViewModel.cancelRecording()
+                }
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                    Log.d(TAG, "Audio focus lost transient")
+                }
+                AudioManager.AUDIOFOCUS_GAIN -> {
+                    Log.d(TAG, "Audio focus regained")
+                }
+            }
+        }
+        audioFocusRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(attributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setOnAudioFocusChangeListener(focusListener, Handler(Looper.getMainLooper()))
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager?.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+            null
+        }
+        audioFocusRequest?.let {
+            audioManager?.requestAudioFocus(it)
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        audioFocusRequest?.let {
+            audioManager?.abandonAudioFocusRequest(it)
+        }
+        audioFocusRequest = null
+        audioManager = null
+    }
+
+    // ── Bluetooth Device Handling ─────────────────────────────────
+
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) {
+            for (device in addedDevices) {
+                if (device.isSink) {
+                    Log.d(TAG, "Audio device added: ${device.productName}")
+                }
+            }
+        }
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) {
+            for (device in removedDevices) {
+                if (device.isSink) {
+                    Log.d(TAG, "Audio device removed: ${device.productName}")
+                }
+            }
+        }
+    }
+
+    private fun registerAudioDeviceCallback() {
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        am.registerAudioDeviceCallback(audioDeviceCallback, Handler(Looper.getMainLooper()))
+    }
+
+    private fun unregisterAudioDeviceCallback() {
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        am.unregisterAudioDeviceCallback(audioDeviceCallback)
     }
 }

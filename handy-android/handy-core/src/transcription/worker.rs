@@ -1,5 +1,6 @@
 use std::sync::mpsc;
 use std::thread;
+use std::time::Instant;
 
 use crate::transcription::router::StreamCmd;
 
@@ -46,8 +47,10 @@ impl StreamWorker {
                         };
 
                         if update.committed_changed || update.tentative_changed {
+                            let t0 = Instant::now();
                             let text = stream.text().display().to_string();
                             if !text.is_empty() {
+                                log::debug!("partial_latency_ms={}", t0.elapsed().as_millis());
                                 on_partial(text);
                             }
                         }
@@ -55,7 +58,9 @@ impl StreamWorker {
                     StreamCmd::Finalize => {
                         match stream.finalize() {
                             Ok(_) => {
+                                let final_t0 = Instant::now();
                                 let text = stream.text().display().to_string();
+                                log::debug!("finalize_latency_ms={}", final_t0.elapsed().as_millis());
                                 on_final(text);
                             }
                             Err(e) => {

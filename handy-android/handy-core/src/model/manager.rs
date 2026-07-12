@@ -317,6 +317,17 @@ impl ModelManager {
                 "Model {model_id} is not downloaded"
             )));
         }
+
+        // OOM: check model file size
+        if let Ok(meta) = std::fs::metadata(&path) {
+            let size_mb = meta.len() / (1024 * 1024);
+            if size_mb > 1500 {
+                return Err(ModelError::Oom(format!(
+                    "Model is {}MB (max 1500MB)", size_mb
+                )));
+            }
+        }
+
         *self.active_model_id.lock().unwrap() = Some(model_id.to_string());
         info!("Active model set to {model_id}");
         Ok(())
