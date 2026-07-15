@@ -32,7 +32,7 @@ impl TranscriptionEngine {
         // whisper.cpp internally asserts gpu_device >= 0.
         // This matches desktop Handy's convention for explicit CPU selection.
         let model_options = ModelOptions {
-            backend: Backend::Cpu,
+            backend: Backend::Auto,
             gpu_device: 0,
         };
 

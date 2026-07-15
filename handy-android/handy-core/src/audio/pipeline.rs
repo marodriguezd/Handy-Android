@@ -18,20 +18,7 @@ struct PipelineInner {
     capture_sample_rate: u32,
 }
 
-/// Boost quiet audio to [-1, 1] range for better Whisper recognition.
-fn normalize_audio(samples: &mut [f32]) {
-    let peak = samples
-        .iter()
-        .map(|&s| s.abs())
-        .fold(0.0f32, f32::max);
-    if peak > 0.001 && peak < 0.3 {
-        let gain = (0.5 / peak).min(10.0);
-        log::debug!("AGC: boosting audio gain by {:.1}x (peak was {:.4})", gain, peak);
-        for s in samples.iter_mut() {
-            *s *= gain;
-        }
-    }
-}
+
 
 impl PipelineInner {
     fn process_samples(&mut self, samples: &[f32]) {
@@ -41,8 +28,7 @@ impl PipelineInner {
             self.audio_buffer.clear();
         }
         self.resampler.push(samples, &mut |frame| {
-            let mut frame = frame.to_vec();
-            normalize_audio(&mut frame);
+            let frame = frame.to_vec();
             self.audio_buffer.extend_from_slice(&frame);
 
             // VAD still runs for the level meter visualization in the UI.

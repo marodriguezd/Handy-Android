@@ -1451,3 +1451,12 @@ handy-android/
 7. **All user-facing strings in `strings.xml`** (Kotlin side) or i18n JSON (Rust side if any UI strings originate there). Prepared for i18n from day one.
 8. **ProGuard rules mandatory for release.** `-keep` rules for `EngineBridge` (all native methods), `EngineCallback` (all methods), and all `EngineCallback` implementors must be present in `proguard-rules.pro`. Without them, R8 obfuscation breaks JNI method dispatch at runtime.
 9. **Engine is process-wide singleton.** `nativeInit` called exactly once from `HandyApplication`. `nativeDestroy` never called on IME destruction — reserved for process teardown. Multiple `nativeInit` calls are prevented by guard flag.
+
+
+## Actualización del Checkpoint (15 de Julio de 2026)
+- **Problema Actual:** La aplicación compila e instala vía ADB, pero el dictado en Android falla en la transcripción. 
+- **Cambios Recientes:** 
+  - Se ha eliminado el AGC (normalize_audio) que distorsionaba el audio subiendo el volumen del ruido.
+  - Se modificó a `Backend::Auto` para mejorar la inferencia.
+  - Se resolvió un problema de CMake inyectando `CMAKE_ARGS` para enlazar correctamente el NDK.
+- **Próximos Pasos:** Analizar los logs de ADB y revisar el proceso de captura de audio y la configuración de Whisper en Android.

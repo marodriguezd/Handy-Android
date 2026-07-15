@@ -94,28 +94,30 @@ The Android port consists of:
 - JNI callbacks (state changes, transcription, vad level, errors)
 - Shizuku/IME/Clipboard injection strategies
 
-### ❌ Issues Found
-- **Transcription accuracy**: Only returns "you" from full sentences
-  - VAD filtering removed (all audio accumulated)
-  - AGC added (quiet audio boosted)
-  - Sample rate mismatch fixed (AAudio now queries actual device rate)
-  - **Hypothesis**: Audio still too quiet, or model needs better params
-  - **Next**: Try `Backend::Auto` instead of `Backend::Cpu`, or check audio levels more carefully
+### ❌ Issues Found (Current Checkpoint)
+- **Transcription accuracy**: Still failing after recent fixes. The user reports it "no va" (does not work) during live testing on device.
+  - AGC (`normalize_audio`) was removed because it boosted background noise, but the issue persists.
+  - `Backend::Auto` is now used.
+  - Needs further ADB logcat analysis to check if audio capture is working or if the model is failing to transcribe.
+
+### ✅ Issues Resolved
+- **Backend Optimization**: `Backend::Cpu` was forcing slow CPU execution. Changed to `Backend::Auto` to leverage hardware acceleration if available.
+- **Linker Errors on NDK**: Resolved missing `libpthread` and NDK CMake errors by passing `CMAKE_ARGS` to the build script.
 
 ### 🔧 Changes Applied (this session)
 1. Model URLs changed from `ggerganov/whisper.cpp` (GGML .bin) to `handy-computer` (GGUF)
 2. Model IDs updated: `whisper-tiny-Q5_K_M`, `whisper-base-Q5_K_M`, etc.
 3. Added Parakeet EN 0.6B model to catalog
 4. `gpu_device: -1` → `gpu_device: 0` (whisper.cpp asserts >= 0)
-5. `Backend::Cpu` with `gpu_device: 0` (explicit CPU, matching desktop convention)
+5. Changed `Backend::Cpu` to `Backend::Auto` for better inference performance.
 6. Removed streaming (`session.stream()` not supported for Whisper) → batch `session.run()`
 7. Removed StreamWorker/StreamRouter architecture (no longer needed)
 8. Removed `worker_id` from `EngineState`
 9. Bypassed VAD filtering in audio accumulation (all frames saved)
-10. Added AGC (normalize_audio) to boost quiet signals
+10. Removed AGC (`normalize_audio`) because it amplified background noise and broke transcription.
 11. AAudio now queries actual device sample rate instead of assuming 16kHz
 12. Resampler configured with device's actual sample rate
-13. Fixed `build-rust.sh` script (removed invalid `-p` flag)
+13. Fixed NDK linkage issues by injecting `CMAKE_ARGS` and a dummy `libpthread.a`.
 
 ## Desktop Development Commands
 

@@ -68,3 +68,12 @@ La carga falla dentro de C++ (`whisper_init_from_file`) sin lanzar excepción vi
    - Cambiar las URLs en `handy-core/src/model/manager.rs` para apuntar a archivos `.gguf` válidos (ej: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-gguf.bin` o similar).
    - Alternativa: verificar si `transcribe-cpp` soporta ambos formatos y necesita un flag de compatibilidad.
 4. **Si el error es otro** (corrupción de archivo, OOM, etc.), ajustar según el mensaje capturado.
+
+
+## Actualización del Checkpoint (15 de Julio de 2026)
+- **Problema Actual:** La aplicación compila e instala vía ADB, pero el dictado en Android falla en la transcripción. 
+- **Cambios Recientes:** 
+  - Se ha eliminado el AGC (normalize_audio) que distorsionaba el audio subiendo el volumen del ruido.
+  - Se modificó a `Backend::Auto` para mejorar la inferencia.
+  - Se resolvió un problema de CMake inyectando `CMAKE_ARGS` para enlazar correctamente el NDK.
+- **Próximos Pasos:** Analizar los logs de ADB y revisar el proceso de captura de audio y la configuración de Whisper en Android.
