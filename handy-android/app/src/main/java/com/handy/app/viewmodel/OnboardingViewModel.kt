@@ -32,6 +32,7 @@ class OnboardingViewModel(
     private var downloadStarted = false
     private var downloadTargetId: String? = null
     private var activated = false
+    private var skipped = false
 
     fun nextStep() {
         val next = _uiState.value.currentStep + 1
@@ -64,6 +65,10 @@ class OnboardingViewModel(
     }
 
     fun skipDownload() {
+        // Also cancel the actual download on the Rust side so it stops
+        // downloading and the tokio task can clean up and fire the
+        // completion callback, which updates the ModelsViewModel UI.
+        com.handy.app.bridge.EngineBridge.nativeCancelDownload()
         _uiState.update {
             it.copy(isDownloadReady = true, isDownloading = false)
         }

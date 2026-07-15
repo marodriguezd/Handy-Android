@@ -43,6 +43,16 @@ blob-report/
 # Nix build output
 result
 
+# Local AI agent memory & tracking
+.agents/
+.tokensave/
+.opencode/
+retrieved.txt
+db_paths.txt
+retrieved_original_request.txt
+root_files.txt
+test_dir.txt
+
 # Android build artifacts
 handy-android/**/build/
 handy-android/**/target/

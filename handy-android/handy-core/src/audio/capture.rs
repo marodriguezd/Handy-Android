@@ -45,6 +45,9 @@ impl AudioCapture {
 
     /// Start capture and return the actual sample rate of the opened stream.
     /// Does NOT request a specific rate — uses the device's native rate and reports it back.
+    ///
+    /// NOTE: aaudio-sys v0.1.0 has a bug where DIRECTION_INPUT is set to 0 instead of 1.
+    /// We use the raw value 1 here to ensure we actually open an input (capture) stream.
     pub fn start(&mut self) -> Result<u32, CaptureError> {
         if self.stream_ptr.is_some() {
             return Err(CaptureError::AlreadyOpen);
@@ -64,10 +67,15 @@ impl AudioCapture {
         }
 
         unsafe {
+            // CRITICAL: AAUDIO_DIRECTION_INPUT = 1 in actual AAudio API.
+            // aaudio-sys v0.1.0 incorrectly defines both OUTPUT and INPUT as 0.
+            // Using 1 directly to ensure we open a CAPTURE stream, not output.
+            const AAUDIO_DIRECTION_INPUT: i32 = 1;
             aaudio_sys::AAudioStreamBuilder_setDirection(
                 builder_ptr,
-                aaudio_sys::DIRECTION_INPUT,
+                AAUDIO_DIRECTION_INPUT,
             );
+
             aaudio_sys::AAudioStreamBuilder_setSharingMode(
                 builder_ptr,
                 aaudio_sys::SHARING_SHARED,
@@ -78,6 +86,27 @@ impl AudioCapture {
             );
             // Do NOT request a specific sample rate — use device's native rate.
             // We'll query the actual rate after opening and resample to 16kHz.
+
+            // Set input preset to VoiceRecognition for optimal speech capture.
+            // This tells AAudio to use the microphone and optimize for speech
+            // recognition quality.
+            aaudio_sys::AAudioStreamBuilder_setInputPreset(
+                builder_ptr,
+                aaudio_sys::INPUT_PRESET_VOICE_RECOGNITION,
+            );
+
+            // Set content type to Speech for proper audio processing.
+            aaudio_sys::AAudioStreamBuilder_setContentType(
+                builder_ptr,
+                aaudio_sys::CONTENT_TYPE_SPEECH,
+            );
+
+            // Use low-latency performance mode for responsive audio capture.
+            aaudio_sys::AAudioStreamBuilder_setPerformanceMode(
+                builder_ptr,
+                aaudio_sys::PERFORMANCE_MODE_LOW_LATENCY,
+            );
+
             aaudio_sys::AAudioStreamBuilder_setChannelCount(builder_ptr, 1);
             aaudio_sys::AAudioStreamBuilder_setDataCallback(
                 builder_ptr,

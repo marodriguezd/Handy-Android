@@ -8,6 +8,14 @@ use crate::audio::vad::{
     VAD_PREFILL_FRAMES, VAD_STREAMING_HANGOVER_FRAMES, VAD_THRESHOLD,
 };
 
+/// Simple fixed-gain pre-amp to boost quiet microphone signals.
+/// Whisper models work best with audio RMS around 0.1–0.3.
+/// Raw AAudio float32 samples from mobile microphones can be
+/// very quiet (RMS ~0.01–0.05), causing poor transcription.
+/// A fixed gain of 2.0–4.0x brings quiet speech into the optimal range.
+/// This is NOT adaptive AGC (which was removed because it boosted noise).
+const PREAMP_GAIN: f32 = 5.0;
+
 struct PipelineInner {
     resampler: FrameResampler,
     smoothed_vad: SmoothedVad,
@@ -16,6 +24,11 @@ struct PipelineInner {
     on_audio_frame: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync>>,
     /// The actual sample rate of the capture stream (device native rate).
     capture_sample_rate: u32,
+    /// Running tally of raw input samples received (for diagnostic logging).
+    total_raw_samples: u64,
+    /// Pre-allocated scratch buffer for applying gain.
+    /// Avoids heap allocation on the real-time AAudio callback thread.
+    gain_scratch: Vec<f32>,
 }
 
 
@@ -27,7 +40,22 @@ impl PipelineInner {
             log::warn!("Audio buffer exceeded max ({} samples), truncating", MAX_BUFFER_SAMPLES);
             self.audio_buffer.clear();
         }
-        self.resampler.push(samples, &mut |frame| {
+
+        self.total_raw_samples += samples.len() as u64;
+
+        // Apply fixed pre-amp gain using a reusable scratch buffer
+        // to avoid heap allocation on the real-time audio callback thread.
+        self.gain_scratch.clear();
+        if PREAMP_GAIN != 1.0 {
+            self.gain_scratch.extend(
+                samples.iter().map(|&s| (s * PREAMP_GAIN).clamp(-1.0, 1.0))
+            );
+        } else {
+            self.gain_scratch.extend_from_slice(samples);
+        }
+        let gained = &self.gain_scratch;
+
+        self.resampler.push(gained, &mut |frame| {
             let frame = frame.to_vec();
             self.audio_buffer.extend_from_slice(&frame);
 
@@ -72,6 +100,8 @@ impl AudioPipeline {
                 on_vad_level: None,
                 on_audio_frame: None,
                 capture_sample_rate: 0,
+                total_raw_samples: 0,
+                gain_scratch: Vec::new(),
             })),
             running: Arc::new(AtomicBool::new(false)),
         }
@@ -121,7 +151,7 @@ impl AudioPipeline {
             CaptureError::Callback(msg) => format!("Callback: {msg}"),
         })?;
 
-        log::info!("Audio capture started at {} Hz (native device rate)", actual_rate);
+        log::info!("Audio capture started at {} Hz (native device rate), resampling to 16000 Hz", actual_rate);
 
         // Configure resampler to convert from device rate → 16 kHz
         {
@@ -130,6 +160,7 @@ impl AudioPipeline {
             guard.smoothed_vad.reset();
             guard.audio_buffer.clear();
             guard.capture_sample_rate = actual_rate;
+            guard.total_raw_samples = 0;
         }
 
         self.capture = Some(capture);
@@ -174,10 +205,15 @@ impl AudioPipeline {
 
         guard.smoothed_vad.reset();
 
+        let raw_seconds = guard.total_raw_samples as f64 / guard.capture_sample_rate as f64;
+        let out_seconds = result.len() as f64 / 16000.0;
         log::info!(
-            "Pipeline stopped: {} samples ({} s at 16 kHz)",
+            "Pipeline stopped: {} raw samples ({:.2}s at {} Hz) → {} output samples ({:.2}s at 16 kHz)",
+            guard.total_raw_samples,
+            raw_seconds,
+            guard.capture_sample_rate,
             result.len(),
-            result.len() as f64 / 16000.0
+            out_seconds,
         );
 
         Ok(result)

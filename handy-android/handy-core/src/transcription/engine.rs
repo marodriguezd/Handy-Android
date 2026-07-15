@@ -83,19 +83,28 @@ impl TranscriptionEngine {
             .map_err(|e| format!("Failed to create session: {e}"))?;
         drop(model_guard);
 
+        // Peak-normalize the audio so Whisper gets a full-range signal.
+        // This is critical: raw microphone float32 samples can be very quiet
+        // (peak < 0.1), which causes Whisper to output silence or garbage.
+        let normalized = normalize_peak(pcm);
+
+        // Compute RMS level for diagnostic logging
+        let rms = compute_rms(&normalized);
+
+        // Force Spanish language to avoid auto-detection issues with tiny models
         let run_options = RunOptions {
             task: Task::Transcribe,
-            language: None,
+            language: Some("es".to_string()),
             target_language: None,
             ..Default::default()
         };
 
-        info!("[handy-core] running transcription on {} samples", pcm.len());
+        info!("[handy-core] running transcription on {} samples, rms={:.4}, language=es", pcm.len(), rms);
         let transcript = session
-            .run(pcm, &run_options)
+            .run(&normalized, &run_options)
             .map_err(|e| format!("Transcription run failed: {e}"))?;
 
-        info!("[handy-core] transcription complete: {} chars", transcript.text.len());
+        info!("[handy-core] transcription complete: {} chars: '{}'", transcript.text.len(), transcript.text);
         Ok(transcript.text)
     }
 
@@ -224,6 +233,45 @@ pub fn collapse_stutters(text: &str) -> String {
         i += count;
     }
     result.join(" ")
+}
+
+/// Peak-normalize audio samples so the maximum absolute value reaches ~0.95.
+/// This ensures Whisper receives audio with adequate signal level regardless
+/// of microphone sensitivity. Returns a new Vec<f32> with the normalized samples.
+pub fn normalize_peak(samples: &[f32]) -> Vec<f32> {
+    if samples.is_empty() {
+        return Vec::new();
+    }
+
+    // Find the peak (maximum absolute) sample value
+    let peak = samples.iter().fold(0.0f32, |max, &s| max.max(s.abs()));
+
+    if peak < 0.0001 {
+        // Near-silence — return as-is
+        log::warn!("[handy-core] normalize_peak: near-silence (peak={:.6})", peak);
+        return samples.to_vec();
+    }
+
+    let target_peak = 0.95f32;
+    let gain = target_peak / peak;
+
+    log::info!("[handy-core] normalize_peak: peak={:.6}, gain={:.2}x", peak, gain);
+
+    if (gain - 1.0).abs() < 0.01 {
+        // Already at good level, no scaling needed
+        samples.to_vec()
+    } else {
+        samples.iter().map(|&s| (s * gain).clamp(-1.0, 1.0)).collect()
+    }
+}
+
+/// Compute the RMS (root mean square) energy of audio samples.
+pub fn compute_rms(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum_sq: f32 = samples.iter().map(|&s| s * s).sum();
+    (sum_sq / samples.len() as f32).sqrt()
 }
 
 /// Apply both post-processing filters: remove filler words and collapse stutters.

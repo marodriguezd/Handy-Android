@@ -775,17 +775,24 @@ PipelineInner (process_samples)
 
 ```rust
 // Implementation: audio/capture.rs via aaudio-sys FFI
+// ⚠️ CRITICAL BUG in aaudio-sys v0.1.0: DIRECTION_INPUT = 0 (same as DIRECTION_OUTPUT = 0).
+//    The NDK spec says INPUT = 1, OUTPUT = 0. The crate has a bug.
+//    FIX: Use raw constant AAUDIO_DIRECTION_INPUT = 1 instead of the crate constant.
+//
 // Builder pattern:
 //   1. AAudio_createStreamBuilder(&mut builder_ptr)
-//   2. AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_INPUT)
-//   3. AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_SHARED)
-//   4. AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_FLOAT)
-//   5. AAudioStreamBuilder_setChannelCount(builder, 1)  // mono
-//   6. AAudioStreamBuilder_setDataCallback(builder, data_callback_thunk, user_data)
-//   7. AAudioStreamBuilder_setErrorCallback(builder, error_callback_thunk, user_data)
-//   8. AAudioStreamBuilder_openStream(builder, &mut stream_ptr)
-//   9. AAudioStream_getSampleRate(stream_ptr)  ← query ACTUAL device rate
-//   10. AAudioStream_requestStart(stream_ptr)
+//   2. AAudioStreamBuilder_setDirection(builder, 1)  // 1 = INPUT (NOT aaudio_sys::DIRECTION_INPUT!)
+//   3. AAudioStreamBuilder_setInputPreset(builder, INPUT_PRESET_VOICE_RECOGNITION)  // API 28+
+//   4. AAudioStreamBuilder_setContentType(builder, CONTENT_TYPE_SPEECH)             // API 28+
+//   5. AAudioStreamBuilder_setPerformanceMode(builder, PERFORMANCE_MODE_LOW_LATENCY) // API 28+
+//   6. AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_SHARED)
+//   7. AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_FLOAT)
+//   8. AAudioStreamBuilder_setChannelCount(builder, 1)  // mono
+//   9. AAudioStreamBuilder_setDataCallback(builder, data_callback_thunk, user_data)
+//  10. AAudioStreamBuilder_setErrorCallback(builder, error_callback_thunk, user_data)
+//  11. AAudioStreamBuilder_openStream(builder, &mut stream_ptr)
+//  12. AAudioStream_getSampleRate(stream_ptr)  ← query ACTUAL device rate
+//  13. AAudioStream_requestStart(stream_ptr)
 //
 // KEY: Do NOT call AAudioStreamBuilder_setSampleRate() — use device's native rate.
 // The actual rate is queried after opening and used to configure the resampler.
@@ -839,7 +846,7 @@ PipelineInner (process_samples)
 5. App going to background does NOT trigger unload (Foreground Service keeps the process alive).
 
 **OOM Protection Strategy:**
-1. **Model size budget:** Limit loaded model to ≤ 1.5 GB. Warn the user if they try to load a model larger than 50% of `Runtime.getRuntime().maxMemory()`.
+1. ~~Model size budget: Limit loaded model to ≤ 1.5 GB~~ (REMOVED in v2.0). The user explicitly requested no limits — ALL 65 PC catalog models are available regardless of size. Users are responsible for choosing models that fit their device memory.
 2. **Streaming buffer cap:** The `accumulated_samples: Vec<f32>` for a single recording session is capped at 300 seconds × 16000 samples/sec × 4 bytes = ~19.2 MB. If exceeded, force-finalize the stream.
 3. **Memory pressure callback:** Register `ComponentCallbacks2.onTrimMemory()`. On `TRIM_MEMORY_RUNNING_CRITICAL` (level ≥ 15), immediately unload the model and cancel any active recording.
 4. **Model quantisation preference:** Default catalog prioritizes Q5_0 or Q4_0 quantized GGUF models for mobile. Full FP16 models are not offered unless the user explicitly enables "Experimental / High Quality" mode.
@@ -1183,8 +1190,8 @@ When disabled or unavailable, the standard IME/clipboard flow is used.
 | 0.2 | Create Android project: Kotlin + Compose, `minSdk 26`, `targetSdk 35`, single Activity | ✅ | Project structure with settings.gradle.kts, build.gradle.kts (root + app) |
 | 0.3 | Create `handy-core` Rust crate (cdylib). Integrate into Android project via Gradle `buildRust` + `copyRustLib` tasks | ✅ | `libhandy_core.so` loaded via `System.loadLibrary()` |
 | 0.4 | JNI Hello World: `nativeInit()` / `nativeDestroy()` with full 21-function bridge | ✅ | Round-trip: Kotlin → Rust → Kotlin callbacks (6 dispatch helpers) |
-| 0.5 | Compile ggml + `transcribe-cpp` for Android NDK | ⏳ Deferred to Sprint 1 | `transcribe_cpp::Model::load_with()` (needs CMake toolchain for ARM64 NEON) |
-| 0.6 | Bundle test model: `whisper-tiny-q5_0.gguf` | ⏳ Deferred to Sprint 1 | Model download + batch transcription test |
+| 0.5 | Compile ggml + `transcribe-cpp` for Android NDK | ✅ (Sprint 1) | `transcribe_cpp::Model::load_with()` with CMake toolchain + NDK linker fix (`CMAKE_ARGS` + dummy `libpthread.a`) |
+| 0.6 | Bundle test model: `whisper-tiny-Q5_K_M.gguf` via HF hub | ✅ (Sprint 1) | Model download from handy-computer/whisper-tiny-gguf + batch transcription via `session.run()` |
 | 0.7 | `EngineCallback` interface + `GlobalRef` storage in Rust | ✅ | All 6 callbacks fire from Rust → Kotlin |
 | 0.8 | `EngineViewModel` as process-wide singleton via `HandyApplication` | ✅ | Single `nativeInit` call, shared between IME and MainActivity |
 | 0.9 | `HandyInputMethodService` with 3-mode Compose UI | ✅ | Idle / Dictating / Confirm modes, falling back to clipboard |
@@ -1295,7 +1302,7 @@ Full cascade recovery path: Shizuku → IME → Clipboard, with no data loss.
 | # | Task | Owner | Deliverable | Status |
 |---|---|---|---|---|
 | 6.1 | Idle model unloading + timer configuration. Verify memory drops after timeout. | Rust | `IdleWatcher` in `idle_watcher.rs`. On finalize/cancel, a background thread sleeps `idle_timeout_secs` then calls `unload_model()`. Reset on `startRecording()`. Configurable via JNI (0 = Never). | ✅ |
-| 6.2 | OOM protection: model size budget (1.5GB max, warning >512MB), streaming buffer cap (300s × 16kHz ≈ 19.2MB), `ComponentCallbacks2.onTrimMemory(CRITICAL)` → native unload, `onLowMemory()` hook. | All | Size check in `ModelManager::set_active_model()` + `jni_bridge::nativeLoadModel()`. Buffer cap in `pipeline.rs`. `HandyApplication` implements `ComponentCallbacks2`. | ✅ |
+| 6.2 | OOM protection: ~~model size budget 1.5GB~~ REMOVED (user chooses freely), streaming buffer cap (300s × 16kHz ≈ 19.2MB), `ComponentCallbacks2.onTrimMemory(CRITICAL)` → native unload, `onLowMemory()` hook. | All | ~~Size check in `ModelManager::set_active_model()`~~ REMOVED. Buffer cap in `pipeline.rs`. `HandyApplication` implements `ComponentCallbacks2`. | ✅ |
 | 6.3 | Edge cases: screen rotation (`configChanges`), incoming call (AudioManager audio focus → cancel recording), Bluetooth headset (AudioDeviceCallback logging), process killed (onSaveInstanceState). | All | `AndroidManifest.xml` configChanges. `RecordingService` audio focus + device callback. `MainActivity` save/restore state. | ✅ |
 | 6.4 | Performance benchmarks: measure end-to-end latency for partial (audio→text) and final (stop→result) via `Instant::now()` logging. Target: < 500ms streaming partials. | Rust | `debug!("partial_latency_ms={}")` in `worker.rs`. `debug!("finalize_latency_ms={}")` in `transcription/engine.rs`. | ✅ |
 | 6.5 | Crash reporting: `catch_unwind` around all 22 JNI entry points via `with_guard()`. Sentry SDK integration in `HandyApplication.onCreate()`. | All | `with_guard` + `with_engine_guard` in `jni_bridge.rs`. Sentry dep in version catalog. ProGuard keep rules. BuildConfig for DSN. | ✅ |

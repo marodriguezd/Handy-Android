@@ -82,42 +82,68 @@ The Android port consists of:
 
 ## Current State (Checkpoint — July 15, 2026)
 
-### ✅ Working
-- App launches, model catalog displays GGUF models from handy-computer
-- Model download from HuggingFace (handy-computer org) — GGUF format
-- Model loading into memory via `transcribe_cpp` v0.1.3
-- Audio capture via AAudio (16kHz float32 mono, device native rate)
-- Audio resampling from device rate → 16kHz (rubato FftFixedIn)
-- Batch transcription via `session.run()` (correct API for Whisper)
+### ✅ Working — Functional State
+- Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
+- Voice Recognition input preset (`INPUT_PRESET_VOICE_RECOGNITION`) + Speech content type
+- Actual device sample rate query (no longer assumes 16kHz)
+- FrameResampler (rubato FftFixedIn) with proper buffer management (no lost samples)
+- Peak normalization (`normalize_peak` → target 0.95) + RMS logging before inference
+- Forced Spanish language (`language="es"`) in RunOptions for better accuracy
+- Peak normalization + RMS logging before inference
+- Batch transcription via `session.run()` with `Backend::Auto`
+- **Transcription verified working** — dictation test results:
+  - "Hola, mundo. Esta es una prueba." ✅ 95%
+  - "El reconocimiento de voz funciona perfectamente en el dispositivo." ✅ 100%
+  - ~85% for longer phrases (expected for Whisper Tiny)
+- Model catalog with ALL 65 Handy PC models (34 originally + 31 added)
+- 3 mobile recommendations: Parakeet TDT 0.6B v3, Canary 180M Flash, Nemotron Streaming 3.5
 - VAD level meter visualization in UI
 - Foreground service with persistent notification
 - JNI callbacks (state changes, transcription, vad level, errors)
 - Shizuku/IME/Clipboard injection strategies
+- Cancel download now properly notifies UI via complete_cb
+- Skip download (onboarding) now cancels Rust download
+- No OOM limit — user can activate any model size
 
-### ❌ Issues Found (Current Checkpoint)
-- **Transcription accuracy**: Still failing after recent fixes. The user reports it "no va" (does not work) during live testing on device.
-  - AGC (`normalize_audio`) was removed because it boosted background noise, but the issue persists.
-  - `Backend::Auto` is now used.
-  - Needs further ADB logcat analysis to check if audio capture is working or if the model is failing to transcribe.
+### ❌ Known Limitations
+- Whisper Tiny struggles with long phrases containing proper nouns (e.g., "Handy para Android" → "han de parandro")
+- "Skip for Now" / "Cancel download" buttons: cancel works but UI refresh may need app restart
+- Some Whisper models (English-only variants) show duplicate entries alongside multilingual variants
+- Moonshine Base models not yet verified to work with transcribe-cpp on Android
+- Voxtral Small 24B (17 GB) is listed but impractical for most mobile devices
 
-### ✅ Issues Resolved
-- **Backend Optimization**: `Backend::Cpu` was forcing slow CPU execution. Changed to `Backend::Auto` to leverage hardware acceleration if available.
-- **Linker Errors on NDK**: Resolved missing `libpthread` and NDK CMake errors by passing `CMAKE_ARGS` to the build script.
+### 🔧 Critical Fixes Applied
+| # | Fix | Details |
+|---|-----|---------|
+| 1 | **DIRECTION_INPUT bug** | `aaudio-sys v0.1.0` defines `DIRECTION_INPUT = 0` (should be 1). Replaced with raw constant `AAUDIO_DIRECTION_INPUT = 1` |
+| 2 | **Input preset** | Added `setInputPreset(INPUT_PRESET_VOICE_RECOGNITION)` + `setContentType(CONTENT_TYPE_SPEECH)` + `setPerformanceMode(PERFORMANCE_MODE_LOW_LATENCY)` |
+| 3 | **Resampler buffer loss** | Accumulated `input_pending` + `output_pending` buffers in FrameResampler to prevent sample dropping |
+| 4 | **Peak normalization** | Added `normalize_peak()` scaling audio to 0.95 peak before session.run() |
+| 5 | **Spanish language** | Forced `language: Some("es")` in RunOptions |
+| 6 | **NDK linker fixes** | Injected `CMAKE_ARGS` and dummy `libpthread.a` for transcribe-cpp build |
+| 7 | **Cancel download UX** | Tokio task now calls `complete_cb(false, "Download cancelled")` on cancel; OnboardingViewModel cancel skip also cancels Rust download |
+| 8 | **OOM limit removed** | Removed 1600MB limit from `set_active_model()` — user chooses freely |
 
-### 🔧 Changes Applied (this session)
-1. Model URLs changed from `ggerganov/whisper.cpp` (GGML .bin) to `handy-computer` (GGUF)
-2. Model IDs updated: `whisper-tiny-Q5_K_M`, `whisper-base-Q5_K_M`, etc.
-3. Added Parakeet EN 0.6B model to catalog
-4. `gpu_device: -1` → `gpu_device: 0` (whisper.cpp asserts >= 0)
-5. Changed `Backend::Cpu` to `Backend::Auto` for better inference performance.
-6. Removed streaming (`session.stream()` not supported for Whisper) → batch `session.run()`
-7. Removed StreamWorker/StreamRouter architecture (no longer needed)
-8. Removed `worker_id` from `EngineState`
-9. Bypassed VAD filtering in audio accumulation (all frames saved)
-10. Removed AGC (`normalize_audio`) because it amplified background noise and broke transcription.
-11. AAudio now queries actual device sample rate instead of assuming 16kHz
-12. Resampler configured with device's actual sample rate
-13. Fixed NDK linkage issues by injecting `CMAKE_ARGS` and a dummy `libpthread.a`.
+### 📋 Model Catalog — 65 Models (all from Handy PC)
+| Priority | Model | Size | Why |
+|----------|-------|------|-----|
+| 🥇 | **Parakeet TDT 0.6B v3** (Q4_K_M) | 485 MB | 25 languages, fast, accurate — default mobile recommendation |
+| 🥈 | **Canary 180M Flash** (Q4_K_M) | 139 MB | Ultra-light, 4 langs + translation |
+| 🥉 | **Nemotron 3.5 Streaming** (Q4_K_M) | 496 MB | 28 languages, streaming, auto-detect |
+| | Whisper family (Tiny/Base/Small/Medium + Large v2/v3/Turbo + English-only) | 46 MB–1.2 GB | 99 languages (multilingual) or English-only |
+| | Canary family (180M/1B/1B Flash/1B v2/Qwen 2.5B) | 139 MB–1.7 GB | 4–25 languages with translation |
+| | Parakeet family (v2, Unified EN, CTC, RNN-T, TDT-CTC, TDT 1.1B) | 135 MB–936 MB | English-only, various architectures |
+| | Qwen3-ASR (0.6B, 1.7B) | 590 MB–1.5 GB | 30 languages, excellent multilingual |
+| | Fun-ASR (Nano, Nano Multilingual) | 557 MB | 3–31 languages, Asian + European |
+| | GigaAM v3 (CTC, E2E-CTC, RNN-T, E2E-RNN-T) | 182–184 MB | Russian speech-to-text |
+| | Granite Speech (4.1 NAR, 4.0 1B, 4.1 2B, Plus) | 1.5–1.6 GB | 5–6 languages, high accuracy |
+| | MedASR | 83 MB | English, ultra-light, token timestamps |
+| | Moonshine (Tiny/Base/Streaming Tiny/Small/Medium + 6 languages) | 35–296 MB | Ultra-light, various languages |
+| | Cohere Transcribe | 1.6 GB | 14 languages, highest accuracy (92) |
+| | SenseVoice Small | 253 MB | 5 languages, auto-detect |
+| | Voxtral (Mini 3B, Mini 4B, Small 24B) | 2.8–17 GB | 8–13 languages, streaming, massive |
+| | Nemotron Speech Streaming EN | 730 MB | English streaming |
+| | Breeze-ASR-25 | 1.2 GB | Taiwanese Mandarin + English
 
 ## Desktop Development Commands
 

@@ -422,7 +422,7 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStre
                 // Run batch transcription (correct API for Whisper GGUF models)
                 match state.transcription_engine.run(&accumulated) {
                     Ok(text) => {
-                        info!("Final transcription: {}", text);
+                        info!("Final transcription ({} chars): {}", text.len(), text);
                         let processed = crate::transcription::engine::post_process(&text);
                         jni_callback::dispatch_transcription(&mut env, &state.callback, &processed, false);
                     }
