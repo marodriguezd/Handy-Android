@@ -293,8 +293,23 @@ fn tokio_runtime() -> &'static tokio::runtime::Runtime {
 
 impl ModelManager {
     pub fn new(model_dir: &str) -> Self {
+        // Clean up any orphaned .tmp files from crashed downloads
+        let dir = PathBuf::from(model_dir);
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("tmp") {
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        if stem.starts_with('.') {
+                            warn!("Cleaning up orphaned temp file: {:?}", path);
+                            let _ = std::fs::remove_file(&path);
+                        }
+                    }
+                }
+            }
+        }
         Self {
-            model_dir: PathBuf::from(model_dir),
+            model_dir: dir,
             active_model_id: Mutex::new(None),
             active_download: Arc::new(Mutex::new(None)),
         }
@@ -345,6 +360,7 @@ impl ModelManager {
             let mut guard = self.active_download.lock().unwrap();
             if guard.is_some() {
                 warn!("A model download is already in progress");
+                complete_cb(model_id.to_string(), false, Some("Download already in progress".to_string()));
                 return;
             }
             *guard = Some(DownloadState {

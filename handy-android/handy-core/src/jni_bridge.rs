@@ -227,13 +227,9 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeLoadModel<'l
                 }
             };
 
-            // OOM: Check model file size before loading
+            // Log model size (user chose to download it, so let them use it)
             if let Ok(meta) = std::fs::metadata(&path) {
                 let size_mb = meta.len() / (1024 * 1024);
-                if size_mb > 1500 {
-                    jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, &format!("Model too large: {}MB (max 1500MB)", size_mb));
-                    return;
-                }
                 if size_mb > 512 {
                     log::warn!("Loading large model: {}MB - may cause OOM on low-end devices", size_mb);
                 }

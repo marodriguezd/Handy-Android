@@ -1,11 +1,11 @@
 # Handy for Android — Master Technical Specification
 
 **Status:** Active development — Dictado funcional (batch transcription con Whisper GGUF via `session.run()`)
-**Version:** 1.9.0
+**Version:** 1.10.0
 **Target:** Android 8.0+ (API 26), `targetSdk 35`
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 **Problem tracker:** See [`SPEC.md`](SPEC.md) for current issues, findings, and fixes applied.
-**Key milestone:** ✅ IME redesigned (PC overlay UI + auto-commit + crash fixed); ✅ Model auto-activates on download; ✅ FlowRow language chips
+**Key milestone:** ✅ Round 2 fixes: Onboarding download flow rework + IME init ordering fix + UI exclusivity + ProGuard rules
 
 ---
 
@@ -715,6 +715,9 @@ Instead:
 # Shizuku SDK API
 -keep class moe.shizuku.api.** { *; }
 
+# IME reflection (ViewTreeLifecycleOwner.set() accessed via Class.forName)
+-keep class androidx.lifecycle.ViewTreeLifecycleOwner { *; }
+
 # AIDL IPC inner classes (ShizukuUserService deserialization)
 -keep class com.handy.app.injection.IHandyUserService { *; }
 -keep class com.handy.app.injection.IHandyUserService$Stub { *; }
@@ -722,9 +725,10 @@ Instead:
 -keep class com.handy.app.injection.HandyUserService { *; }
 ```
 
-Without these rules, R8 obfuscation renames JNI callbacks and AIDL inner classes,
+Without these rules, R8 obfuscation renames JNI callbacks, AIDL inner classes, and IME reflection targets,
 causing `JNIEnv::call_method` to fail with `NoSuchMethodError` at runtime,
-and `IHandyUserService.Stub.asInterface()` to crash with `ClassNotFoundException`.
+`IHandyUserService.Stub.asInterface()` to crash with `ClassNotFoundException`,
+and `ViewTreeLifecycleOwner.set()` reflection to fail silently in release builds.
 
 ### 4.1 Audio Pipeline Specification
 
@@ -920,24 +924,32 @@ private class ImeContainer(
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
     init {
+        // CRITICAL: Set ViewTreeLifecycleOwner BEFORE adding child views.
+        // In Android, onAttachedToWindow is called depth-first (children before parents),
+        // so doing this in onAttachedToWindow() would be too late for ComposeView.
+        try {
+            val clazz = Class.forName("androidx.lifecycle.ViewTreeLifecycleOwner")
+            val setMethod = clazz.getMethod(
+                "set",
+                View::class.java,
+                LifecycleOwner::class.java,
+            )
+            setMethod.invoke(null, this, this)
+        } catch (e: Exception) {
+            android.util.Log.w("HandyIME", "Failed to set ViewTreeLifecycleOwner: ${e.message}")
+        }
+
         val composeView = ComposeView(context).apply {
             setContent { content() }
         }
         addView(composeView, ...)
     }
-
-    override fun onAttachedToWindow() {
-        // Reflection to access lifecycle-runtime's internal R.id
-        val rIdClass = Class.forName("androidx.lifecycle.R$id")
-        val field = rIdClass.getField("view_tree_lifecycle_owner")
-        val tagId = field.getInt(null)
-        setTag(tagId, this)
-        super.onAttachedToWindow()
-    }
 }
 ```
 
 **Why reflection?** `ViewTreeLifecycleOwner.set()` is a public static method in `lifecycle-runtime`, but the class is not directly importable in all build configurations. Using `Class.forName("androidx.lifecycle.ViewTreeLifecycleOwner")` with `getMethod("set", ...)` accesses the stable public API. We use `getMethod` (not `getDeclaredMethod`) because this is a public static method.
+
+**Why `init{}` and not `onAttachedToWindow()`?** In Android, `onAttachedToWindow()` is dispatched depth-first: child views receive it before their parent. By the time `ImeContainer.onAttachedToWindow()` runs, `ComposeView` has already attempted to find a `LifecycleOwner` and failed. Moving the reflection to `init{}` ensures the tag is set before any view is attached. The `setTag()` and `ViewTreeLifecycleOwner.set()` calls work correctly before attachment because they set static metadata on the view.
 
 **Lifecycle events:**
 - `onCreate()` → `ON_CREATE`

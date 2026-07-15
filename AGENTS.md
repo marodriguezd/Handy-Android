@@ -27,8 +27,20 @@ This repo contains TWO separate projects:
 # Set NDK path (required)
 export ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/<version>
 
+# Create dummy libpthread.a (Android NDK has pthread in libc, but linker still needs it)
+mkdir -p /tmp/dummy-pthread
+TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+echo "void pthread_dummy(void){}" > /tmp/dummy-pthread/dummy.c
+$TOOLCHAIN/bin/aarch64-linux-android26-clang -c -o /tmp/dummy-pthread/dummy.o /tmp/dummy-pthread/dummy.c
+$TOOLCHAIN/bin/llvm-ar crs /tmp/dummy-pthread/libpthread.a /tmp/dummy-pthread/dummy.o
+
 # 1. Build Rust native library (ARM64)
+# NOTE: CMAKE_TOOLCHAIN_FILE + CMAKE_ARGS are required to avoid -march=native errors
+# with the cross-compiler, and to set the correct ABI (arm64-v8a) and platform level.
 cd handy-android/handy-core
+CMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+CMAKE_ARGS="-DGGML_NATIVE=OFF -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=26" \
+RUSTFLAGS="-L /tmp/dummy-pthread" \
 cargo ndk --target aarch64-linux-android --platform 26 build --release
 
 # 2. Copy .so to jniLibs
@@ -36,7 +48,7 @@ cp target/aarch64-linux-android/release/libhandy_core.so ../app/src/main/jniLibs
 
 # 3. Build debug APK
 cd ..
-./gradlew assembleDebug
+ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/<version> ./gradlew assembleDebug
 
 # 4. Install on device
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -46,6 +58,10 @@ adb shell pm clear com.handy.app.debug
 adb logcat -c
 adb shell am start -n com.handy.app.debug/com.handy.app.MainActivity
 ```
+
+**IMPORTANT:** The Gradle `buildRust` task (in `app/build.gradle.kts`) runs as a dependency of `assembleDebug` and always rebuilds Rust in **debug** mode (~131MB) with `--link-libcxx-shared`. It overwrites any release `.so` you manually placed in `jniLibs/`. If you want the 6MB release `.so` in the APK, you have two options:
+- Run `./gradlew assembleRelease` (requires a release keystore)
+- Manually build with `RUSTFLAGS="-L /tmp/dummy-pthread" cargo ndk ... build --release` and copy the .so to jniLibs AFTER the gradle build completes, then rebuild without `buildRust` or modify the gradle task to set `RUSTFLAGS`.
 
 **Logcat monitoring:**
 
@@ -80,7 +96,7 @@ The Android port consists of:
 - `service/RecordingService.kt` — Foreground service for persistent recording
 - `ui/dictation/DictationScreen.kt` — Dictation test screen
 
-## Current State (Checkpoint — July 15, 2026)
+## Current State (Checkpoint — July 16, 2026)
 
 ### ✅ Working — Functional State
 - Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
@@ -129,25 +145,32 @@ The Android port consists of:
 - IME uses hardcoded UI strings (not string resources) — i18n pending
 - No streaming live text display during recording (batch transcription only)
 - `onComputeInsets` removed — IME height may cause unexpected layout shifts in host apps
+- Gradle `buildRust` task rebuilds Rust in debug mode without `RUSTFLAGS`, overwriting release `.so`
 
 ### 🔧 Critical Fixes Applied
-| # | Fix | Details |
-|---|-----|---------|
-| 1 | **DIRECTION_INPUT bug** | `aaudio-sys v0.1.0` defines `DIRECTION_INPUT = 0` (should be 1). Replaced with raw constant `AAUDIO_DIRECTION_INPUT = 1` |
-| 2 | **Input preset** | Added `setInputPreset(INPUT_PRESET_VOICE_RECOGNITION)` + `setContentType(CONTENT_TYPE_SPEECH)` + `setPerformanceMode(PERFORMANCE_MODE_LOW_LATENCY)` |
-| 3 | **Resampler buffer loss** | Accumulated `input_pending` + `output_pending` buffers in FrameResampler to prevent sample dropping |
-| 4 | **Peak normalization** | Added `normalize_peak()` scaling audio to 0.95 peak before session.run() |
-| 5 | **Spanish language** | Forced `language: Some("es")` in RunOptions |
-| 6 | **NDK linker fixes** | Injected `CMAKE_ARGS` and dummy `libpthread.a` for transcribe-cpp build |
-| 7 | **Cancel download UX** | Tokio task now calls `complete_cb(false, "Download cancelled")` on cancel; OnboardingViewModel cancel skip also cancels Rust download |
-| 8 | **OOM limit removed** | Removed 1600MB limit from `set_active_model()` — user chooses freely |
-| 9 | **IME ViewTreeLifecycleOwner (v2)** | Uses reflection on stable `androidx.lifecycle.ViewTreeLifecycleOwner` class name with `getMethod("set", ...)` — NOT `R$id` which caused `ClassNotFoundException` on some devices |
-| 10 | **Auto-activate on download** | Added `nativeSetActiveModel(modelId)` call in `EngineViewModel.onDownloadComplete()` before `refreshModels()` |
-| 11 | **ModelCard languages** | Changed from single `Surface` chip + ellipsis to `FlowRow` with per-language chips via `model.language.split(",")` |
-| 12 | **IME auto-commit** | Transcription auto-inserts via `InputConnection.commitText()` — no confirm step needed |
-| 13 | **IME model check** | `startRecording()` checks `nativeIsModelLoaded()` before starting; shows error if no model available |
-| 14 | **IME injection failure** | `confirmInsert()` failure shows `STATE_ERROR` (not silent reset) so user gets feedback + retry option |
-| 15 | **IME keyboard switch** | `showInputMethodPicker()` with try-catch fallback to `ACTION_INPUT_METHOD_SETTINGS` for OEM compatibility |
+| # | Round | Fix | Details |
+|---|-------|-----|---------|
+| 1 | 1 | **DIRECTION_INPUT bug** | `aaudio-sys v0.1.0` defines `DIRECTION_INPUT = 0` (should be 1). Replaced with raw constant `AAUDIO_DIRECTION_INPUT = 1` |
+| 2 | 1 | **Input preset** | Added `setInputPreset(INPUT_PRESET_VOICE_RECOGNITION)` + `setContentType(CONTENT_TYPE_SPEECH)` + `setPerformanceMode(PERFORMANCE_MODE_LOW_LATENCY)` |
+| 3 | 1 | **Resampler buffer loss** | Accumulated `input_pending` + `output_pending` buffers in FrameResampler to prevent sample dropping |
+| 4 | 1 | **Peak normalization** | Added `normalize_peak()` scaling audio to 0.95 peak before session.run() |
+| 5 | 1 | **Spanish language** | Forced `language: Some("es")` in RunOptions |
+| 6 | 1 | **NDK linker fixes** | Injected `CMAKE_ARGS` and dummy `libpthread.a` for transcribe-cpp build |
+| 7 | 1 | **Cancel download UX** | Tokio task now calls `complete_cb(false, "Download cancelled")` on cancel; OnboardingViewModel cancel skip also cancels Rust download |
+| 8 | 1 | **OOM limit removed** | Removed 1600MB limit from `set_active_model()` — user chooses freely |
+| 9 | 1 | **IME ViewTreeLifecycleOwner (v2)** | Uses reflection on stable `androidx.lifecycle.ViewTreeLifecycleOwner` class name with `getMethod("set", ...)` — NOT `R$id` which caused `ClassNotFoundException` on some devices |
+| 10 | 1 | **Auto-activate on download** | Added `nativeSetActiveModel(modelId)` call in `EngineViewModel.onDownloadComplete()` before `refreshModels()` |
+| 11 | 1 | **ModelCard languages** | Changed from single `Surface` chip + ellipsis to `FlowRow` with per-language chips via `model.language.split(",")` |
+| 12 | 1 | **IME auto-commit** | Transcription auto-inserts via `InputConnection.commitText()` — no confirm step needed |
+| 13 | 1 | **IME model check** | `startRecording()` checks `nativeIsModelLoaded()` before starting; shows error if no model available |
+| 14 | 1 | **IME injection failure** | `confirmInsert()` failure shows `STATE_ERROR` (not silent reset) so user gets feedback + retry option |
+| 15 | 1 | **IME keyboard switch** | `showInputMethodPicker()` with try-catch fallback to `ACTION_INPUT_METHOD_SETTINGS` for OEM compatibility |
+| 16 | 2 | **ModelsViewModel revert** | Removed `state.downloads - event.modelId` — entries stay in map so OnboardingViewModel can consume them |
+| 17 | 2 | **Onboarding collector rework** | Changed from `activeDownloadId` lookup to scanning `modelState.downloads.entries` directly; handles success + failure |
+| 18 | 2 | **Download error path** | OnboardingViewModel collector now auto-detects completion events with `event.error != null` and sets `downloadError` + `isDownloading = false` |
+| 19 | 2 | **UI exclusivity (two buttons)** | Replaced 5 overlapping `if` blocks with `when` — exactly one UI state visible at a time |
+| 20 | 2 | **ImeContainer init ordering** | Moved `ViewTreeLifecycleOwner` reflection from `onAttachedToWindow()` to `init{}` (before `addView()`) to fix depth-first timing |
+| 21 | 2 | **ProGuard rules** | Added `-keep class androidx.lifecycle.ViewTreeLifecycleOwner { *; }` for release build reflection safety |
 
 ### 📋 Model Catalog — 65 Models (all from Handy PC)
 | Priority | Model | Size | Why |

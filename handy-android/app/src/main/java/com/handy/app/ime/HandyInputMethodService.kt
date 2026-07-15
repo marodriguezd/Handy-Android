@@ -75,23 +75,10 @@ private class ImeContainer(
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
     init {
-        val composeView = ComposeView(context).apply {
-            setContent { content() }
-        }
-        addView(
-            composeView,
-            LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-    }
-
-    override fun onAttachedToWindow() {
+        // Set ViewTreeLifecycleOwner BEFORE adding child views.
+        // In Android, onAttachedToWindow is called depth-first (children before parents),
+        // so doing this in onAttachedToWindow() would be too late for ComposeView.
         try {
-            // Use reflection to set ViewTreeLifecycleOwner — the class isn't
-            // directly importable in all build configurations, but its fully-
-            // qualified name is stable across AndroidX lifecycle versions.
             val clazz = Class.forName("androidx.lifecycle.ViewTreeLifecycleOwner")
             val setMethod = clazz.getMethod(
                 "set",
@@ -102,7 +89,17 @@ private class ImeContainer(
         } catch (e: Exception) {
             android.util.Log.w("HandyIME", "Failed to set ViewTreeLifecycleOwner: ${e.message}")
         }
-        super.onAttachedToWindow()
+
+        val composeView = ComposeView(context).apply {
+            setContent { content() }
+        }
+        addView(
+            composeView,
+            LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
     }
 }
 

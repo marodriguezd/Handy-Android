@@ -27,8 +27,8 @@ impl EngineState {
     pub fn new(model_dir: String, config_dir: String, callback: GlobalRef) -> Self {
         let history_path = format!("{}/history.db", config_dir);
         let history_manager = HistoryManager::new(&history_path).unwrap_or_else(|e| {
-            warn!("History init failed: {e}");
-            panic!("{}", e);
+            warn!("History init failed (continuing without history): {e}");
+            HistoryManager::new_empty()
         });
 
         Self {

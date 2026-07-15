@@ -49,3 +49,8 @@
 -keep class io.sentry.** { *; }
 -dontwarn io.sentry.**
 -keepattributes *Annotation*
+
+# ── IME Reflection ─────────────────────────────────────────────────
+# Keep ViewTreeLifecycleOwner for IME reflection (HandyInputMethodService uses
+# Class.forName("androidx.lifecycle.ViewTreeLifecycleOwner").getMethod("set"))
+-keep class androidx.lifecycle.ViewTreeLifecycleOwner { *; }

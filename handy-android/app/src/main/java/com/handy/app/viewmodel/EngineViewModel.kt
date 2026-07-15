@@ -61,7 +61,7 @@ class EngineViewModel(
         val error: String?,
     )
 
-    private val _downloadEvents = MutableSharedFlow<DownloadProgressEvent>(replay = 0, extraBufferCapacity = 16)
+    private val _downloadEvents = MutableSharedFlow<DownloadProgressEvent>(replay = 0, extraBufferCapacity = 64)
     val downloadEvents: SharedFlow<DownloadProgressEvent> = _downloadEvents.asSharedFlow()
 
     // ── Available Models ──────────────────────────────────────
@@ -246,7 +246,7 @@ class EngineViewModel(
 
     override fun onDownloadProgress(modelId: String, bytesSoFar: Long, totalBytes: Long) {
         val progress = if (totalBytes > 0) bytesSoFar.toFloat() / totalBytes.toFloat() else -1f
-        _downloadEvents.tryEmit(
+        val emitted = _downloadEvents.tryEmit(
             DownloadProgressEvent(
                 modelId = modelId,
                 progress = progress,
@@ -256,10 +256,13 @@ class EngineViewModel(
                 error = null,
             )
         )
+        if (!emitted) {
+            Log.w(TAG, "onDownloadProgress: event dropped for $modelId (buffer full)")
+        }
     }
 
     override fun onDownloadComplete(modelId: String, success: Boolean, errorMsg: String?) {
-        _downloadEvents.tryEmit(
+        val emitted = _downloadEvents.tryEmit(
             DownloadProgressEvent(
                 modelId = modelId,
                 progress = if (success) 1f else 0f,
@@ -269,6 +272,9 @@ class EngineViewModel(
                 error = errorMsg.takeUnless { success },
             )
         )
+        if (!emitted) {
+            Log.w(TAG, "onDownloadComplete: event dropped for $modelId (buffer full)")
+        }
         if (success) {
             // Auto-activate the newly downloaded model so it's immediately usable
             EngineBridge.nativeSetActiveModel(modelId)

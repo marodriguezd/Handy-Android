@@ -295,72 +295,67 @@ private fun ModelDownloadContent(viewModel: OnboardingViewModel) {
         )
         Spacer(Modifier.height(24.dp))
 
-        if (!uiState.isDownloading && !uiState.isDownloadReady && uiState.downloadError == null) {
-            Button(onClick = {
-                viewModel.skipToModelDownload()
-            }) {
-                Text(stringResource(R.string.onboarding_model_download))
+        when {
+            uiState.downloadError != null -> {
+                Text(
+                    text = uiState.downloadError ?: "",
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { viewModel.nextStep() }) {
+                    Text(stringResource(R.string.onboarding_continue_anyway))
+                }
             }
-        }
-
-        if (uiState.isDownloading) {
-            LinearProgressIndicator(
-                progress = { uiState.downloadProgress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(0.7f),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text("Downloading ${(uiState.downloadProgress * 100).toInt()}%")
-        }
-
-        if (uiState.isDownloadCanceled) {
-            Icon(
-                imageVector = Icons.Default.Download,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.onboarding_model_canceled),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = {
-                viewModel.retryDownload()
-            }) {
-                Text(stringResource(R.string.onboarding_model_download))
+            uiState.isDownloading -> {
+                LinearProgressIndicator(
+                    progress = { uiState.downloadProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Downloading ${(uiState.downloadProgress * 100).toInt()}%")
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = { viewModel.skipDownload() }) {
+                    Text(stringResource(R.string.onboarding_skip))
+                }
             }
-        }
-
-        if (uiState.isDownloadReady) {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.onboarding_model_ready),
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-
-        if (uiState.downloadError != null) {
-            Text(
-                text = uiState.downloadError ?: "",
-                color = MaterialTheme.colorScheme.error,
-            )
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = { viewModel.nextStep() }) {
-                Text(stringResource(R.string.onboarding_continue_anyway))
+            uiState.isDownloadCanceled -> {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.onboarding_model_canceled),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    viewModel.retryDownload()
+                }) {
+                    Text(stringResource(R.string.onboarding_model_download))
+                }
             }
-        }
-
-        if (uiState.isDownloading) {
-            Spacer(Modifier.height(16.dp))
-            TextButton(onClick = { viewModel.skipDownload() }) {
-                Text(stringResource(R.string.onboarding_skip))
+            uiState.isDownloadReady -> {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.onboarding_model_ready),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            else -> {
+                Button(onClick = {
+                    viewModel.skipToModelDownload()
+                }) {
+                    Text(stringResource(R.string.onboarding_model_download))
+                }
             }
         }
     }

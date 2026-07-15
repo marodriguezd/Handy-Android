@@ -155,4 +155,10 @@ impl HistoryManager {
         info!("Toggled saved for history entry {id}");
         Ok(())
     }
+
+    pub fn new_empty() -> Self {
+        Self {
+            db: Mutex::new(Connection::open_in_memory().expect("Failed to create in-memory history database")),
+        }
+    }
 }

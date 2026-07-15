@@ -30,6 +30,7 @@ class OnboardingViewModel(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private var modelsViewModel: ModelsViewModel? = null
+    private var initialized = false
     private var downloadStarted = false
     private var downloadTargetId: String? = null
     private var activated = false
@@ -96,39 +97,65 @@ class OnboardingViewModel(
             val mv = modelsViewModel!!
             viewModelScope.launch {
                 mv.uiState.collect { modelState ->
-                    val event = modelState.activeDownloadId?.let { modelState.downloads[it] }
-                    if (event != null) {
+                    // Scan ALL downloads in the map for completion events
+                    val completedEvent = modelState.downloads.entries
+                        .firstOrNull { (_, e) -> e.isComplete }
+                        ?.let { (id, event) -> id to event }
+
+                    if (completedEvent != null) {
+                        val (id, event) = completedEvent
+                        if (event.error != null) {
+                            // Download failed — show error
+                            _uiState.update {
+                                it.copy(
+                                    downloadProgress = 0f,
+                                    downloadError = event.error,
+                                    isDownloadReady = false,
+                                    isDownloading = false,
+                                )
+                            }
+                        } else {
+                            // Download succeeded
+                            if (!activated) {
+                                activated = true
+                                mv.setActiveModel(id)
+                            }
+                            _uiState.update {
+                                it.copy(
+                                    downloadProgress = 1f,
+                                    downloadError = null,
+                                    isDownloadReady = true,
+                                    isDownloading = false,
+                                )
+                            }
+                        }
+                    }
+
+                    // Also update progress from active download
+                    val progressEvent = modelState.activeDownloadId?.let { modelState.downloads[it] }
+                    if (progressEvent != null && !progressEvent.isComplete) {
                         _uiState.update {
                             it.copy(
-                                downloadProgress = event.progress,
-                                downloadError = if (event.isComplete) event.error else null,
-                                isDownloadReady = event.isComplete && event.error == null,
-                                isDownloading = !event.isComplete,
+                                downloadProgress = progressEvent.progress,
+                                downloadError = null,
+                                isDownloadReady = false,
+                                isDownloading = true,
                             )
                         }
                     }
 
-                    // Find any completed download in the map (even if activeDownloadId was consumed)
-                    val completedId = modelState.downloads.entries
-                        .firstOrNull { (_, e) -> e.isComplete && e.error == null }
-                        ?.key
-                    if (completedId != null && !activated) {
-                        activated = true
-                        _uiState.update { it.copy(isDownloadReady = true, isDownloading = false) }
-                        mv.setActiveModel(completedId)
-                    }
-
-                if (!downloadStarted && modelState.models.isNotEmpty() && !modelState.isLoading) {
-                    val models = modelState.models
-                    val target = models.firstOrNull { it.recommended && !it.isDownloaded }
-                        ?: models.firstOrNull { !it.isDownloaded }
-                    // Allow retry: accept if no entry exists, or if previous download completed (even with error)
-                    val existing = target?.let { modelState.downloads[it.id] }
-                    if (target != null && (existing == null || existing.isComplete)) {
-                        downloadStarted = true
-                        downloadTargetId = target.id
-                        _uiState.update { it.copy(isDownloading = true) }
-                        mv.downloadModel(target.id)
+                    // Auto-start download if models are loaded and no download has been started
+                    if (!downloadStarted && modelState.models.isNotEmpty() && !modelState.isLoading) {
+                        val models = modelState.models
+                        val target = models.firstOrNull { it.recommended && !it.isDownloaded }
+                            ?: models.firstOrNull { !it.isDownloaded }
+                        val existing = target?.let { modelState.downloads[it.id] }
+                        // Start download if: no prior entry exists, OR the prior entry completed (success or failure)
+                        if (target != null && (existing == null || existing.isComplete)) {
+                            downloadStarted = true
+                            downloadTargetId = target.id
+                            _uiState.update { it.copy(isDownloading = true) }
+                            mv.downloadModel(target.id)
                         } else if (models.all { it.isDownloaded }) {
                             _uiState.update { it.copy(isDownloadReady = true) }
                             val id = downloadTargetId ?: models.firstOrNull { it.isDownloaded }?.id

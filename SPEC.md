@@ -1,7 +1,7 @@
 # Handy Android — Estado Actual y Diagnóstico
 
-**Última actualización:** 2026-07-15  
-**Checkpoint:** 🟢 FUNCIONAL — IME redesigned (PC overlay UI + auto-commit) + crash fixed + model auto-activate
+**Última actualización:** 2026-07-16  
+**Checkpoint:** 🟢 FUNCIONAL — Onboarding download flow fixed + IME init ordering fix + UI exclusivity + ProGuard rules
 
 ---
 
@@ -141,6 +141,60 @@ Esta clase es una API pública estable de AndroidX lifecycle-runtime, a diferenc
 - Usar `@OptIn(ExperimentalLayoutApi::class)` para `FlowRow`
 - El tamaño/quant del modelo va inline después de los chips
 
+### 🐛 Bug #16 (CRÍTICO) — Onboarding: collector no detectaba completación de download
+
+**Síntoma:** El download mostraba 1% y se congelaba, o mostraba "Download canceled" sin razón aparente.
+
+**Causa raíz (múltiple):**
+1. **ModelsViewModel removía entries del map** al completarse (`state.downloads - event.modelId`), antes de que OnboardingViewModel las consumiera
+2. **OnboardingViewModel buscaba por `activeDownloadId`** que se ponía `null` en completación → nunca veía eventos
+3. **`downloadStarted` se reseteaba** en cada `initModelDownload()`, causando re-descargas automáticas tras fallos
+4. **No había path automático a `isDownloadCanceled`** cuando el download fallaba en Rust
+
+**Solución (Round 2):**
+- Revertir `ModelsViewModel` a mantener entries en el map (sin eliminar)
+- OnboardingViewModel ahora escanea `modelState.downloads.entries` directamente
+- El collector maneja completaciones con error: setea `downloadError`, `isDownloading = false`
+- `downloadStarted` ya no se resetea al inicio de `initModelDownload()`
+
+### 🐛 Bug #17 (CRÍTICO) — UI de onboarding con estados no exclusivos
+
+**Síntoma:** Dos botones "Download Recommended Model" visibles simultáneamente.
+
+**Causa raíz:** 5 bloques `if` independientes que no eran mutuamente excluyentes. Cuando `isDownloadCanceled = true` y `isDownloading = false`, coincidían las condiciones de idle y cancelado.
+
+**Solución:** Reemplazar `if` independientes por `when` con prioridad: error > downloading > cancelado > ready > idle.
+
+### 🐛 Bug #18 (CRÍTICO) — IME: ViewTreeLifecycleOwner seteado demasiado tarde
+
+**Síntoma:** IME crashea al seleccionar Handy como teclado en algunos dispositivos. `ComposeView` no encuentra LifecycleOwner.
+
+**Causa raíz:** `onAttachedToWindow()` en Android se llama depth-first (hijos antes que padres). `ImeContainer.onAttachedToWindow()` setea el LifecycleOwner DESPUÉS de que `ComposeView.onAttachedToWindow()` ya intentó encontrarlo y falló.
+
+**Solución:** Mover la reflexión del LifecycleOwner al `init{}` del `ImeContainer`, ANTES de agregar el `ComposeView` como hijo. Eliminar `onAttachedToWindow()`.
+
+### 🐛 Bug #19 (MEDIUM) — ProGuard ofusca ViewTreeLifecycleOwner
+
+**Síntoma:** En builds release, la reflexión sobre `ViewTreeLifecycleOwner.set()` falla silenciosamente porque ProGuard ofusca la clase o el método.
+
+**Solución:** Agregar `-keep class androidx.lifecycle.ViewTreeLifecycleOwner { *; }` en `proguard-rules.pro`.
+
+### 🐛 Bug #20 (HIGH) — downloadStarted desincronizado en retry
+
+**Síntoma:** Tras cancelar un download y hacer retry, a veces se descargaba el modelo dos veces o no se descargaba.
+
+**Causa raíz:** `initModelDownload()` reseteaba `downloadStarted = false` antes de que el collector pudiera verificar si ya había un download en curso.
+
+**Solución:** Eliminar `downloadStarted = false` de `initModelDownload()`. Usar flag `initialized` separado.
+
+### 🐛 Bug #21 (HIGH) — Sin feedback automático en error de download
+
+**Síntoma:** Si el download fallaba en Rust (error de red, stream error), la UI se quedaba congelada en "Downloading 1%" sin error visible.
+
+**Causa raíz:** No había código que detectara completaciones con error y actualizara `downloadError` o `isDownloadCanceled`.
+
+**Solución:** El collector ahora detecta eventos completados con `event.error != null` y setea `downloadError`, `isDownloading = false` automáticamente.
+
 ### 🐛 Bug #6 — Backend lento (CPU forzado)
 
 **Solución:** Cambiar `Backend::Cpu` → `Backend::Auto` para aprovechar aceleración hardware si disponible.
@@ -168,8 +222,12 @@ No hay límite OOM — el usuario puede activar cualquier modelo.
 | Issue | Prioridad | Descripción |
 |-------|-----------|-------------|
 | Whisper Large en móvil | Baja | Modelos >1.5 GB pueden causar OOM en dispositivos con poca RAM. El usuario es responsable de elegir. |
-| ~~UI refresh en cancel download~~ | ~~Media~~ | ✅ RESUELTO — Ahora muestra "Download canceled" con retry. |
+| ~~UI refresh en cancel download~~ | ~~Media~~ | ✅ RESUELTO (Round 2) — Collector escanea `downloads.entries` directamente. |
+| ~~Download se congela al 1%~~ | ~~CRÍTICA~~ | ✅ RESUELTO (Round 2) — Error path automático + fix de `ModelsViewModel.revert`. |
+| ~~Dos botones "Download" simultáneos~~ | ~~CRÍTICA~~ | ✅ RESUELTO (Round 2) — `when` en vez de `if` independientes. |
+| ~~IME crash (LifecycleOwner timing)~~ | ~~CRÍTICA~~ | ✅ RESUELTO (Round 2) — Reflection movida a `init{}` antes de `addView()`. |
 | Voces largas con nombres propios | Baja | Whisper Tiny produce ~85% precisión en frases largas con nombres compuestos. Usar Whisper Small o Parakeet v3 para mejor resultado. |
 | IME hardcoded strings | Baja | El panel IME usa strings hardcoded ("Dictate", "Transcribing…", "Error") en lugar de string resources. Pendiente i18n. |
 | IME onComputeInsets | Media | `onComputeInsets` fue eliminado. El panel IME puede causar layout shifts inesperados en apps host. Necesita restaurar control de insets. |
 | IME streaming text | Media | Sin preview de texto en vivo durante grabación (solo batch transcription). Necesita `session.stream()` en Rust para live text como el overlay de PC. |
+| Gradle buildRust overwrites .so | Baja | `assembleDebug` reconstruye Rust en modo debug (131MB) sin `RUSTFLAGS`. El release build manual de 6MB se pierde. Necesita arreglar el task de Gradle. |
