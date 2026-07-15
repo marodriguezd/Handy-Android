@@ -112,12 +112,19 @@ class EngineViewModel(
             Log.d(TAG, "nativeLoadModel done, checking if model loaded...")
             val loaded = EngineBridge.nativeIsModelLoaded()
             if (!loaded) {
-                Log.w(TAG, "nativeLoadModel reported model NOT loaded, checking active model...")
+                Log.w(TAG, "nativeLoadModel reported model NOT loaded")
                 val models = EngineBridge.nativeGetAvailableModels()
                 val parsed = ModelInfo.fromJsonArray(models)
                 val active = parsed.firstOrNull { it.isActive }
                 val downloaded = parsed.firstOrNull { it.isDownloaded }
-                Log.w(TAG, "active=$active downloaded=$downloaded models=$models")
+                Log.w(TAG, "active=$active downloaded=$downloaded")
+                // No model available — show error to user
+                if (active == null && downloaded == null) {
+                    _lastErrorMessage.value = "No model downloaded. Go to Models to download one."
+                    _state.value = STATE_ERROR
+                    RecordingService.stop(getApplication())
+                    return@launch
+                }
             }
             Log.d(TAG, "nativeStartRecording starting...")
             EngineBridge.nativeStartRecording(sampleRate = 16000, channelCount = 1)
@@ -164,6 +171,11 @@ class EngineViewModel(
                 _state.value = STATE_IDLE
                 _finalText.value = null
                 _partialText.value = ""
+            } else {
+                // Injection failed — show error so user knows and can retry
+                Log.w(TAG, "confirmInsert: injection failed: ${result.exceptionOrNull()}")
+                _lastErrorMessage.value = result.exceptionOrNull()?.message ?: "Insertion failed"
+                _state.value = STATE_ERROR
             }
         }
     }

@@ -5,7 +5,7 @@
 **Target:** Android 8.0+ (API 26), `targetSdk 35`
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 **Problem tracker:** See [`SPEC.md`](SPEC.md) for current issues, findings, and fixes applied.
-**Key milestone:** ✅ IME crash fixed via reflection-based ViewTreeLifecycleOwner; ✅ Model auto-activates on download; ✅ FlowRow language chips
+**Key milestone:** ✅ IME redesigned (PC overlay UI + auto-commit + crash fixed); ✅ Model auto-activates on download; ✅ FlowRow language chips
 
 ---
 
@@ -937,11 +937,7 @@ private class ImeContainer(
 }
 ```
 
-**Why reflection?** `ViewTreeLifecycleOwner.set()` is in `lifecycle-runtime` but the
-class is not exposed to app code at compile time via transitive dependencies.
-Using `Class.forName` on `androidx.lifecycle.R$id` accesses the same resource ID
-that `ViewTreeLifecycleOwner.get()` uses internally. The inner `ComposeView`
-then finds the tag when `ViewTreeLifecycleOwner.get()` traverses up the view tree.
+**Why reflection?** `ViewTreeLifecycleOwner.set()` is a public static method in `lifecycle-runtime`, but the class is not directly importable in all build configurations. Using `Class.forName("androidx.lifecycle.ViewTreeLifecycleOwner")` with `getMethod("set", ...)` accesses the stable public API. We use `getMethod` (not `getDeclaredMethod`) because this is a public static method.
 
 **Lifecycle events:**
 - `onCreate()` → `ON_CREATE`
@@ -951,29 +947,35 @@ then finds the tag when `ViewTreeLifecycleOwner.get()` traverses up the view tre
 
 (Full implementation at `app/src/main/java/com/handy/app/ime/HandyInputMethodService.kt`)
 
-### 5.3 IME Visual Contract — Floating Bubble Overlay
+### 5.3 IME Visual Contract — Voice Panel (PC Overlay Design)
 
-The IME renders a **compact floating bubble** (56dp height) matching the PC desktop overlay style. It occupies minimal keyboard area and uses AccentPink (#E85D75) as the accent color.
+The IME renders a **full-width voice panel** (52dp height) matching the PC desktop overlay design. It occupies the keyboard area and uses theme-aware colors via `MaterialTheme.colorScheme`.
 
-**Mode A — Idle (no dictation active):**
-- Centered pill with pulsing animation (scale 1.0 to 1.08)
-- Red dot + microphone emoji + "Dictate" label
-- Tapping the pill starts dictation
+**State A — Idle (no dictation active):**
+- Full-width Surface with rounded top corners (16dp) + 1dp border + 2dp shadow
+- SurfaceVariant background at 70% opacity
+- Left: pulsing AccentPink dot + 🎙 emoji + "Dictate" label (FontWeight.Medium)
+- Right: ⌨ keyboard switch button (28dp, faint color)
+- Entire pill is tappable to start dictation
 
-**Mode B — Dictating:**
-- Left: pulsing red dot + 9 waveform bars (react to vadLevel, center bars react more)
-- Center: partial text preview (truncated, monospace)
-- Right: red circle stop button (36dp)
+**State B — Recording (LISTENING / LOADING / TRANSCRIBING):**
+- Left: pulsing AccentPink dot
+- Center: 9 waveform bars (4dp wide, 3-18dp height, phase-offset animation per bar, center bars react more to vadLevel)
+- Right: MM:SS timer (FontFamily.Monospace, 13sp) + red stop button (32dp circle, ErrorRed)
+- Timer starts at 0:00 when recording begins, increments every second
 
-**Mode C — Post-dictation confirmation:**
-- Monospace text preview (truncated, 1 line)
-- Green circle checkmark (36dp) = Insert via InputConnection.commitText()
-- Gray circle retry (36dp) = discard and return to Idle
+**State C — Transcribing (batch processing):**
+- Center: Material3 `CircularProgressIndicator` (14dp, AccentPink) + "Transcribing…" label (13sp, muted)
+- Right: red cancel button (32dp circle, ErrorRed)
 
-**Mode D — Error:**
-- Warning emoji + error text (red) + pink circle retry button
+**State D — Error:**
+- Left: ⚠ emoji
+- Center: error message text (13sp, ErrorRed, maxLines=1, ellipsis)
+- Right: pink retry button (32dp circle, AccentPink)
 
-All modes render inside a 56dp tall Surface with rounded pill shape (RoundedCornerShape(20.dp)) and dark background (0xFF1E1E1E). The bubble floats at the bottom of the keyboard area without pushing app content.
+**Auto-commit flow:** When transcription completes (`STATE_CONFIRM`), the IME auto-commits text via `InputConnection.commitText()` without showing a confirm UI. The `autoCommitted` flag prevents infinite retry loops if injection fails. On failure, state transitions to `STATE_ERROR` so the user gets feedback.
+
+**Pop-in animation:** Card scales from 0.92→1.0 with alpha 0→1 over 460ms (CubicBezierEasing(0.22, 1, 0.36, 1)).
 ### 5.4 IME ↔ Engine Integration
 
 ```
@@ -994,8 +996,14 @@ HandyInputMethodService (IME Process)
     ├── Observes EngineViewModel.vadLevel (StateFlow<Float>)
     │     Animates audio level meter in Mode B
     │
-    └── Calls EngineViewModel.startRecording() / stopRecording()
+    ├── Calls EngineViewModel.startRecording() / stopRecording()
           → JNI → Rust Engine
+    │
+    └── Auto-commit: when state == CONFIRM && !autoCommitted:
+          → engineViewModel.confirmInsert(text)
+          → injectorRouter.inject(text)
+          → on success: STATE_IDLE, clear texts
+          → on failure: STATE_ERROR (user sees error bar + retry)
 ```
 
 ### 5.5 String Resources (IME)

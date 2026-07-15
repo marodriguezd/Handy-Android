@@ -1,7 +1,7 @@
 # Handy Android — Estado Actual y Diagnóstico
 
 **Última actualización:** 2026-07-15  
-**Checkpoint:** 🟢 FUNCIONAL — IME crash fixed + auto-activate model + model cards multi-idioma
+**Checkpoint:** 🟢 FUNCIONAL — IME redesigned (PC overlay UI + auto-commit) + crash fixed + model auto-activate
 
 ---
 
@@ -85,25 +85,43 @@
 
 ### 🐛 Bug #12 — IME no funcionaba como micrófono
 
-**Síntoma:** El IME ocupaba toda el área de teclado con una UI completa que no se parecía al overlay flotante de PC.
+**Síntoma:** El IME ocupaba toda el área de teclado con una UI completa que no se parecía al overlay flotante de PC. La UX era incompleta: sin timer, sin waveform animada, paso de confirmación incómodo, sin theme-aware.
 
-**Solución:** Reescribir completamente `HandyInputMethodService.kt` como una burbuja flotante compacta (56dp). Estados: Idle (pill pulsante con mic + "Dictate"), Recording (waveform bars de 9 barras + texto parcial + botón stop rojo), Confirm (texto + checkmark verde insert + retry gris), Error (error + retry rosa). Usa AccentPink #E85D75 del overlay de PC.
+**Solución:** Reescribir completamente `HandyInputMethodService.kt` from scratch como un panel de voz completo que coincide con el overlay de PC:
+
+- **Estado Idle:** Pill con dot pulsante + emoji mic + "Dictate" + botón ⌨ para cambiar teclado
+- **Estado Recording:** 9 barras de waveform con animación de fase offset + timer MM:SS + botón stop rojo (32dp)
+- **Estado Transcribing:** `CircularProgressIndicator` de Material3 + "Transcribing…" + botón cancel rojo
+- **Estado Error:** Icono ⚠ + mensaje de error rojo + botón retry rosa
+- **Auto-commit:** La transcripción se inserta automáticamente via `InputConnection.commitText()` sin paso de confirmación (como Wispr Flow)
+- **Theme-aware:** Colores via `MaterialTheme.colorScheme` (soporte light/dark)
+- **Animaciones:** Pop-in (460ms cubic-bezier), dot pulsante (1.9s), waveform bars con fase offset, timer en tiempo real
+- **Keyboard switcher:** `showInputMethodPicker()` con fallback a `ACTION_INPUT_METHOD_SETTINGS`
+- **Model check:** `startRecording()` verifica `nativeIsModelLoaded()` antes de iniciar
+- **Injection failure feedback:** `confirmInsert()` error muestra `STATE_ERROR` en vez de reset silencioso
+- **Auto-commit guard:** Flag `autoCommitted` previene loops infinitos de retry
 
 ### 🐛 Bug #13 (CRÍTICO) — IME: ViewTreeLifecycleOwner not found
 
 **Síntoma:** Al seleccionar Handy como teclado IME y tocar cualquier campo de texto, la app crashea con `IllegalStateException: ViewTreeLifecycleOwner not found from android.widget.LinearLayout{...}`. El dictado también deja de funcionar porque el IME no puede inicializarse.
 
-**Causa raíz:** `InputMethodService` no provee un `LifecycleOwner` en el árbol de vistas, pero `ComposeView.onAttachedToWindow()` lo requiere para crear el `WindowRecomposer`. Intentos previos usando `resources.getIdentifier("view_tree_lifecycle_owner", "id", "androidx.lifecycle")` fallaron porque el recurso no es accesible desde código de app.
+**Causa raíz:** `InputMethodService` no provee un `LifecycleOwner` en el árbol de vistas, pero `ComposeView.onAttachedToWindow()` lo requiere para crear el `WindowRecomposer`.
 
-**Solución:**
-1. Eliminar el `ImeComposeView` que extendía `AbstractComposeView` (tampoco funcionaba porque `ComposeView` es final)
-2. Crear `ImeContainer`: un `FrameLayout` que implementa `LifecycleOwner` y envuelve un `ComposeView` interno
-3. En `onAttachedToWindow()`, usar reflexión para acceder al `R.id.view_tree_lifecycle_owner` interno de `lifecycle-runtime`: `Class.forName("androidx.lifecycle.R$id").getField("view_tree_lifecycle_owner").getInt(null)`
-4. Llamar `setTag(tagId, this)` con el ID obtenido por reflexión
-5. El `ComposeView` hijo encuentra el tag al subir el árbol de vistas en `ViewTreeLifecycleOwner.get()`
-6. Añadir `lifecycle-runtime` como dependencia explícita en `build.gradle.kts`
-7. `HandyInputMethodService` implementa `LifecycleOwner` con `LifecycleRegistry`
-8. Eventos de lifecycle: `ON_CREATE` en `onCreate()`, `ON_RESUME` en `onStartInput()`, `ON_PAUSE` en `onFinishInput()`, `ON_DESTROY` en `onDestroy()`
+**Solución (v1 — Sprint 8):** Crear `ImeContainer` (FrameLayout + LifecycleOwner) con reflexión sobre `androidx.lifecycle.R$id.view_tree_lifecycle_owner`. Funcionaba en algunos dispositivos pero fallaba con `ClassNotFoundException` en otros.
+
+**Solución (v2 — Sprint 9, actual):** Reemplazar la reflexión sobre `R$id` (fragile, interna) por reflexión sobre la clase pública estable `androidx.lifecycle.ViewTreeLifecycleOwner`:
+```kotlin
+val clazz = Class.forName("androidx.lifecycle.ViewTreeLifecycleOwner")
+val setMethod = clazz.getMethod("set", View::class.java, LifecycleOwner::class.java)
+setMethod.invoke(null, this, this)
+```
+Esta clase es una API pública estable de AndroidX lifecycle-runtime, a diferencia de `R$id` que es un recurso interno. Se usa `getMethod` (no `getDeclaredMethod`) porque es un método público estático.
+
+**Cambios de lifecycle (permanecen igual):**
+- `onCreate()` → `ON_CREATE`
+- `onStartInput()` → `ON_RESUME`
+- `onFinishInput()` → `ON_PAUSE`
+- `onDestroy()` → `ON_DESTROY`
 
 ### 🐛 Bug #14 — Modelo no se activa automáticamente tras descarga
 
@@ -152,4 +170,6 @@ No hay límite OOM — el usuario puede activar cualquier modelo.
 | Whisper Large en móvil | Baja | Modelos >1.5 GB pueden causar OOM en dispositivos con poca RAM. El usuario es responsable de elegir. |
 | ~~UI refresh en cancel download~~ | ~~Media~~ | ✅ RESUELTO — Ahora muestra "Download canceled" con retry. |
 | Voces largas con nombres propios | Baja | Whisper Tiny produce ~85% precisión en frases largas con nombres compuestos. Usar Whisper Small o Parakeet v3 para mejor resultado. |
-| IME hardcoded strings | Baja | La burbuja IME usa strings hardcoded en lugar de string resources. Mejora de mantenibilidad pendiente. |
+| IME hardcoded strings | Baja | El panel IME usa strings hardcoded ("Dictate", "Transcribing…", "Error") en lugar de string resources. Pendiente i18n. |
+| IME onComputeInsets | Media | `onComputeInsets` fue eliminado. El panel IME puede causar layout shifts inesperados en apps host. Necesita restaurar control de insets. |
+| IME streaming text | Media | Sin preview de texto en vivo durante grabación (solo batch transcription). Necesita `session.stream()` en Rust para live text como el overlay de PC. |

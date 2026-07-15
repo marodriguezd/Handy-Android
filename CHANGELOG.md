@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.0-alpha4 (Sprint 9 — IME Redesign: PC-Overlay UI + Auto-Commit + Crash Fix)
+
+### New Features
+- **IME Complete Redesign**: Rewrote `HandyInputMethodService.kt` from scratch. The IME now renders a full-width voice panel matching the PC desktop overlay design:
+  - **Idle state**: Mic pill with pulsing dot, "Dictate" label, and keyboard switch button
+  - **Recording state**: 9-bar waveform animation (phase-offset, center-reactive), MM:SS timer, red stop button
+  - **Transcribing state**: Material3 `CircularProgressIndicator` + "Transcribing…" label + cancel button
+  - **Error state**: Error message + pink retry button
+  - Pop-in animation (460ms cubic-bezier matching PC overlay)
+  - Theme-aware colors via `MaterialTheme.colorScheme` (light/dark mode)
+- **Auto-Commit Text**: Transcription auto-inserts into the active text field via `InputConnection.commitText()` — no confirm step needed (like Wispr Flow). The `autoCommitted` guard flag prevents infinite retry loops if injection fails.
+- **Model Availability Check**: `startRecording()` now checks `nativeIsModelLoaded()` before starting recording. If no model is downloaded, shows error state instead of silently failing.
+- **Injection Failure Feedback**: `confirmInsert()` failure now shows `STATE_ERROR` instead of silently resetting to IDLE — user gets error message + retry option.
+- **Keyboard Switcher**: `showInputMethodPicker()` with try-catch fallback to `ACTION_INPUT_METHOD_SETTINGS` for OEM compatibility.
+
+### Bug Fixes
+- **IME Crash Fixed (ViewTreeLifecycleOwner v2)**: Replaced `Class.forName("androidx.lifecycle.R\$id")` (which caused `ClassNotFoundException` on some devices) with reflection on the stable public class name `androidx.lifecycle.ViewTreeLifecycleOwner` using `getMethod("set", View.class, LifecycleOwner.class)`. This fixes the `IllegalStateException: ViewTreeLifecycleOwner not found` crash.
+- Fixed `autoCommitted` flag not resetting on retry — now resets in both `onStartInput` and the `onRetry` lambda.
+
+### Documentation
+- Updated AGENTS.md, SPEC.md, ARCHITECTURE.md, CHANGELOG.md with IME redesign details.
+
 ## v1.1.0-alpha3 (Sprint 8 — IME Fix + Onboarding Auto-Activate + ModelCard Languages)
 
 ### New Features

@@ -103,8 +103,17 @@ The Android port consists of:
 - Cancel download now properly notifies UI via complete_cb
 - Skip download (onboarding) now cancels Rust download
 - No OOM limit — user can activate any model size
-- **IME floating bubble overlay** — Compact 56dp pill at keyboard area, matching PC overlay style (AccentPink #E85D75), with idle/recording/confirm/error states
-- **IME crash fixed** — Uses `ImeContainer` (FrameLayout + LifecycleOwner) with reflection to set `ViewTreeLifecycleOwner` tag via `Class.forName("androidx.lifecycle.R$id")`, fixing `IllegalStateException: ViewTreeLifecycleOwner not found`
+- **IME Redesign (Sprint 9)** — Complete rewrite matching PC overlay design:
+  - Full-width voice panel with PC-overlay-matching UI (surface color, border, rounded corners)
+  - **Auto-commit text** — Transcription auto-inserts via `InputConnection.commitText()` (no confirm step, like Wispr Flow)
+  - **4 visual states**: Idle (mic pill + keyboard switch), Recording (9-bar waveform + MM:SS timer + stop), Transcribing (Material3 spinner + cancel), Error (message + retry)
+  - **Smooth animations**: Pop-in (460ms cubic-bezier), pulsing dot (1.9s), phase-offset waveform bars, timer
+  - **Theme-aware colors** via `MaterialTheme.colorScheme` (light/dark mode support)
+  - **Auto-commit guard** (`autoCommitted` flag) prevents infinite retry loops if injection fails
+  - **Model availability check** in `startRecording()` — shows error if no model is downloaded
+  - **confirmInsert failure handling** — Shows `STATE_ERROR` instead of silently resetting
+  - **Keyboard switcher** via `InputMethodManager.showInputMethodPicker()` with try-catch fallback to settings
+- **IME crash fixed** — Uses `ImeContainer` (FrameLayout + LifecycleOwner) with reflection on stable class name `androidx.lifecycle.ViewTreeLifecycleOwner` (not `R$id`) to set lifecycle owner, fixing `ClassNotFoundException` + `IllegalStateException: ViewTreeLifecycleOwner not found`
 - **Auto-activate model after download** — `EngineViewModel.onDownloadComplete()` calls `nativeSetActiveModel()` automatically so the model is immediately usable
 - **ModelCard languages in multi-row** — `FlowRow` with per-language chips instead of single truncated chip
 - **ModelCard layout fixed** — Column-based layout with 3 rows (title, languages+size, action buttons)
@@ -117,9 +126,9 @@ The Android port consists of:
 - Some Whisper models (English-only variants) show duplicate entries alongside multilingual variants
 - Moonshine Base models not yet verified to work with transcribe-cpp on Android
 - Voxtral Small 24B (17 GB) is listed but impractical for most mobile devices
-- IME bubble uses hardcoded strings (not string resources) for simplicity
-- IME bubble has no recording timer (MM:SS) like the PC overlay
-- IME bubble has no streaming live text display (partial + tentative with blinking caret)
+- IME uses hardcoded UI strings (not string resources) — i18n pending
+- No streaming live text display during recording (batch transcription only)
+- `onComputeInsets` removed — IME height may cause unexpected layout shifts in host apps
 
 ### 🔧 Critical Fixes Applied
 | # | Fix | Details |
@@ -132,9 +141,13 @@ The Android port consists of:
 | 6 | **NDK linker fixes** | Injected `CMAKE_ARGS` and dummy `libpthread.a` for transcribe-cpp build |
 | 7 | **Cancel download UX** | Tokio task now calls `complete_cb(false, "Download cancelled")` on cancel; OnboardingViewModel cancel skip also cancels Rust download |
 | 8 | **OOM limit removed** | Removed 1600MB limit from `set_active_model()` — user chooses freely |
-| 9 | **IME ViewTreeLifecycleOwner** | Replaced `resources.getIdentifier()` with reflection on `androidx.lifecycle.R$id.view_tree_lifecycle_owner` to correctly set the lifecycle owner tag; wrapped ComposeView in `ImeContainer` (FrameLayout + LifecycleOwner) |
+| 9 | **IME ViewTreeLifecycleOwner (v2)** | Uses reflection on stable `androidx.lifecycle.ViewTreeLifecycleOwner` class name with `getMethod("set", ...)` — NOT `R$id` which caused `ClassNotFoundException` on some devices |
 | 10 | **Auto-activate on download** | Added `nativeSetActiveModel(modelId)` call in `EngineViewModel.onDownloadComplete()` before `refreshModels()` |
 | 11 | **ModelCard languages** | Changed from single `Surface` chip + ellipsis to `FlowRow` with per-language chips via `model.language.split(",")` |
+| 12 | **IME auto-commit** | Transcription auto-inserts via `InputConnection.commitText()` — no confirm step needed |
+| 13 | **IME model check** | `startRecording()` checks `nativeIsModelLoaded()` before starting; shows error if no model available |
+| 14 | **IME injection failure** | `confirmInsert()` failure shows `STATE_ERROR` (not silent reset) so user gets feedback + retry option |
+| 15 | **IME keyboard switch** | `showInputMethodPicker()` with try-catch fallback to `ACTION_INPUT_METHOD_SETTINGS` for OEM compatibility |
 
 ### 📋 Model Catalog — 65 Models (all from Handy PC)
 | Priority | Model | Size | Why |
