@@ -53,6 +53,12 @@ retrieved_original_request.txt
 root_files.txt
 test_dir.txt
 
+# Scratch / temp files
+ORIGINAL_REQUEST.md
+cron_data.txt
+handy-android/handy-core/src/audio/t.txt
+handy-android/app/src/main/java/com/handy/app/ime/TestOwner.kt
+
 # Android build artifacts
 handy-android/**/build/
 handy-android/**/target/
