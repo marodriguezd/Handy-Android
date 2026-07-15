@@ -89,7 +89,6 @@ The Android port consists of:
 - FrameResampler (rubato FftFixedIn) with proper buffer management (no lost samples)
 - Peak normalization (`normalize_peak` → target 0.95) + RMS logging before inference
 - Forced Spanish language (`language="es"`) in RunOptions for better accuracy
-- Peak normalization + RMS logging before inference
 - Batch transcription via `session.run()` with `Backend::Auto`
 - **Transcription verified working** — dictation test results:
   - "Hola, mundo. Esta es una prueba." ✅ 95%
@@ -104,13 +103,18 @@ The Android port consists of:
 - Cancel download now properly notifies UI via complete_cb
 - Skip download (onboarding) now cancels Rust download
 - No OOM limit — user can activate any model size
+- **IME floating bubble overlay** — Compact 56dp pill at keyboard area, matching PC overlay style (AccentPink #E85D75), with idle/recording/confirm/error states
+- **ModelCard layout fixed** — Column-based layout with 3 rows (title, languages+size, action buttons), language chip truncation
+- **Onboarding default model** — Parakeet TDT 0.6B v3 (485 MB) instead of Whisper Small
+- **Cancel behavior** — Shows "Download canceled" with retry button instead of "Model Ready"
+- **Retry download** — Fixed race condition where retry after cancel would not restart download
 
 ### ❌ Known Limitations
 - Whisper Tiny struggles with long phrases containing proper nouns (e.g., "Handy para Android" → "han de parandro")
-- "Skip for Now" / "Cancel download" buttons: cancel works but UI refresh may need app restart
 - Some Whisper models (English-only variants) show duplicate entries alongside multilingual variants
 - Moonshine Base models not yet verified to work with transcribe-cpp on Android
 - Voxtral Small 24B (17 GB) is listed but impractical for most mobile devices
+- IME bubble uses hardcoded strings (not string resources) for simplicity
 
 ### 🔧 Critical Fixes Applied
 | # | Fix | Details |

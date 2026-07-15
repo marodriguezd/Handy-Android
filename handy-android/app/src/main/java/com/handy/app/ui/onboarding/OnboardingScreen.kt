@@ -312,6 +312,26 @@ private fun ModelDownloadContent(viewModel: OnboardingViewModel) {
             Text("Downloading ${(uiState.downloadProgress * 100).toInt()}%")
         }
 
+        if (uiState.isDownloadCanceled) {
+            Icon(
+                imageVector = Icons.Default.Download,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.onboarding_model_canceled),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = {
+                viewModel.retryDownload()
+            }) {
+                Text(stringResource(R.string.onboarding_model_download))
+            }
+        }
+
         if (uiState.isDownloadReady) {
             Icon(
                 imageVector = Icons.Default.CheckCircle,

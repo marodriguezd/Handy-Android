@@ -895,27 +895,29 @@ class HandyInputMethodService : InputMethodService() {
 ```
 (Full implementation at `app/src/main/java/com/handy/app/ime/HandyInputMethodService.kt`)
 
-### 5.3 IME Visual Contract
+### 5.3 IME Visual Contract — Floating Bubble Overlay
 
-The IME Compose view has three modes:
+The IME renders a **compact floating bubble** (56dp height) matching the PC desktop overlay style. It occupies minimal keyboard area and uses AccentPink (#E85D75) as the accent color.
 
 **Mode A — Idle (no dictation active):**
-- Large dictation microphone button (filled, primary color).
-- Small keyboard switch button (icon-only, bottom-right).
-- No text preview area.
+- Centered pill with pulsing animation (scale 1.0 to 1.08)
+- Red dot + microphone emoji + "Dictate" label
+- Tapping the pill starts dictation
 
 **Mode B — Dictating:**
-- Animated audio level meter (vertical bar reacting to `vadLevel`).
-- Live transcription text area (scrollable, monospace, showing `partialText`).
-- Stop button (filled red, replaces microphone).
-- Keyboard switch button hidden.
+- Left: pulsing red dot + 9 waveform bars (react to vadLevel, center bars react more)
+- Center: partial text preview (truncated, monospace)
+- Right: red circle stop button (36dp)
 
 **Mode C — Post-dictation confirmation:**
-- Final transcribed text in a scrollable, monospace preview.
-- "Insert" commits text via `InputConnection.commitText(text, 1)`.
-- "Retry" discards text and returns to Mode A.
-- Keyboard switch button visible.
+- Monospace text preview (truncated, 1 line)
+- Green circle checkmark (36dp) = Insert via InputConnection.commitText()
+- Gray circle retry (36dp) = discard and return to Idle
 
+**Mode D — Error:**
+- Warning emoji + error text (red) + pink circle retry button
+
+All modes render inside a 56dp tall Surface with rounded pill shape (RoundedCornerShape(20.dp)) and dark background (0xFF1E1E1E). The bubble floats at the bottom of the keyboard area without pushing app content.
 ### 5.4 IME ↔ Engine Integration
 
 ```

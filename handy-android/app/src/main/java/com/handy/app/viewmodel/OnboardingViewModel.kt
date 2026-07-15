@@ -23,6 +23,7 @@ class OnboardingViewModel(
         val downloadError: String? = null,
         val isDownloadReady: Boolean = false,
         val isDownloading: Boolean = false,
+        val isDownloadCanceled: Boolean = false,
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -33,6 +34,7 @@ class OnboardingViewModel(
     private var downloadTargetId: String? = null
     private var activated = false
     private var skipped = false
+    private var retryingDownload = false
 
     fun nextStep() {
         val next = _uiState.value.currentStep + 1
@@ -69,59 +71,77 @@ class OnboardingViewModel(
         // downloading and the tokio task can clean up and fire the
         // completion callback, which updates the ModelsViewModel UI.
         com.handy.app.bridge.EngineBridge.nativeCancelDownload()
+        downloadStarted = false
+        retryingDownload = false
+        activated = false
         _uiState.update {
-            it.copy(isDownloadReady = true, isDownloading = false)
+            it.copy(isDownloadCanceled = true, isDownloadReady = false, isDownloading = false)
         }
     }
 
-    private fun initModelDownload() {
-        if (modelsViewModel != null) return
-        modelsViewModel = modelsViewModelFactory()
-        val mv = modelsViewModel!!
-        viewModelScope.launch {
-            mv.uiState.collect { modelState ->
-                val event = modelState.activeDownloadId?.let { modelState.downloads[it] }
-                if (event != null) {
-                    _uiState.update {
-                        it.copy(
-                            downloadProgress = event.progress,
-                            downloadError = if (event.isComplete) event.error else null,
-                            isDownloadReady = event.isComplete && event.error == null,
-                            isDownloading = !event.isComplete,
-                        )
-                    }
-                }
+    fun retryDownload() {
+        // Reset state so initModelDownload can start a fresh download
+        downloadStarted = false
+        retryingDownload = true
+        activated = false
+        _uiState.update {
+            it.copy(isDownloadCanceled = false, isDownloadReady = false, isDownloading = false)
+        }
+        initModelDownload()
+    }
 
-                // Find any completed download in the map (even if activeDownloadId was consumed)
-                val completedId = modelState.downloads.entries
-                    .firstOrNull { (_, e) -> e.isComplete && e.error == null }
-                    ?.key
-                if (completedId != null && !activated) {
-                    activated = true
-                    _uiState.update { it.copy(isDownloadReady = true, isDownloading = false) }
-                    mv.setActiveModel(completedId)
-                }
+    private fun initModelDownload() {
+        if (modelsViewModel == null) {
+            modelsViewModel = modelsViewModelFactory()
+            val mv = modelsViewModel!!
+            viewModelScope.launch {
+                mv.uiState.collect { modelState ->
+                    val event = modelState.activeDownloadId?.let { modelState.downloads[it] }
+                    if (event != null) {
+                        _uiState.update {
+                            it.copy(
+                                downloadProgress = event.progress,
+                                downloadError = if (event.isComplete) event.error else null,
+                                isDownloadReady = event.isComplete && event.error == null,
+                                isDownloading = !event.isComplete,
+                            )
+                        }
+                    }
+
+                    // Find any completed download in the map (even if activeDownloadId was consumed)
+                    val completedId = modelState.downloads.entries
+                        .firstOrNull { (_, e) -> e.isComplete && e.error == null }
+                        ?.key
+                    if (completedId != null && !activated) {
+                        activated = true
+                        _uiState.update { it.copy(isDownloadReady = true, isDownloading = false) }
+                        mv.setActiveModel(completedId)
+                    }
 
                 if (!downloadStarted && modelState.models.isNotEmpty() && !modelState.isLoading) {
                     val models = modelState.models
                     val target = models.firstOrNull { it.recommended && !it.isDownloaded }
                         ?: models.firstOrNull { !it.isDownloaded }
-                    if (target != null && !modelState.downloads.containsKey(target.id)) {
+                    // Allow retry: accept if no entry exists, or if previous download completed (even with error)
+                    val existing = target?.let { modelState.downloads[it.id] }
+                    if (target != null && (existing == null || existing.isComplete)) {
                         downloadStarted = true
                         downloadTargetId = target.id
                         _uiState.update { it.copy(isDownloading = true) }
                         mv.downloadModel(target.id)
-                    } else if (models.all { it.isDownloaded }) {
-                        _uiState.update { it.copy(isDownloadReady = true) }
-                        val id = downloadTargetId ?: models.firstOrNull { it.isDownloaded }?.id
-                        if (id != null && !activated) {
-                            activated = true
-                            mv.setActiveModel(id)
+                        } else if (models.all { it.isDownloaded }) {
+                            _uiState.update { it.copy(isDownloadReady = true) }
+                            val id = downloadTargetId ?: models.firstOrNull { it.isDownloaded }?.id
+                            if (id != null && !activated) {
+                                activated = true
+                                mv.setActiveModel(id)
+                            }
                         }
                     }
                 }
             }
         }
-        mv.loadModels()
+        // (Re)load models — triggers the collector above which picks up a fresh download
+        modelsViewModel!!.loadModels()
     }
 }

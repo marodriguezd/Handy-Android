@@ -89,9 +89,10 @@
     <string name="onboarding_ime_body">To type with your voice in any app, enable Handy as an input method.</string>
     <string name="onboarding_ime_open">Open Keyboard Settings</string>
     <string name="onboarding_model_title">Download Speech Model</string>
-    <string name="onboarding_model_body">Handy needs a language model to transcribe your speech. Recommended: Whisper Small (~500 MB).</string>
+    <string name="onboarding_model_body">Handy needs a language model to transcribe your speech. Recommended: Parakeet TDT 0.6B v3 (485 MB).</string>
     <string name="onboarding_model_download">Download Recommended Model</string>
     <string name="onboarding_model_ready">Model ready!</string>
+    <string name="onboarding_model_canceled">Download canceled</string>
     <string name="onboarding_ready_title">You\'re All Set!</string>
     <string name="onboarding_ready_body">Start dictating anywhere by switching to the Handy keyboard. Tap the microphone button to begin.</string>
     <string name="onboarding_start">Start Using Handy</string>

@@ -1,7 +1,7 @@
 # Handy Android — Estado Actual y Diagnóstico
 
 **Última actualización:** 2026-07-15  
-**Checkpoint:** 🟢 FUNCIONAL — Transcripción verificada en dispositivo
+**Checkpoint:** 🟢 FUNCIONAL — IME burbuja flotante + fixes UI + cancel/retry
 
 ---
 
@@ -59,6 +59,36 @@
 - El tokio task de descarga ahora llama `complete_cb(false, "Download cancelled")` cuando detecta el flag de cancelación.
 - `OnboardingViewModel.skipDownload()` ahora llama `EngineBridge.nativeCancelDownload()`.
 
+### 🐛 Bug #8 — Modelo por defecto incorrecto en onboarding
+
+**Síntoma:** Al abrir la app por primera vez, el onboarding ofrecía descargar Whisper Small en lugar de Parakeet TDT 0.6B v3.
+
+**Solución:** Actualizar `onboarding_model_body` en strings.xml para referenciar Parakeet TDT 0.6B v3 (485 MB).
+
+### 🐛 Bug #9 — Cancel mostraba "Model Ready" en vez de feedback de cancelación
+
+**Síntoma:** Al cancelar la descarga en el onboarding, la UI mostraba "Model Ready" con icono verde, confundiendo al usuario.
+
+**Solución:** Añadir estado `isDownloadCanceled` en `OnboardingViewModel`. Ahora muestra "Download canceled" con botón de reintento. El retry resetea correctamente el flag `downloadStarted` para permitir una nueva descarga.
+
+### 🐛 Bug #10 — Retry tras cancelación no funcionaba
+
+**Síntoma:** Tras cancelar una descarga, pulsar "Download Recommended Model" no iniciaba una nueva descarga porque `initModelDownload()` retornaba temprano (ModelsViewModel ya existía) y `downloadStarted` seguía en `true`.
+
+**Solución:** `retryDownload()` resetea `downloadStarted`, `retryingDownload`, `activated`. `initModelDownload()` ahora siempre llama `loadModels()` incluso si el ModelsViewModel ya existe. La condición de descarga acepta entradas completadas (con error) para permitir retry.
+
+### 🐛 Bug #11 — ModelCard UI desalineada
+
+**Síntoma:** En la pantalla de modelos, los chips de idioma, tamaños y botones de descarga estaban desalineados y el texto de idiomas overflowing.
+
+**Solución:** Restructurar `ModelCard` de layout Row-based a Column-based con 3 filas: (1) icono + título + badge activo, (2) chip idioma con `weight(1f)` + `maxLines=1` + info tamaño/quant, (3) botones de acción alineados a la derecha.
+
+### 🐛 Bug #12 — IME no funcionaba como micrófono
+
+**Síntoma:** El IME ocupaba toda el área de teclado con una UI completa que no se parecía al overlay flotante de PC.
+
+**Solución:** Reescribir completamente `HandyInputMethodService.kt` como una burbuja flotante compacta (56dp). Estados: Idle (pill pulsante con mic + "Dictate"), Recording (waveform bars de 9 barras + texto parcial + botón stop rojo), Confirm (texto + checkmark verde insert + retry gris), Error (error + retry rosa). Usa AccentPink #E85D75 del overlay de PC.
+
 ### 🐛 Bug #6 — Backend lento (CPU forzado)
 
 **Solución:** Cambiar `Backend::Cpu` → `Backend::Auto` para aprovechar aceleración hardware si disponible.
@@ -86,5 +116,6 @@ No hay límite OOM — el usuario puede activar cualquier modelo.
 | Issue | Prioridad | Descripción |
 |-------|-----------|-------------|
 | Whisper Large en móvil | Baja | Modelos >1.5 GB pueden causar OOM en dispositivos con poca RAM. El usuario es responsable de elegir. |
-| UI refresh en cancel download | Media | "Skip for Now" y "Cancel download" funcionan pero la UI puede no refrescar hasta la próxima interacción. |
+| ~~UI refresh en cancel download~~ | ~~Media~~ | ✅ RESUELTO — Ahora muestra "Download canceled" con retry. |
 | Voces largas con nombres propios | Baja | Whisper Tiny produce ~85% precisión en frases largas con nombres compuestos. Usar Whisper Small o Parakeet v3 para mejor resultado. |
+| IME hardcoded strings | Baja | La burbuja IME usa strings hardcoded en lugar de string resources. Mejora de mantenibilidad pendiente. |

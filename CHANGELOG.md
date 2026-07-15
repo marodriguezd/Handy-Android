@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.0-alpha2 (Sprint 7 — UI + IME Bubble)
+
+### New Features
+- **IME Floating Bubble Overlay**: Complete rewrite of HandyInputMethodService as a compact 56dp pill matching the PC desktop overlay. States: Idle (pulsing mic), Recording (9-bar waveform + partial text + stop), Confirm (text + insert/retry), Error (error + retry). Uses AccentPink #E85D75.
+- **ModelCard Layout Fix**: Restructured from Row-based to Column-based with 3 clear rows. Language chip truncation prevents overflow.
+- **Onboarding Default Model**: Changed from Whisper Small to Parakeet TDT 0.6B v3 (485 MB).
+- **Cancel Behavior**: Shows "Download canceled" with retry button instead of "Model Ready".
+
+### Bug Fixes
+- Fixed retry download after cancel (race condition in OnboardingViewModel)
+- Fixed ModelCard UI misalignment (languages, sizes, buttons)
+- Fixed onboarding model description string
+
+### Documentation
+- Updated AGENTS.md, SPEC.md, ARCHITECTURE.md with IME bubble and UI fixes
+
 ## v1.0.0-alpha1 (Sprint 6)
 
 ### New Features

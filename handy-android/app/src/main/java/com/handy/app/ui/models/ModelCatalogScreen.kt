@@ -161,54 +161,37 @@ fun ModelCard(
                 },
             ),
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = if (model.isDownloaded) {
-                            Icons.Default.CheckCircle
-                        } else {
-                            Icons.Default.Add
-                        },
-                        contentDescription = null,
-                        tint = if (model.isDownloaded) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = model.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Row {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = model.language,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(6.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "${model.formattedSize()} \u00B7 ${model.quant}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            // ── Row 1: Icon + Title ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = if (model.isDownloaded) {
+                        Icons.Default.CheckCircle
+                    } else {
+                        Icons.Default.Add
+                    },
+                    contentDescription = null,
+                    tint = if (model.isDownloaded) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = model.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
                 if (model.isActive) {
-                    Spacer(Modifier.height(4.dp))
                     Surface(
                         color = MaterialTheme.colorScheme.primary,
                         shape = MaterialTheme.shapes.small,
@@ -217,42 +200,94 @@ fun ModelCard(
                             text = stringResource(R.string.models_active),
                             color = MaterialTheme.colorScheme.onPrimary,
                             style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
-                }
-                if (downloadState != null && isActiveDownload) {
-                    Spacer(Modifier.height(8.dp))
-                    val progress = downloadState.progress
-                    if (progress >= 0f) {
-                        LinearProgressIndicator(
-                            progress = { progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    }
-                    Text(
-                        text = if (progress >= 0f) {
-                            "Downloading ${(progress * 100).toInt()}%"
-                        } else {
-                            stringResource(R.string.models_downloading)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (downloadState?.isComplete == true && downloadState.error != null) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = downloadState.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
                 }
             }
 
-            Column(verticalArrangement = Arrangement.Center) {
+            Spacer(Modifier.height(6.dp))
+
+            // ── Row 2: Language chip + Size info ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        text = model.language,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "${model.formattedSize()} \u00B7 ${model.quant}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // ── Download progress ──
+            if (downloadState != null && isActiveDownload) {
+                Spacer(Modifier.height(8.dp))
+                val progress = downloadState.progress
+                if (progress >= 0f) {
+                    LinearProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                Text(
+                    text = if (progress >= 0f) {
+                        "Downloading ${(progress * 100).toInt()}%"
+                    } else {
+                        stringResource(R.string.models_downloading)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (downloadState?.isComplete == true && downloadState.error != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = downloadState.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ── Row 3: Action buttons ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (model.isDownloaded && !model.isActive) {
+                    IconButton(
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.models_delete),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
                 when {
                     model.isActive -> {
                         Button(onClick = {}, enabled = false) {
@@ -285,15 +320,6 @@ fun ModelCard(
                         OutlinedButton(onClick = { onSetActive(model.id) }) {
                             Text(stringResource(R.string.models_use))
                         }
-                    }
-                }
-
-                if (model.isDownloaded && !model.isActive) {
-                    IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = stringResource(R.string.models_delete),
-                        )
                     }
                 }
             }
