@@ -257,7 +257,11 @@ class EngineViewModel(
                 error = errorMsg.takeUnless { success },
             )
         )
-        if (success) refreshModels()
+        if (success) {
+            // Auto-activate the newly downloaded model so it's immediately usable
+            EngineBridge.nativeSetActiveModel(modelId)
+            refreshModels()
+        }
     }
 
     override fun onCleared() {

@@ -40,12 +40,64 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.FrameLayout
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import com.handy.app.HandyApplication
 import com.handy.app.injection.ImeInjector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.viewmodel.EngineViewModel
 
-class HandyInputMethodService : InputMethodService() {
+/**
+ * A wrapper FrameLayout that provides a LifecycleOwner for Compose.
+ * InputMethodService does not provide a ViewTreeLifecycleOwner in its
+ * view hierarchy, which ComposeView requires. We set the lifecycle
+ * owner tag on this container using reflection to access the
+ * lifecycle-runtime's internal R.id value.
+ */
+private class ImeContainer(
+    context: android.content.Context,
+    private val lifecycleRegistry: LifecycleRegistry,
+    private val content: @Composable () -> Unit,
+) : FrameLayout(context), LifecycleOwner {
+
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+
+    init {
+        // Create the inner ComposeView (use fully qualified name to avoid import conflicts)
+        val composeView = androidx.compose.ui.platform.ComposeView(context).apply {
+            setContent { content() }
+        }
+        addView(
+            composeView,
+            LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+    }
+
+    override fun onAttachedToWindow() {
+        // Set the lifecycle owner tag via reflection to access lifecycle-runtime's
+        // internal R.id.view_tree_lifecycle_owner, which is not directly accessible
+        // from app code at compile time but works at runtime.
+        try {
+            val rIdClass = Class.forName("androidx.lifecycle.R\$id")
+            val field = rIdClass.getField("view_tree_lifecycle_owner")
+            val tagId = field.getInt(null)
+            setTag(tagId, this)
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "HandyIME",
+                "Failed to set ViewTreeLifecycleOwner tag via reflection",
+            )
+        }
+        super.onAttachedToWindow()
+    }
+}
+
+class HandyInputMethodService : InputMethodService(), LifecycleOwner {
 
     private val engineViewModel: EngineViewModel
         get() = (application as HandyApplication).engineViewModel
@@ -57,27 +109,30 @@ class HandyInputMethodService : InputMethodService() {
 
     private var lastInputConnection: InputConnection? = null
 
+    // ── Lifecycle management for ComposeView ─────────────────────
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+
     override fun onCreate() {
         super.onCreate()
         injectorRouter.setImeInjector(imeInjector)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
     }
 
     override fun onCreateInputView(): View {
-        return ComposeView(this).also { view ->
-            view.setContent {
-                HandyBubble(
-                    state = engineViewModel.state.collectAsState().value,
-                    partialText = engineViewModel.partialText.collectAsState().value,
-                    finalText = engineViewModel.finalText.collectAsState().value,
-                    vadLevel = engineViewModel.vadLevel.collectAsState().value,
-                    lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
-                    onStartDictation = { engineViewModel.startRecording() },
-                    onStopDictation = { engineViewModel.stopRecording() },
-                    onCommitText = { text -> engineViewModel.confirmInsert(text) },
-                    onRetry = { engineViewModel.resetPartialText() },
-                    onCancelDictation = { engineViewModel.cancelRecording() },
-                )
-            }
+        return ImeContainer(this, lifecycleRegistry) {
+            HandyBubble(
+                state = engineViewModel.state.collectAsState().value,
+                partialText = engineViewModel.partialText.collectAsState().value,
+                finalText = engineViewModel.finalText.collectAsState().value,
+                vadLevel = engineViewModel.vadLevel.collectAsState().value,
+                lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
+                onStartDictation = { engineViewModel.startRecording() },
+                onStopDictation = { engineViewModel.stopRecording() },
+                onCommitText = { text -> engineViewModel.confirmInsert(text) },
+                onRetry = { engineViewModel.resetPartialText() },
+                onCancelDictation = { engineViewModel.cancelRecording() },
+            )
         }
     }
 
@@ -85,18 +140,22 @@ class HandyInputMethodService : InputMethodService() {
         super.onStartInput(attribute, restarting)
         lastInputConnection = currentInputConnection
         engineViewModel.clearPartialText()
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }
 
     override fun onFinishInput() {
         super.onFinishInput()
         lastInputConnection = null
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+    }
+
+    override fun onDestroy() {
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        super.onDestroy()
     }
 
     // Request minimal keyboard height for the bubble
     override fun onComputeInsets(outInsets: InputMethodService.Insets) {
-        // Don't call super — it sets insets based on the view's measured height,
-        // which works but we want to keep the keyboard area as compact as possible.
-        // Set contentTopInsets to 0 so the app content isn't pushed up.
         outInsets.contentTopInsets = 0
         outInsets.visibleTopInsets = 0
     }

@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.1.0-alpha3 (Sprint 8 — IME Fix + Onboarding Auto-Activate + ModelCard Languages)
+
+### New Features
+- **IME Crash Fix**: Replaced `ImeComposeView` (AbstractComposeView) with `ImeContainer` (FrameLayout wrapper + LifecycleOwner). Uses reflection (`Class.forName("androidx.lifecycle.R$id")`) to access lifecycle-runtime's internal `view_tree_lifecycle_owner` resource ID and set the ViewTreeLifecycleOwner tag. Fixes `IllegalStateException: ViewTreeLifecycleOwner not found` when ComposeView initializes inside InputMethodService.
+- **Auto-Activate Model**: `EngineViewModel.onDownloadComplete()` now automatically calls `nativeSetActiveModel(modelId)` after successful download, so the model is immediately usable without manual activation.
+- **ModelCard Multi-Row Languages**: Changed from single language chip with ellipsis to `FlowRow` with individual per-language chips that wrap naturally.
+
+### Bug Fixes
+- Fixed IME crash on startup (`ViewTreeLifecycleOwner not found`) via reflective tag setting on wrapper FrameLayout
+- Fixed model not auto-activating after onboarding download (added `nativeSetActiveModel()` in `onDownloadComplete()`)
+- Fixed model language display overflow by splitting into per-language chips in FlowRow
+
+### Infrastructure
+- Added explicit `lifecycle-runtime` dependency to compile classpath
+
+### Documentation
+- Updated AGENTS.md, SPEC.md, CHANGELOG.md with IME fix, onboarding auto-activation, and model card language changes
+
 ## v1.1.0-alpha2 (Sprint 7 — UI + IME Bubble)
 
 ### New Features

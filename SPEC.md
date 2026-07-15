@@ -1,7 +1,7 @@
 # Handy Android — Estado Actual y Diagnóstico
 
 **Última actualización:** 2026-07-15  
-**Checkpoint:** 🟢 FUNCIONAL — IME burbuja flotante + fixes UI + cancel/retry
+**Checkpoint:** 🟢 FUNCIONAL — IME crash fixed + auto-activate model + model cards multi-idioma
 
 ---
 
@@ -88,6 +88,40 @@
 **Síntoma:** El IME ocupaba toda el área de teclado con una UI completa que no se parecía al overlay flotante de PC.
 
 **Solución:** Reescribir completamente `HandyInputMethodService.kt` como una burbuja flotante compacta (56dp). Estados: Idle (pill pulsante con mic + "Dictate"), Recording (waveform bars de 9 barras + texto parcial + botón stop rojo), Confirm (texto + checkmark verde insert + retry gris), Error (error + retry rosa). Usa AccentPink #E85D75 del overlay de PC.
+
+### 🐛 Bug #13 (CRÍTICO) — IME: ViewTreeLifecycleOwner not found
+
+**Síntoma:** Al seleccionar Handy como teclado IME y tocar cualquier campo de texto, la app crashea con `IllegalStateException: ViewTreeLifecycleOwner not found from android.widget.LinearLayout{...}`. El dictado también deja de funcionar porque el IME no puede inicializarse.
+
+**Causa raíz:** `InputMethodService` no provee un `LifecycleOwner` en el árbol de vistas, pero `ComposeView.onAttachedToWindow()` lo requiere para crear el `WindowRecomposer`. Intentos previos usando `resources.getIdentifier("view_tree_lifecycle_owner", "id", "androidx.lifecycle")` fallaron porque el recurso no es accesible desde código de app.
+
+**Solución:**
+1. Eliminar el `ImeComposeView` que extendía `AbstractComposeView` (tampoco funcionaba porque `ComposeView` es final)
+2. Crear `ImeContainer`: un `FrameLayout` que implementa `LifecycleOwner` y envuelve un `ComposeView` interno
+3. En `onAttachedToWindow()`, usar reflexión para acceder al `R.id.view_tree_lifecycle_owner` interno de `lifecycle-runtime`: `Class.forName("androidx.lifecycle.R$id").getField("view_tree_lifecycle_owner").getInt(null)`
+4. Llamar `setTag(tagId, this)` con el ID obtenido por reflexión
+5. El `ComposeView` hijo encuentra el tag al subir el árbol de vistas en `ViewTreeLifecycleOwner.get()`
+6. Añadir `lifecycle-runtime` como dependencia explícita en `build.gradle.kts`
+7. `HandyInputMethodService` implementa `LifecycleOwner` con `LifecycleRegistry`
+8. Eventos de lifecycle: `ON_CREATE` en `onCreate()`, `ON_RESUME` en `onStartInput()`, `ON_PAUSE` en `onFinishInput()`, `ON_DESTROY` en `onDestroy()`
+
+### 🐛 Bug #14 — Modelo no se activa automáticamente tras descarga
+
+**Síntoma:** Tras completar la descarga del modelo en el onboarding o en la pantalla de modelos, el modelo descargado no se establece como activo. El usuario tiene que ir manualmente a la pantalla de modelos y pulsar "Use".
+
+**Causa raíz:** `OnboardingViewModel` intentaba llamar a `setActiveModel()` tras detectar la descarga completada, pero el timing de la corrutina y los SharedFlow causaba que la activación no se ejecutara consistentemente.
+
+**Solución:** Añadir `EngineBridge.nativeSetActiveModel(modelId)` directamente en `EngineViewModel.onDownloadComplete()` antes de `refreshModels()`. Así el modelo se activa inmediatamente al completarse cualquier descarga exitosa, independientemente de qué ViewModel esté manejando el flujo.
+
+### 🐛 Bug #15 — Idiomas de modelo en una sola línea fea
+
+**Síntoma:** En las tarjetas de modelo (`ModelCard`), el campo `language` contenía todos los idiomas separados por coma en un solo chip (ej: "English, Spanish, French, German..."), lo que causaba overflow visual o truncamiento feo.
+
+**Solución:** Cambiar de un solo `Row` con un `Surface` chip a un `FlowRow` con chips individuales por idioma:
+- `model.language.split(",").map { it.trim() }.filter { it.isNotEmpty() }`
+- Cada idioma es un `Surface` independiente con `RoundedCornerShape(4.dp)`
+- Usar `@OptIn(ExperimentalLayoutApi::class)` para `FlowRow`
+- El tamaño/quant del modelo va inline después de los chips
 
 ### 🐛 Bug #6 — Backend lento (CPU forzado)
 

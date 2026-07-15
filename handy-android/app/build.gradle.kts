@@ -123,6 +123,7 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.navigation.compose)
     implementation(libs.coroutines.android)
+    implementation(libs.lifecycle.runtime)
 
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)

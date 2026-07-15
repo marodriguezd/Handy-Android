@@ -104,7 +104,10 @@ The Android port consists of:
 - Skip download (onboarding) now cancels Rust download
 - No OOM limit — user can activate any model size
 - **IME floating bubble overlay** — Compact 56dp pill at keyboard area, matching PC overlay style (AccentPink #E85D75), with idle/recording/confirm/error states
-- **ModelCard layout fixed** — Column-based layout with 3 rows (title, languages+size, action buttons), language chip truncation
+- **IME crash fixed** — Uses `ImeContainer` (FrameLayout + LifecycleOwner) with reflection to set `ViewTreeLifecycleOwner` tag via `Class.forName("androidx.lifecycle.R$id")`, fixing `IllegalStateException: ViewTreeLifecycleOwner not found`
+- **Auto-activate model after download** — `EngineViewModel.onDownloadComplete()` calls `nativeSetActiveModel()` automatically so the model is immediately usable
+- **ModelCard languages in multi-row** — `FlowRow` with per-language chips instead of single truncated chip
+- **ModelCard layout fixed** — Column-based layout with 3 rows (title, languages+size, action buttons)
 - **Onboarding default model** — Parakeet TDT 0.6B v3 (485 MB) instead of Whisper Small
 - **Cancel behavior** — Shows "Download canceled" with retry button instead of "Model Ready"
 - **Retry download** — Fixed race condition where retry after cancel would not restart download
@@ -115,6 +118,8 @@ The Android port consists of:
 - Moonshine Base models not yet verified to work with transcribe-cpp on Android
 - Voxtral Small 24B (17 GB) is listed but impractical for most mobile devices
 - IME bubble uses hardcoded strings (not string resources) for simplicity
+- IME bubble has no recording timer (MM:SS) like the PC overlay
+- IME bubble has no streaming live text display (partial + tentative with blinking caret)
 
 ### 🔧 Critical Fixes Applied
 | # | Fix | Details |
@@ -127,6 +132,9 @@ The Android port consists of:
 | 6 | **NDK linker fixes** | Injected `CMAKE_ARGS` and dummy `libpthread.a` for transcribe-cpp build |
 | 7 | **Cancel download UX** | Tokio task now calls `complete_cb(false, "Download cancelled")` on cancel; OnboardingViewModel cancel skip also cancels Rust download |
 | 8 | **OOM limit removed** | Removed 1600MB limit from `set_active_model()` — user chooses freely |
+| 9 | **IME ViewTreeLifecycleOwner** | Replaced `resources.getIdentifier()` with reflection on `androidx.lifecycle.R$id.view_tree_lifecycle_owner` to correctly set the lifecycle owner tag; wrapped ComposeView in `ImeContainer` (FrameLayout + LifecycleOwner) |
+| 10 | **Auto-activate on download** | Added `nativeSetActiveModel(modelId)` call in `EngineViewModel.onDownloadComplete()` before `refreshModels()` |
+| 11 | **ModelCard languages** | Changed from single `Surface` chip + ellipsis to `FlowRow` with per-language chips via `model.language.split(",")` |
 
 ### 📋 Model Catalog — 65 Models (all from Handy PC)
 | Priority | Model | Size | Why |

@@ -1,11 +1,11 @@
 # Handy for Android — Master Technical Specification
 
 **Status:** Active development — Dictado funcional (batch transcription con Whisper GGUF via `session.run()`)
-**Version:** 1.8.0
+**Version:** 1.9.0
 **Target:** Android 8.0+ (API 26), `targetSdk 35`
 **Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 **Problem tracker:** See [`SPEC.md`](SPEC.md) for current issues, findings, and fixes applied.
-**Key milestone:** ✅ Model loads, audio captures, batch transcription runs — resultado: "you" (precisión pendiente de mejora)
+**Key milestone:** ✅ IME crash fixed via reflection-based ViewTreeLifecycleOwner; ✅ Model auto-activates on download; ✅ FlowRow language chips
 
 ---
 
@@ -880,19 +880,75 @@ singleton from `HandyApplication`. This ensures the engine survives IME destruct
 (keyboard switches) and that `nativeInit` is called exactly once.
 
 ```kotlin
-class HandyInputMethodService : InputMethodService() {
+class HandyInputMethodService : InputMethodService(), LifecycleOwner {
 
     // Singleton — shared with MainActivity via HandyApplication
     private val engineViewModel: EngineViewModel
         get() = (application as HandyApplication).engineViewModel
 
+    // LifecycleRegistry for ComposeView support
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+
+    override fun onCreateInputView(): View {
+        return ImeContainer(this, lifecycleRegistry) {
+            HandyBubble(...)
+        }
+    }
+    
     override fun onDestroy() {
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         super.onDestroy()
         // IMPORTANT: Do NOT call engineViewModel.cleanup() here.
         // The engine is process-wide; destroying it on IME switch
         // would kill the Rust core for the entire app.
     }
 ```
+
+**CRITICAL: ViewTreeLifecycleOwner** — `InputMethodService` does NOT provide a
+`LifecycleOwner` in its view tree, but `ComposeView` (via `AbstractComposeView`)
+requires one when attached to the window. The solution uses `ImeContainer`, a
+`FrameLayout` wrapper that implements `LifecycleOwner` and wraps a `ComposeView`:
+
+```kotlin
+private class ImeContainer(
+    context: Context,
+    private val lifecycleRegistry: LifecycleRegistry,
+    private val content: @Composable () -> Unit,
+) : FrameLayout(context), LifecycleOwner {
+
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+
+    init {
+        val composeView = ComposeView(context).apply {
+            setContent { content() }
+        }
+        addView(composeView, ...)
+    }
+
+    override fun onAttachedToWindow() {
+        // Reflection to access lifecycle-runtime's internal R.id
+        val rIdClass = Class.forName("androidx.lifecycle.R$id")
+        val field = rIdClass.getField("view_tree_lifecycle_owner")
+        val tagId = field.getInt(null)
+        setTag(tagId, this)
+        super.onAttachedToWindow()
+    }
+}
+```
+
+**Why reflection?** `ViewTreeLifecycleOwner.set()` is in `lifecycle-runtime` but the
+class is not exposed to app code at compile time via transitive dependencies.
+Using `Class.forName` on `androidx.lifecycle.R$id` accesses the same resource ID
+that `ViewTreeLifecycleOwner.get()` uses internally. The inner `ComposeView`
+then finds the tag when `ViewTreeLifecycleOwner.get()` traverses up the view tree.
+
+**Lifecycle events:**
+- `onCreate()` → `ON_CREATE`
+- `onStartInput()` → `ON_RESUME` (IME becomes visible and interactive)
+- `onFinishInput()` → `ON_PAUSE`
+- `onDestroy()` → `ON_DESTROY`
+
 (Full implementation at `app/src/main/java/com/handy/app/ime/HandyInputMethodService.kt`)
 
 ### 5.3 IME Visual Contract — Floating Bubble Overlay
