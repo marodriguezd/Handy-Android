@@ -10,11 +10,19 @@ class ImeInjector(
 
     override val displayName: String get() = "IME InputConnection"
 
-    override fun isAvailable(): Boolean = inputConnectionProvider() != null
+    @Volatile
+    private var cachedConnection: InputConnection? = null
+
+    override fun isAvailable(): Boolean {
+        val ic = inputConnectionProvider()
+        cachedConnection = ic
+        return ic != null
+    }
 
     override suspend fun inject(text: String): Result<Unit> = withContext(Dispatchers.Main) {
-        val ic = inputConnectionProvider()
+        val ic = cachedConnection ?: inputConnectionProvider()
             ?: return@withContext Result.failure(IllegalStateException("IME InputConnection not available"))
+        cachedConnection = null
         return@withContext try {
             ic.commitText(text, 1)
             ic.finishComposingText()

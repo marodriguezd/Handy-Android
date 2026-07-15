@@ -412,6 +412,7 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStre
             if accumulated.is_empty() {
                 warn!("nativeFinalizeStream: no audio captured");
                 jni_callback::dispatch_error(&mut env, &state.callback, 3, "No audio captured");
+                jni_callback::dispatch_state_change(&mut env, &state.callback, 0);
             } else {
                 info!("nativeFinalizeStream: {} samples accumulated", accumulated.len());
 
@@ -420,19 +421,22 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStre
                     Ok(text) => {
                         info!("Final transcription ({} chars): {}", text.len(), text);
                         let processed = crate::transcription::engine::post_process(&text);
+                        // Dispatch transcription result — Kotlin will handle state transitions
+                        // (including auto-insert in IME mode). We do NOT dispatch STATE_IDLE here
+                        // to avoid a StateFlow conflation race where IDLE overrides CONFIRM before
+                        // the main-thread collector can process it.
                         jni_callback::dispatch_transcription(&mut env, &state.callback, &processed, false);
                     }
                     Err(e) => {
                         warn!("nativeFinalizeStream: run failed: {e}");
                         jni_callback::dispatch_error(&mut env, &state.callback, 3, &e);
+                        jni_callback::dispatch_state_change(&mut env, &state.callback, 0);
                     }
                 }
             }
 
             // Start idle watcher
             state.idle_watcher.start();
-
-            jni_callback::dispatch_state_change(&mut env, &state.callback, 0);
         });
     });
 }

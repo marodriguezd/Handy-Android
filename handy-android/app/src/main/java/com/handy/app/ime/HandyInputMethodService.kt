@@ -47,66 +47,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.handy.app.HandyApplication
 import com.handy.app.injection.ImeInjector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.viewmodel.EngineViewModel
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-// ═══════════════════════════════════════════════════════════════════
-// ImeContainer — LifecycleOwner wrapper for ComposeView in IME
-// InputMethodService does not provide ViewTreeLifecycleOwner, which
-// ComposeView requires. We set it via reflection.
-// ═══════════════════════════════════════════════════════════════════
-private class ImeContainer(
-    context: android.content.Context,
-    private val lifecycleRegistry: LifecycleRegistry,
-    private val content: @Composable () -> Unit,
-) : FrameLayout(context), LifecycleOwner {
-
-    override val lifecycle: Lifecycle get() = lifecycleRegistry
-
-    init {
-        // Set ViewTreeLifecycleOwner BEFORE adding child views.
-        // In Android, onAttachedToWindow is called depth-first (children before parents),
-        // so doing this in onAttachedToWindow() would be too late for ComposeView.
-        try {
-            val clazz = Class.forName("androidx.lifecycle.ViewTreeLifecycleOwner")
-            val setMethod = clazz.getMethod(
-                "set",
-                View::class.java,
-                LifecycleOwner::class.java,
-            )
-            setMethod.invoke(null, this, this)
-        } catch (e: Exception) {
-            android.util.Log.w("HandyIME", "Failed to set ViewTreeLifecycleOwner: ${e.message}")
-        }
-
-        val composeView = ComposeView(context).apply {
-            setContent { content() }
-        }
-        addView(
-            composeView,
-            LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// HandyInputMethodService — Voice input panel for Handy Android
-// ═══════════════════════════════════════════════════════════════════
-class HandyInputMethodService : InputMethodService(), LifecycleOwner {
+class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private val engineViewModel: EngineViewModel
         get() = (application as HandyApplication).engineViewModel
@@ -116,35 +76,70 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner {
 
     private val imeInjector = ImeInjector { currentInputConnection ?: lastInputConnection }
 
+    @Volatile
     private var lastInputConnection: InputConnection? = null
-    private var autoCommitJob: Job? = null
-    private var autoCommitted = false // Guard against infinite retry loop
 
-    // ── Lifecycle ─────────────────────────────────────────────
+    // ── Lifecycle & Owners ────────────────────────────────────
     private val lifecycleRegistry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
+    private val store = ViewModelStore()
+    override val viewModelStore: ViewModelStore get() = store
+
+    private val savedStateRegistryController = SavedStateRegistryController.create(this)
+    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
+
     override fun onCreate() {
         super.onCreate()
+        savedStateRegistryController.performRestore(null)
         injectorRouter.setImeInjector(imeInjector)
+        // Enable auto-insert mode: final transcriptions will be automatically injected
+        // into the text field via EngineViewModel (bypasses StateFlow conflation issues)
+        engineViewModel.setImeModeEnabled(true)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        
+        val dialogWindow = this.window?.window
+        if (dialogWindow != null) {
+            dialogWindow.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            val decorView = dialogWindow.decorView
+            decorView.setViewTreeLifecycleOwner(this)
+            decorView.setViewTreeViewModelStoreOwner(this)
+            decorView.setViewTreeSavedStateRegistryOwner(this)
+        }
     }
 
     override fun onCreateInputView(): View {
-        return ImeContainer(this, lifecycleRegistry) {
-            HandyVoiceBar(
-                state = engineViewModel.state.collectAsState().value,
-                vadLevel = engineViewModel.vadLevel.collectAsState().value,
-                lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
-                onStartDictation = { engineViewModel.startRecording() },
-                onStopDictation = { engineViewModel.stopRecording() },
-                onRetry = {
-                    autoCommitted = false
-                    engineViewModel.resetPartialText()
-                },
-                onCancelDictation = { engineViewModel.cancelRecording() },
-                onSwitchKeyboard = { showInputMethodPicker() },
+        return ComposeView(this).apply {
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
             )
+            
+            val dialogWindow = this@HandyInputMethodService.window?.window
+            dialogWindow?.decorView?.let { decorView ->
+                decorView.setViewTreeLifecycleOwner(this@HandyInputMethodService)
+                decorView.setViewTreeViewModelStoreOwner(this@HandyInputMethodService)
+                decorView.setViewTreeSavedStateRegistryOwner(this@HandyInputMethodService)
+            }
+            
+            setViewTreeLifecycleOwner(this@HandyInputMethodService)
+            setViewTreeViewModelStoreOwner(this@HandyInputMethodService)
+            setViewTreeSavedStateRegistryOwner(this@HandyInputMethodService)
+            
+            setContent {
+                HandyVoiceBar(
+                    state = engineViewModel.state.collectAsState().value,
+                    vadLevel = engineViewModel.vadLevel.collectAsState().value,
+                    lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
+                    onStartDictation = { engineViewModel.startRecording() },
+                    onStopDictation = { engineViewModel.stopRecording() },
+                    onRetry = {
+                        engineViewModel.resetPartialText()
+                    },
+                    onCancelDictation = { engineViewModel.cancelRecording() },
+                    onSwitchKeyboard = { showInputMethodPicker() },
+                )
+            }
         }
     }
 
@@ -152,35 +147,18 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner {
         super.onStartInput(attribute, restarting)
         lastInputConnection = currentInputConnection
         engineViewModel.clearPartialText()
-        autoCommitted = false
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
-
-        // Auto-commit: when transcription completes, inject text automatically.
-        // The autoCommitted flag prevents infinite retry loops if injection fails.
-        autoCommitJob?.cancel()
-        autoCommitJob = lifecycleScope.launch {
-            engineViewModel.state.collect { state ->
-                if (state == EngineViewModel.STATE_CONFIRM && !autoCommitted) {
-                    val text = engineViewModel.finalText.value
-                    if (text != null) {
-                        autoCommitted = true
-                        engineViewModel.confirmInsert(text)
-                    }
-                }
-            }
-        }
     }
 
     override fun onFinishInput() {
         super.onFinishInput()
-        autoCommitJob?.cancel()
-        autoCommitJob = null
         lastInputConnection = null
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
     }
 
     override fun onDestroy() {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        store.clear()
         super.onDestroy()
     }
 
@@ -189,7 +167,6 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner {
             val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
             imm.showInputMethodPicker()
         } catch (e: Exception) {
-            // Some OEMs restrict showInputMethodPicker; fall back to settings
             val intent = android.content.Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -221,7 +198,6 @@ private fun HandyVoiceBar(
     val surfaceColor = MaterialTheme.colorScheme.surface
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
 
-    // Pop-in animation
     var visible by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { visible = 1 }
 
@@ -236,19 +212,25 @@ private fun HandyVoiceBar(
         label = "popAlpha",
     )
 
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-            },
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        color = surfaceColor,
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
-        shadowElevation = 2.dp,
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 56.dp),
+        contentAlignment = Alignment.Center
     ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    this.alpha = alpha
+                },
+            shape = RoundedCornerShape(28.dp),
+            color = surfaceColor,
+            border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+            shadowElevation = 6.dp,
+        ) {
         when (state) {
             EngineViewModel.STATE_LISTENING,
             EngineViewModel.STATE_LOADING,
@@ -272,6 +254,7 @@ private fun HandyVoiceBar(
             )
         }
     }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -285,17 +268,16 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { onStart() },
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { onStart() },
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         ) {
@@ -306,14 +288,10 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                // Left: pulsing dot + mic icon
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PulsingDot()
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = "🎙",
-                        fontSize = 18.sp,
-                    )
+                    Text(text = "🎙", fontSize = 18.sp)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "Dictate",
@@ -323,7 +301,6 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
                     )
                 }
 
-                // Right: keyboard switch
                 Box(
                     modifier = Modifier
                         .size(28.dp)
@@ -334,11 +311,7 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
                         ) { onSwitchKeyboard() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "⌨",
-                        fontSize = 14.sp,
-                        color = faintColor,
-                    )
+                    Text(text = "⌨", fontSize = 14.sp, color = faintColor)
                 }
             }
         }
@@ -352,7 +325,6 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
 private fun RecordingBar(vadLevel: Float, onStop: () -> Unit) {
     var elapsedSeconds by remember { mutableIntStateOf(0) }
 
-    // Timer while recording
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
@@ -380,17 +352,11 @@ private fun RecordingBar(vadLevel: Float, onStop: () -> Unit) {
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Left: pulsing dot
                 PulsingDot()
-
                 Spacer(Modifier.width(10.dp))
-
-                // Center: waveform bars
                 WaveformBars(level = vadLevel)
-
                 Spacer(Modifier.weight(1f))
-
-                // Timer
+                
                 val minutes = elapsedSeconds / 60
                 val seconds = elapsedSeconds % 60
                 Text(
@@ -403,7 +369,6 @@ private fun RecordingBar(vadLevel: Float, onStop: () -> Unit) {
 
                 Spacer(Modifier.width(12.dp))
 
-                // Stop button (red circle with ■)
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -415,12 +380,7 @@ private fun RecordingBar(vadLevel: Float, onStop: () -> Unit) {
                         ) { onStop() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "■",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Text(text = "■", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -453,7 +413,6 @@ private fun TranscribingBar(onCancel: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                // Material3 circular spinner
                 androidx.compose.material3.CircularProgressIndicator(
                     modifier = Modifier.size(14.dp),
                     color = AccentPink,
@@ -471,7 +430,6 @@ private fun TranscribingBar(onCancel: () -> Unit) {
 
                 Spacer(Modifier.weight(1f))
 
-                // Cancel button
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -483,12 +441,7 @@ private fun TranscribingBar(onCancel: () -> Unit) {
                         ) { onCancel() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "✕",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Text(text = "✕", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -528,7 +481,6 @@ private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                // Retry button
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -540,12 +492,7 @@ private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
                         ) { onRetry() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "↻",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Text(text = "↻", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -578,14 +525,12 @@ private fun PulsingDot() {
     )
 
     Box(contentAlignment = Alignment.Center) {
-        // Pulse ring
         Box(
             modifier = Modifier
                 .size((7 * pulseScale).dp)
                 .clip(CircleShape)
                 .background(AccentPink.copy(alpha = pulseAlpha))
         )
-        // Solid dot
         Box(
             modifier = Modifier
                 .size(7.dp)
@@ -597,8 +542,6 @@ private fun PulsingDot() {
 
 // ═══════════════════════════════════════════════════════════════════
 // WaveformBars — 9 reactive bars matching PC overlay design
-// Each bar has phase-offset animation for organic movement.
-// Center bars react more to the audio level.
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun WaveformBars(level: Float) {
@@ -610,7 +553,6 @@ private fun WaveformBars(level: Float) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (i in 0 until barCount) {
-            // Phase-offset animation: each bar cycles at a slightly different speed
             val infiniteTransition = rememberInfiniteTransition(label = "bar$i")
             val phase by infiniteTransition.animateFloat(
                 initialValue = 0f,
@@ -622,13 +564,8 @@ private fun WaveformBars(level: Float) {
                 label = "phase$i",
             )
 
-            // Center bars react more to the audio level
             val centerFactor = 1f - (abs(i - barCount / 2).toFloat() / (barCount / 2f))
-
-            // Combine level with phase for organic movement
             val combined = (level * centerFactor * 0.8f + phase * 0.2f).coerceIn(0f, 1f)
-
-            // Map to height: 3–18dp range (matching PC overlay --swave)
             val height = (3 + combined * 15)
 
             Box(

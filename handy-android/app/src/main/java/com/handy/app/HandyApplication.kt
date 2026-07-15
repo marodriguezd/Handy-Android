@@ -144,7 +144,9 @@ class HandyApplication : Application(), ComponentCallbacks2 {
         }
     }
 
-    override fun onConfigurationChanged(newConfig: Configuration) {}
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+    }
 
     override fun onLowMemory() {
         Log.w("HandyApp", "onLowMemory - unloading model")

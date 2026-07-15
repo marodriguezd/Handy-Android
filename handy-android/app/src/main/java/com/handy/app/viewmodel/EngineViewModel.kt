@@ -94,6 +94,14 @@ class EngineViewModel(
 
     // ── Public API ─────────────────────────────────────────────
 
+    @Volatile
+    private var _imeModeEnabled = false
+
+    /** Enable auto-insert mode (IME). When true, final transcriptions are auto-injected. */
+    fun setImeModeEnabled(enabled: Boolean) {
+        _imeModeEnabled = enabled
+    }
+
     fun startRecording() {
         val current = _state.value
         Log.d(TAG, "startRecording: currentState=$current")
@@ -101,10 +109,12 @@ class EngineViewModel(
             Log.w(TAG, "startRecording: already recording, ignoring")
             return
         }
+        // Show loading state immediately to prevent UI flicker
+        _state.value = STATE_LOADING
         _finalText.value = null
         _partialText.value = ""
+        _vadLevel.value = 0f
         _lastErrorMessage.value = null
-        _state.value = STATE_LISTENING
         RecordingService.start(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
             Log.d(TAG, "nativeLoadModel starting...")
@@ -223,6 +233,12 @@ class EngineViewModel(
     // ── EngineCallback Implementation ──────────────────────────
 
     override fun onStateChange(state: Int) {
+        // Prevent flicker: suppress native STATE_IDLE while we're loading
+        // (nativeLoadModel fires LOADING(1) then IDLE(0) before nativeStartRecording fires LISTENING(2))
+        if (state == STATE_IDLE && _state.value == STATE_LOADING) {
+            Log.d(TAG, "onStateChange: suppressing IDLE during LOADING (model loaded, will start recording)")
+            return
+        }
         _state.value = state
     }
 
@@ -232,6 +248,23 @@ class EngineViewModel(
         } else {
             _finalText.value = text
             _state.value = STATE_CONFIRM
+            // Auto-insert when in IME mode (bypasses StateFlow conflation issue where
+            // IDLE overrides CONFIRM before the main-thread collector can process it)
+            if (_imeModeEnabled) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    val result = injectorRouter.inject(text)
+                    if (result.isSuccess) {
+                        Log.d(TAG, "auto-insert succeeded")
+                        _state.value = STATE_IDLE
+                        _finalText.value = null
+                        _partialText.value = ""
+                    } else {
+                        Log.w(TAG, "auto-insert failed: ${result.exceptionOrNull()}")
+                        _lastErrorMessage.value = result.exceptionOrNull()?.message ?: "Insertion failed"
+                        _state.value = STATE_ERROR
+                    }
+                }
+            }
         }
     }
 

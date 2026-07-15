@@ -2,14 +2,11 @@
 
 This file provides guidance to AI coding assistants working with code in this repository.
 
-## Project Structure
+## Project
 
-This repo contains TWO separate projects:
+**Handy Android** (`handy-android/`) — Android port of Handy (Rust JNI + Kotlin/Jetpack Compose). Fork del [repositorio original](https://github.com/cjpais/Handy) enfocado exclusivamente en Android.
 
-1. **Handy Desktop** (`src/`, `src-tauri/`) — Cross-platform desktop app (Tauri 2.x + React)
-2. **Handy Android** (`handy-android/`) — Android port of Handy (Rust JNI + Kotlin/Jetpack Compose)
-
-## Android Development Commands
+## Development Commands
 
 **Prerequisites:**
 
@@ -96,7 +93,7 @@ The Android port consists of:
 - `service/RecordingService.kt` — Foreground service for persistent recording
 
 
-## Current State (Checkpoint — July 16, 2026 — Sprint 10 Fixes)
+## Current State (Checkpoint — July 16, 2026 — Sprint 11 — Preview Release)
 
 ### ✅ Working — Functional State
 - Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
@@ -130,6 +127,7 @@ The Android port consists of:
   - **Model availability check** in `startRecording()` — shows error if no model is downloaded
   - **confirmInsert failure handling** — Shows `STATE_ERROR` instead of silently resetting
   - **Keyboard switcher** via `InputMethodManager.showInputMethodPicker()` with try-catch fallback to settings
+  - **IME injection priority** — IME InputConnection takes priority over Shizuku (`InjectorRouter.selectStrategy()`) for the most reliable text insertion path
 - **IME ViewTreeLifecycleOwner CRITICAL FIX** — Jetpack Compose's `WindowRecomposer` searches for the `ViewTreeLifecycleOwner` starting from the window's `rootView` (the `parentPanel` LinearLayout in the IME). Setting the owner on the `ComposeView` is NOT ENOUGH and causes `IllegalStateException`. FIX: Extract the dialog's `DecorView` in `onCreateInputView()` (`this.window?.window?.decorView`) and explicitly call `setViewTreeLifecycleOwner`, `setViewTreeViewModelStoreOwner`, and `setViewTreeSavedStateRegistryOwner` on it before calling `setContent`. This is the definitive canonical fix for Compose in InputMethodService.
 - **Auto-activate model after download** — `EngineViewModel.onDownloadComplete()` calls `nativeSetActiveModel()` automatically so the model is immediately usable
 - **ModelCard languages in multi-row** — `FlowRow` with per-language chips instead of single truncated chip
@@ -184,6 +182,13 @@ The Android port consists of:
 | 29 | 3 | **menuAnchor() deprecation** | Reemplazado `Modifier.menuAnchor()` por `Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true)` en SettingsScreen.kt. Cero warnings de compilación. |
 | 30 | 3 | **DictationScreen eliminado** | Archivo `ui/dictation/DictationScreen.kt` y directorio removidos — sin ruta, sin referencias. |
 
+### 🔧 Sprint 11 — IME Injection Priority & Reliability Fixes
+| # | Round | Fix | Details |
+|---|-------|-----|---------|
+| 31 | 4 | **IME priority over Shizuku** | `InjectorRouter.selectStrategy()` now tries IME InputConnection before Shizuku. Shizuku's `KEYCODE_PASTE` reflection often fails silently, leaving text only in clipboard. IME `commitText()` is the most reliable path. |
+| 32 | 4 | **`@Volatile` on `lastInputConnection`** | `HandyInputMethodService.lastInputConnection` was written on Main thread and read on IO thread via the `imeInjector` lambda. Without `@Volatile`, the IO thread could see stale `null`, making `ImeInjector.isAvailable()` return `false` and falling back to clipboard. |
+| 33 | 4 | **TOCTOU race fix in ImeInjector** | `inputConnectionProvider()` was called twice (in `isAvailable()` on IO thread, then in `inject()` on Main thread). Between calls, `onFinishInput()` could nullify the connection. Now `isAvailable()` caches the connection in a `@Volatile` field, and `inject()` reuses it on Main. |
+
 ### ✅ Sprint 10 Completado — Rediseño de Interfaz de App
 
 **Objetivo cumplido:** Interfaz premium alineada con el escritorio. Paleta oscura/crema + rosa pastel, BottomNavigationBar con 4 pestañas, TabRow para sub-secciones.
@@ -225,23 +230,6 @@ The Android port consists of:
 | | Voxtral (Mini 3B, Mini 4B, Small 24B) | 2.8–17 GB | 8–13 languages, streaming, massive |
 | | Nemotron Speech Streaming EN | 730 MB | English streaming |
 | | Breeze-ASR-25 | 1.2 GB | Taiwanese Mandarin + English
-
-## Desktop Development Commands
-
-```bash
-# Install dependencies
-bun install
-
-# Run in development mode
-bun run tauri dev
-
-# Build for production
-bun run tauri build
-
-# Linting and formatting
-bun run lint
-bun run format
-```
 
 ## Code Style
 

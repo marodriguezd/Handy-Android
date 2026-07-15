@@ -1,52 +1,49 @@
-# Handy for Android
+# Handy para Android
 
-[![Android CI](https://github.com/cjpais/Handy/actions/workflows/android-ci.yml/badge.svg)](https://github.com/cjpais/Handy/actions/workflows/android-ci.yml)
+[![Build](https://github.com/anomalyco/Handy-Android/actions/workflows/android-ci.yml/badge.svg)](https://github.com/anomalyco/Handy-Android/actions/workflows/android-ci.yml)
 
 Offline, on-device speech-to-text dictation engine for Android 8.0+ (API 26).
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (latest stable)
-- [Android NDK](https://developer.android.com/ndk) (via Android Studio or SDK Manager)
+- [Android NDK](https://developer.android.com/ndk) r26+ (via Android Studio SDK Manager)
 - [cargo-ndk](https://github.com/bbqsrc/cargo-ndk): `cargo install cargo-ndk`
-- Rust target: `rustup target add aarch64-linux-android x86_64-linux-android`
-- [Bun](https://bun.sh/) (for desktop build, if developing the full monorepo)
+- Rust target: `rustup target add aarch64-linux-android`
+- Java 17+ JDK
+- Android SDK (compileSdk 35)
+- A device connected via ADB
 
 ## Quick Start
 
 ```bash
-# Build the Rust native library
-cd handy-android/handy-core
-cargo ndk --target aarch64-linux-android --platform 26 -- build --release
+cd handy-android
+ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/<version> ./gradlew assembleDebug
 
-# Build the Android app
-cd ..
-./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-
-The signed APK will be at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Development
 
-### Rust Core (handy-core/)
+### Rust Core (`handy-core/`)
 
-The Rust engine is a `cdylib` that exposes 21 JNI functions. It handles:
+The Rust engine is a `cdylib` exposing 21 JNI functions. It handles:
 - AAudio microphone capture
 - Energy-based Voice Activity Detection (VAD)
 - Audio resampling (via rubato)
-- Streaming transcription (via transcribe-cpp / GGML)
+- Batch transcription (via transcribe-cpp / GGML)
 - Post-processing (filler word removal, stutter collapse)
 - Model download and management (via reqwest)
-- SQLite history persistence
 
-### Kotlin App (app/)
+### Kotlin App (`app/`)
 
 The Android app provides:
-- Input Method Service (IME) for text injection
-- Jetpack Compose UI with 4 tabs (Dictation, Models, Settings, History)
-- Shizuku-based power-user injection (UID 2000)
+- Input Method Service (IME) with floating pill UI
+- Automatic text insertion via `InputConnection.commitText()`
+- Jetpack Compose UI (4 tabs: General, Models, History, About)
+- Shizuku power-user injection (UID 2000, optional)
 - Foreground Service for persistent recording
-- Onboarding flow
+- Onboarding flow with model download
 
 ### Architecture
 
@@ -61,6 +58,8 @@ export HANDY_KEY_ALIAS=handy
 export HANDY_KEY_PASSWORD=<password>
 ./gradlew assembleRelease bundleRelease
 ```
+
+The release build compiles Rust in `--release` mode (~6 MB `.so`).
 
 ## License
 

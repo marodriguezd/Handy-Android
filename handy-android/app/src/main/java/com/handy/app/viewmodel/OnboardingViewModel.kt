@@ -73,6 +73,7 @@ class OnboardingViewModel(
         // completion callback, which updates the ModelsViewModel UI.
         com.handy.app.bridge.EngineBridge.nativeCancelDownload()
         downloadStarted = false
+        skipped = true
         retryingDownload = false
         activated = false
         _uiState.update {
@@ -83,6 +84,7 @@ class OnboardingViewModel(
     fun retryDownload() {
         // Reset state so initModelDownload can start a fresh download
         downloadStarted = false
+        skipped = false
         retryingDownload = true
         activated = false
         _uiState.update {
@@ -145,7 +147,7 @@ class OnboardingViewModel(
                     }
 
                     // Auto-start download if models are loaded and no download has been started
-                    if (!downloadStarted && modelState.models.isNotEmpty() && !modelState.isLoading) {
+                    if (!downloadStarted && !skipped && modelState.models.isNotEmpty() && !modelState.isLoading) {
                         val models = modelState.models
                         val target = models.firstOrNull { it.recommended && !it.isDownloaded }
                             ?: models.firstOrNull { !it.isDownloaded }

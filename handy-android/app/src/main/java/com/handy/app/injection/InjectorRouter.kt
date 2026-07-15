@@ -23,8 +23,8 @@ class InjectorRouter(
     }
 
     private fun selectStrategy(): InjectorStrategy = when {
-        settingsStore.shizukuEnabled && shizukuInjector.isAvailable() -> shizukuInjector
         imeInjector.isAvailable() -> imeInjector
+        settingsStore.shizukuEnabled && shizukuInjector.isAvailable() -> shizukuInjector
         else -> clipboardInjector
     }
 }
