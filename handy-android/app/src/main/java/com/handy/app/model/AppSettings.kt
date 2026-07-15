@@ -6,4 +6,9 @@ data class AppSettings(
     val postProcessEndpoint: String = "",
     val postProcessApiKey: String = "",
     val batteryOptimizationExempt: Boolean = false,
+    val experimentalEnabled: Boolean = false,
+    val vadEnabled: Boolean = true,
+    val addFinalSpace: Boolean = false,
+    val postProcessingEnabled: Boolean = true,
+    val autoSend: String = "disabled",
 )

@@ -29,4 +29,24 @@ class SettingsStore(context: Context) {
     var batteryOptimizationExempt: Boolean
         get() = prefs.getBoolean("battery_optimization_exempt", false)
         set(value) = prefs.edit().putBoolean("battery_optimization_exempt", value).apply()
+
+    var experimentalEnabled: Boolean
+        get() = prefs.getBoolean("experimental_enabled", false)
+        set(value) = prefs.edit().putBoolean("experimental_enabled", value).apply()
+
+    var vadEnabled: Boolean
+        get() = prefs.getBoolean("vad_enabled", true)
+        set(value) = prefs.edit().putBoolean("vad_enabled", value).apply()
+
+    var addFinalSpace: Boolean
+        get() = prefs.getBoolean("add_final_space", false)
+        set(value) = prefs.edit().putBoolean("add_final_space", value).apply()
+
+    var postProcessingEnabled: Boolean
+        get() = prefs.getBoolean("post_processing_enabled", true)
+        set(value) = prefs.edit().putBoolean("post_processing_enabled", value).apply()
+
+    var autoSend: String
+        get() = prefs.getString("auto_send", "disabled") ?: "disabled"
+        set(value) = prefs.edit().putString("auto_send", value).apply()
 }

@@ -2,20 +2,26 @@ package com.handy.app.navigation
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -32,23 +38,25 @@ data class BottomNavItem(
 )
 
 private val bottomNavItems = listOf(
-    BottomNavItem("Dictation", Icons.Default.Mic, Screen.Dictation),
-    BottomNavItem("Models", Icons.Default.Build, Screen.Models),
-    BottomNavItem("Settings", Icons.Default.Settings, Screen.Settings),
-    BottomNavItem("History", Icons.Default.DateRange, Screen.History),
+    BottomNavItem("General", Icons.Default.Settings, Screen.General),
+    BottomNavItem("Modelos", Icons.Default.Build, Screen.Models),
+    BottomNavItem("Historial", Icons.Default.DateRange, Screen.History),
+    BottomNavItem("Acerca de", Icons.Default.Info, Screen.About),
 )
 
 @Composable
 fun AppNavigation(
     onboardingCompleted: Boolean,
     onboardingContent: @Composable (onComplete: () -> Unit) -> Unit,
-    dictationContent: @Composable () -> Unit,
-    modelsContent: @Composable () -> Unit,
-    settingsContent: @Composable () -> Unit,
+    generalTabContent: @Composable () -> Unit,
+    advancedTabContent: @Composable () -> Unit,
+    modelsTabContent: @Composable () -> Unit,
+    postProcessTabContent: @Composable () -> Unit,
     historyContent: @Composable () -> Unit,
+    aboutContent: @Composable () -> Unit,
 ) {
     val navController = rememberNavController()
-    val startDestination = if (onboardingCompleted) Screen.Dictation.route else Screen.Onboarding.route
+    val startDestination = if (onboardingCompleted) Screen.General.route else Screen.Onboarding.route
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -79,18 +87,52 @@ fun AppNavigation(
             exitTransition = { ExitTransition.None },
         ) {
             composable(Screen.Onboarding.route) {
-                onboardingContent(
-                    {
-                        navController.navigate(Screen.Dictation.route) {
-                            popUpTo(Screen.Onboarding.route) { inclusive = true }
+                onboardingContent {
+                    navController.navigate(Screen.General.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                }
+            }
+            composable(Screen.General.route) {
+                var selectedTab by remember { mutableIntStateOf(0) }
+                val tabs = listOf("General", "Avanzado")
+                Column(modifier = Modifier.fillMaxSize()) {
+                    TabRow(selectedTabIndex = selectedTab) {
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = { Text(title) },
+                            )
                         }
                     }
-                )
+                    when (selectedTab) {
+                        0 -> generalTabContent()
+                        1 -> advancedTabContent()
+                    }
+                }
             }
-            composable(Screen.Dictation.route) { dictationContent() }
-            composable(Screen.Models.route) { modelsContent() }
-            composable(Screen.Settings.route) { settingsContent() }
+            composable(Screen.Models.route) {
+                var selectedTab by remember { mutableIntStateOf(0) }
+                val tabs = listOf("Modelos", "Post Proceso")
+                Column(modifier = Modifier.fillMaxSize()) {
+                    TabRow(selectedTabIndex = selectedTab) {
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = { Text(title) },
+                            )
+                        }
+                    }
+                    when (selectedTab) {
+                        0 -> modelsTabContent()
+                        1 -> postProcessTabContent()
+                    }
+                }
+            }
             composable(Screen.History.route) { historyContent() }
+            composable(Screen.About.route) { aboutContent() }
         }
     }
 }

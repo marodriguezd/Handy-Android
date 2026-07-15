@@ -11,14 +11,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Visibility
@@ -33,13 +30,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,10 +57,9 @@ import com.handy.app.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun GeneralSettingsContent(viewModel: SettingsViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     var showShizukuDialog by remember { mutableStateOf(false) }
-    var showLicenseDialog by remember { mutableStateOf(false) }
 
     if (showShizukuDialog) {
         AlertDialog(
@@ -81,6 +76,209 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         )
     }
 
+    // ── Section: Audio ─────────────────────────────────────
+    SectionHeader(stringResource(R.string.settings_audio))
+
+    SettingsRow(
+        title = stringResource(R.string.settings_idle_timeout),
+        trailing = {
+            var expanded by remember { mutableStateOf(false) }
+            val timeoutDisplay = when (uiState.idleTimeout) {
+                Int.MAX_VALUE -> stringResource(R.string.settings_idle_timeout_never)
+                else -> "${uiState.idleTimeout}s"
+            }
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded },
+            ) {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true),
+                ) {
+                    Text(timeoutDisplay)
+                }
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                ) {
+                    listOf(10, 30, 60, 120, Int.MAX_VALUE).forEach { seconds ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (seconds == Int.MAX_VALUE) stringResource(R.string.settings_idle_timeout_never) else "${seconds}s"
+                                )
+                            },
+                            onClick = {
+                                viewModel.setIdleTimeout(seconds)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        },
+    )
+
+    HorizontalDivider()
+
+    // ── Section: Text Injection ─────────────────────────────
+    SectionHeader(stringResource(R.string.settings_injection))
+
+    val app = LocalContext.current.applicationContext as HandyApplication
+
+    SettingsRow(
+        title = stringResource(R.string.settings_shizuku),
+        subtitle = stringResource(R.string.settings_shizuku_description),
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val shizukuStatus = try {
+                    val pingOk = Shizuku.pingBinder()
+                    val hasPerm = Shizuku.checkSelfPermission() == 0
+                    val svcConnected = app.shizukuInjector.isAvailable()
+                    when {
+                        !pingOk || !hasPerm -> androidx.compose.ui.graphics.Color.Red
+                        svcConnected -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                        else -> androidx.compose.ui.graphics.Color(0xFFFF9800)
+                    }
+                } catch (_: Exception) {
+                    androidx.compose.ui.graphics.Color.Red
+                }
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(shizukuStatus)
+                )
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = uiState.shizukuEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            try {
+                                val pingOk = Shizuku.pingBinder()
+                                val hasPerm = Shizuku.checkSelfPermission() == 0
+                                if (!pingOk || !hasPerm) {
+                                    showShizukuDialog = true
+                                } else {
+                                    viewModel.setShizukuEnabled(true)
+                                }
+                            } catch (_: Exception) {
+                                showShizukuDialog = true
+                            }
+                        } else {
+                            viewModel.setShizukuEnabled(false)
+                        }
+                    },
+                )
+            }
+        },
+    )
+
+    SettingsRow(
+        title = stringResource(R.string.settings_switch_keyboard),
+        trailing = {
+            Button(
+                onClick = {
+                    val imm = app.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.showInputMethodPicker()
+                },
+            ) {
+                Text(stringResource(R.string.settings_switch))
+            }
+        },
+    )
+
+    HorizontalDivider()
+
+    // ── Section: Battery Optimization ──────────────────────
+    SectionHeader(stringResource(R.string.settings_battery))
+
+    SettingsRow(
+        title = stringResource(R.string.settings_battery_exemption),
+        subtitle = stringResource(R.string.settings_battery_exemption_description),
+        trailing = {
+            Switch(
+                checked = uiState.batteryOptimizationExempt,
+                onCheckedChange = { enabled ->
+                    if (enabled) {
+                        val intent = Intent(
+                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                        ).apply {
+                            setData(Uri.parse("package:${app.packageName}"))
+                        }
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try {
+                            app.startActivity(intent)
+                        } catch (e: Exception) {
+                            android.util.Log.w("HandySettings", "Battery opt intent failed: $e")
+                        }
+                    }
+                    viewModel.setBatteryOptimizationExempt(enabled)
+                },
+            )
+        },
+    )
+
+    HorizontalDivider()
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PostProcessContent(viewModel: SettingsViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    // ── Section: Post-Processing ────────────────────────────
+    SectionHeader(stringResource(R.string.settings_postproc))
+
+    SettingsRow(
+        title = stringResource(R.string.settings_llm_endpoint),
+        trailing = {
+            OutlinedTextField(
+                value = uiState.postProcessEndpoint,
+                onValueChange = { viewModel.setPostProcessEndpoint(it) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("https://api.openai.com/v1/chat/completions") },
+            )
+        },
+    )
+
+    SettingsRow(
+        title = stringResource(R.string.settings_api_key),
+        trailing = {
+            OutlinedTextField(
+                value = uiState.postProcessApiKey,
+                onValueChange = { viewModel.setPostProcessApiKey(it) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = if (uiState.isApiKeyVisible) {
+                    VisualTransformation.None
+                } else {
+                    PasswordVisualTransformation()
+                },
+                trailingIcon = {
+                    IconButton(onClick = { viewModel.toggleApiKeyVisibility() }) {
+                        Icon(
+                            imageVector = if (uiState.isApiKeyVisible) {
+                                Icons.Default.VisibilityOff
+                            } else {
+                                Icons.Default.Visibility
+                            },
+                            contentDescription = "Toggle",
+                        )
+                    }
+                },
+            )
+        },
+    )
+
+    HorizontalDivider()
+}
+
+@Composable
+fun AboutContent() {
+    var showLicenseDialog by remember { mutableStateOf(false) }
+
     if (showLicenseDialog) {
         AlertDialog(
             onDismissRequest = { showLicenseDialog = false },
@@ -94,229 +292,147 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.settings_title)) })
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            // ── Section: Audio ─────────────────────────────────────
-            SectionHeader(stringResource(R.string.settings_audio))
+    // ── Section: About ─────────────────────────────────────
+    SectionHeader(stringResource(R.string.settings_about))
 
-            SettingsRow(
-                title = stringResource(R.string.settings_idle_timeout),
-                trailing = {
-                    var expanded by remember { mutableStateOf(false) }
-                    val timeoutDisplay = when (uiState.idleTimeout) {
-                        Int.MAX_VALUE -> stringResource(R.string.settings_idle_timeout_never)
-                        else -> "${uiState.idleTimeout}s"
-                    }
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded },
-                    ) {
-                        OutlinedButton(
-                            onClick = { expanded = true },
-                            modifier = Modifier.menuAnchor(),
-                        ) {
-                            Text(timeoutDisplay)
-                        }
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false },
-                        ) {
-                            listOf(10, 30, 60, 120, Int.MAX_VALUE).forEach { seconds ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (seconds == Int.MAX_VALUE) stringResource(R.string.settings_idle_timeout_never) else "${seconds}s"
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.setIdleTimeout(seconds)
-                                        expanded = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                },
+    SettingsRow(
+        title = stringResource(R.string.settings_version),
+        trailing = { Text(BuildConfig.VERSION_NAME) },
+    )
+
+    SettingsRow(
+        title = stringResource(R.string.settings_licenses),
+        onClick = { showLicenseDialog = true },
+        trailing = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
             )
+        },
+    )
 
-            HorizontalDivider()
+    HorizontalDivider()
 
-            // ── Section: Text Injection ─────────────────────────────
-            SectionHeader(stringResource(R.string.settings_injection))
+    val context = LocalContext.current
+    SettingsRow(
+        title = "GitHub",
+        subtitle = "github.com/handy-org/handy",
+        onClick = {
+            val intent = android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse("https://github.com/handy-org/handy"),
+            )
+            context.startActivity(intent)
+        },
+        trailing = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+            )
+        },
+    )
+}
 
-            val app = LocalContext.current.applicationContext as HandyApplication
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
 
-            SettingsRow(
-                title = stringResource(R.string.settings_shizuku),
-                subtitle = stringResource(R.string.settings_shizuku_description),
-                trailing = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val shizukuStatus = try {
-                                    val pingOk = Shizuku.pingBinder()
-                                        val hasPerm = Shizuku.checkSelfPermission() == 0
-                            val svcConnected = app.shizukuInjector.isAvailable()
-                            when {
-                                !pingOk || !hasPerm -> androidx.compose.ui.graphics.Color.Red
-                                svcConnected -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
-                                else -> androidx.compose.ui.graphics.Color(0xFFFF9800)
-                            }
-                        } catch (_: Exception) {
-                            androidx.compose.ui.graphics.Color.Red
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(shizukuStatus)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Switch(
-                            checked = uiState.shizukuEnabled,
-                            onCheckedChange = { enabled ->
-                                if (enabled) {
-                                    try {
-                                        val pingOk = Shizuku.pingBinder()
-                                        val hasPerm = Shizuku.checkSelfPermission() == 0
-                                        if (!pingOk || !hasPerm) {
-                                            showShizukuDialog = true
-                                        } else {
-                                            viewModel.setShizukuEnabled(true)
-                                        }
-                                    } catch (_: Exception) {
-                                        showShizukuDialog = true
-                                    }
-                                } else {
-                                    viewModel.setShizukuEnabled(false)
-                                }
+    // ── Section: APLICACIÓN ──
+    SectionHeader("APLICACIÓN")
+
+    SettingsRow(
+        title = "Funciones Experimentales",
+        subtitle = "Activa funciones experimentales inestables",
+        trailing = {
+            Switch(
+                checked = uiState.experimentalEnabled,
+                onCheckedChange = { viewModel.setExperimentalEnabled(it) },
+            )
+        },
+    )
+
+    HorizontalDivider()
+
+    // ── Section: SALIDA ──
+    SectionHeader("SALIDA")
+
+    SettingsRow(
+        title = "Envío automático",
+        trailing = {
+            var expanded by remember { mutableStateOf(false) }
+            val options = listOf("disabled" to "Desactivado", "ime" to "Auto (IME)")
+            val displayText = options.firstOrNull { it.first == uiState.autoSend }?.second ?: "Desactivado"
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded },
+            ) {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true),
+                ) {
+                    Text(displayText)
+                }
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                ) {
+                    options.forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                viewModel.setAutoSend(value)
+                                expanded = false
                             },
                         )
                     }
-                },
+                }
+            }
+        },
+    )
+
+    HorizontalDivider()
+
+    // ── Section: TRANSCRIPCIÓN ──
+    SectionHeader("TRANSCRIPCIÓN")
+
+    SettingsRow(
+        title = "Voice Activity Detection",
+        subtitle = "Detección de actividad de voz",
+        trailing = {
+            Switch(
+                checked = uiState.vadEnabled,
+                onCheckedChange = { viewModel.setVadEnabled(it) },
             )
+        },
+    )
 
-            SettingsRow(
-                title = stringResource(R.string.settings_switch_keyboard),
-                trailing = {
-                    Button(
-                        onClick = {
-                            val imm = app.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                            imm.showInputMethodPicker()
-                        },
-                    ) {
-                        Text(stringResource(R.string.settings_switch))
-                    }
-                },
+    SettingsRow(
+        title = "Agregar Espacio Final",
+        subtitle = "Añade un espacio al final de la transcripción",
+        trailing = {
+            Switch(
+                checked = uiState.addFinalSpace,
+                onCheckedChange = { viewModel.setAddFinalSpace(it) },
             )
+        },
+    )
 
-            HorizontalDivider()
+    HorizontalDivider()
 
-            // ── Section: Battery Optimization ──────────────────────
-            SectionHeader(stringResource(R.string.settings_battery))
+    // ── Section: EXPERIMENTAL ──
+    SectionHeader("EXPERIMENTAL")
 
-            SettingsRow(
-                title = stringResource(R.string.settings_battery_exemption),
-                subtitle = stringResource(R.string.settings_battery_exemption_description),
-                trailing = {
-                    Switch(
-                        checked = uiState.batteryOptimizationExempt,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                val intent = Intent(
-                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-                                ).apply {
-                                    setData(Uri.parse("package:${app.packageName}"))
-                                }
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                try {
-                                    app.startActivity(intent)
-                                } catch (e: Exception) {
-                                    android.util.Log.w("HandySettings", "Battery opt intent failed: $e")
-                                }
-                            }
-                            viewModel.setBatteryOptimizationExempt(enabled)
-                        },
-                    )
-                },
+    SettingsRow(
+        title = "Post Procesamiento",
+        subtitle = "Procesar transcripción con LLM",
+        trailing = {
+            Switch(
+                checked = uiState.postProcessingEnabled,
+                onCheckedChange = { viewModel.setPostProcessingEnabled(it) },
             )
-
-            HorizontalDivider()
-
-            // ── Section: Post-Processing ────────────────────────────
-            SectionHeader(stringResource(R.string.settings_postproc))
-
-            SettingsRow(
-                title = stringResource(R.string.settings_llm_endpoint),
-                trailing = {
-                    OutlinedTextField(
-                        value = uiState.postProcessEndpoint,
-                        onValueChange = { viewModel.setPostProcessEndpoint(it) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("https://api.openai.com/v1/chat/completions") },
-                    )
-                },
-            )
-
-            SettingsRow(
-                title = stringResource(R.string.settings_api_key),
-                trailing = {
-                    OutlinedTextField(
-                        value = uiState.postProcessApiKey,
-                        onValueChange = { viewModel.setPostProcessApiKey(it) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = if (uiState.isApiKeyVisible) {
-                            VisualTransformation.None
-                        } else {
-                            PasswordVisualTransformation()
-                        },
-                        trailingIcon = {
-                            IconButton(onClick = { viewModel.toggleApiKeyVisibility() }) {
-                                Icon(
-                                    imageVector = if (uiState.isApiKeyVisible) {
-                                        Icons.Default.VisibilityOff
-                                    } else {
-                                        Icons.Default.Visibility
-                                    },
-                                    contentDescription = "Toggle",
-                                )
-                            }
-                        },
-                    )
-                },
-            )
-
-            HorizontalDivider()
-
-            // ── Section: About ─────────────────────────────────────
-            SectionHeader(stringResource(R.string.settings_about))
-
-            SettingsRow(
-                title = stringResource(R.string.settings_version),
-                trailing = { Text(BuildConfig.VERSION_NAME) },
-            )
-
-            SettingsRow(
-                title = stringResource(R.string.settings_licenses),
-                onClick = { showLicenseDialog = true },
-                trailing = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                    )
-                },
-            )
-        }
-    }
+        },
+    )
 }
 
 @Composable

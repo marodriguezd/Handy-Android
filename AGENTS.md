@@ -87,16 +87,16 @@ The Android port consists of:
 
 ### Kotlin App (`handy-android/app/`)
 - `HandyApplication.kt` — Process-wide singleton for EngineViewModel
-- `MainActivity.kt` — Compose navigation (Dictation, Models, Settings, History)
+- `MainActivity.kt` — Bottom navigation with 4 tabs (General, Modelos, Historial, Acerca de), shared SettingsViewModel
 - `viewmodel/EngineViewModel.kt` — State management for recording/transcription
 - `bridge/EngineBridge.kt` — JNI external fun declarations
 - `bridge/EngineCallback.kt` — Callback interface (Rust → Kotlin)
 - `ime/HandyInputMethodService.kt` — IME keyboard with dictation UI
 - `injection/` — Strategy pattern for text injection (Shizuku, IME, Clipboard)
 - `service/RecordingService.kt` — Foreground service for persistent recording
-- `ui/dictation/DictationScreen.kt` — Dictation test screen
 
-## Current State (Checkpoint — July 16, 2026)
+
+## Current State (Checkpoint — July 16, 2026 — Sprint 10 Fixes)
 
 ### ✅ Working — Functional State
 - Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
@@ -119,9 +119,10 @@ The Android port consists of:
 - Cancel download now properly notifies UI via complete_cb
 - Skip download (onboarding) now cancels Rust download
 - No OOM limit — user can activate any model size
-- **IME Redesign (Sprint 9)** — Complete rewrite matching PC overlay design:
-  - Full-width voice panel with PC-overlay-matching UI (surface color, border, rounded corners)
-  - **Auto-commit text** — Transcription auto-inserts via `InputConnection.commitText()` (no confirm step, like Wispr Flow)
+- **IME Redesign (Sprint 9)** — Complete rewrite matching Wispr Flow floating pill design:
+  - Floating pill UI with transparent window background, full rounded corners (28.dp), and elevation shadows instead of a full-width bottom sheet. Bottom padding increased to 56.dp to avoid overlap with system navigation bar.
+  - **Auto-commit text** — Transcription auto-inserts via `InputConnection.commitText()` (no confirm step, like Wispr Flow). Fixed bug where multiple dictations in same field failed to reset `autoCommitted` flag.
+  - **Flicker fix** — Removed eager UI state update to `STATE_LISTENING` in `startRecording()`. UI now waits for Rust engine callback to avoid IDLE -> LISTENING -> IDLE -> LISTENING visual bounce.
   - **4 visual states**: Idle (mic pill + keyboard switch), Recording (9-bar waveform + MM:SS timer + stop), Transcribing (Material3 spinner + cancel), Error (message + retry)
   - **Smooth animations**: Pop-in (460ms cubic-bezier), pulsing dot (1.9s), phase-offset waveform bars, timer
   - **Theme-aware colors** via `MaterialTheme.colorScheme` (light/dark mode support)
@@ -129,13 +130,14 @@ The Android port consists of:
   - **Model availability check** in `startRecording()` — shows error if no model is downloaded
   - **confirmInsert failure handling** — Shows `STATE_ERROR` instead of silently resetting
   - **Keyboard switcher** via `InputMethodManager.showInputMethodPicker()` with try-catch fallback to settings
-- **IME crash fixed** — Uses `ImeContainer` (FrameLayout + LifecycleOwner) with reflection on stable class name `androidx.lifecycle.ViewTreeLifecycleOwner` (not `R$id`) to set lifecycle owner, fixing `ClassNotFoundException` + `IllegalStateException: ViewTreeLifecycleOwner not found`
+- **IME ViewTreeLifecycleOwner CRITICAL FIX** — Jetpack Compose's `WindowRecomposer` searches for the `ViewTreeLifecycleOwner` starting from the window's `rootView` (the `parentPanel` LinearLayout in the IME). Setting the owner on the `ComposeView` is NOT ENOUGH and causes `IllegalStateException`. FIX: Extract the dialog's `DecorView` in `onCreateInputView()` (`this.window?.window?.decorView`) and explicitly call `setViewTreeLifecycleOwner`, `setViewTreeViewModelStoreOwner`, and `setViewTreeSavedStateRegistryOwner` on it before calling `setContent`. This is the definitive canonical fix for Compose in InputMethodService.
 - **Auto-activate model after download** — `EngineViewModel.onDownloadComplete()` calls `nativeSetActiveModel()` automatically so the model is immediately usable
 - **ModelCard languages in multi-row** — `FlowRow` with per-language chips instead of single truncated chip
 - **ModelCard layout fixed** — Column-based layout with 3 rows (title, languages+size, action buttons)
 - **Onboarding default model** — Parakeet TDT 0.6B v3 (485 MB) instead of Whisper Small
 - **Cancel behavior** — Shows "Download canceled" with retry button instead of "Model Ready"
 - **Retry download** — Fixed race condition where retry after cancel would not restart download
+- **Skip download infinite loop** — Added `skipped` flag to `OnboardingViewModel` so clicking "Skip" doesn't immediately auto-trigger the download collector again.
 
 ### ❌ Known Limitations
 - Whisper Tiny struggles with long phrases containing proper nouns (e.g., "Handy para Android" → "han de parandro")
@@ -146,6 +148,7 @@ The Android port consists of:
 - No streaming live text display during recording (batch transcription only)
 - `onComputeInsets` removed — IME height may cause unexpected layout shifts in host apps
 - Gradle `buildRust` task rebuilds Rust in debug mode without `RUSTFLAGS`, overwriting release `.so`
+- `DictationScreen.kt` removed — no standalone dictation test UI (IME is the primary interface)
 
 ### 🔧 Critical Fixes Applied
 | # | Round | Fix | Details |
@@ -158,7 +161,7 @@ The Android port consists of:
 | 6 | 1 | **NDK linker fixes** | Injected `CMAKE_ARGS` and dummy `libpthread.a` for transcribe-cpp build |
 | 7 | 1 | **Cancel download UX** | Tokio task now calls `complete_cb(false, "Download cancelled")` on cancel; OnboardingViewModel cancel skip also cancels Rust download |
 | 8 | 1 | **OOM limit removed** | Removed 1600MB limit from `set_active_model()` — user chooses freely |
-| 9 | 1 | **IME ViewTreeLifecycleOwner (v2)** | Uses reflection on stable `androidx.lifecycle.ViewTreeLifecycleOwner` class name with `getMethod("set", ...)` — NOT `R$id` which caused `ClassNotFoundException` on some devices |
+| 9 | 1 | **IME ViewTreeLifecycleOwner (v3)** | CANONICAL FIX: Compose `WindowRecomposer` checks `view.rootView`. Extracted `dialogWindow.decorView` in `onCreate()` and `onCreateInputView()` and set standard AndroidX ViewTree extensions on it. Removes all reflection hacks and permanently fixes `IllegalStateException`. |
 | 10 | 1 | **Auto-activate on download** | Added `nativeSetActiveModel(modelId)` call in `EngineViewModel.onDownloadComplete()` before `refreshModels()` |
 | 11 | 1 | **ModelCard languages** | Changed from single `Surface` chip + ellipsis to `FlowRow` with per-language chips via `model.language.split(",")` |
 | 12 | 1 | **IME auto-commit** | Transcription auto-inserts via `InputConnection.commitText()` — no confirm step needed |
@@ -171,6 +174,36 @@ The Android port consists of:
 | 19 | 2 | **UI exclusivity (two buttons)** | Replaced 5 overlapping `if` blocks with `when` — exactly one UI state visible at a time |
 | 20 | 2 | **ImeContainer init ordering** | Moved `ViewTreeLifecycleOwner` reflection from `onAttachedToWindow()` to `init{}` (before `addView()`) to fix depth-first timing |
 | 21 | 2 | **ProGuard rules** | Added `-keep class androidx.lifecycle.ViewTreeLifecycleOwner { *; }` for release build reflection safety |
+| 22 | 2 | **IME Bottom Padding** | Added `bottom = 56.dp` padding to `HandyVoiceBar` so the floating pill doesn't overlap the system nav bar / keyboard switcher |
+| 23 | 2 | **IME Flicker Fix** | Removed eager `_state.value = STATE_LISTENING` in `startRecording()` to wait for native callback, eliminating visual bounce |
+| 24 | 3 | **Loading state flicker** | Set `_state = STATE_LOADING` immediately in `startRecording()` + suppress `STATE_IDLE` during `STATE_LOADING` in `onStateChange()` to prevent native `nativeLoadModel` transient IDLE from flashing the idle bar |
+| 25 | 3 | **Auto-commit StateFlow conflation** | Moved auto-insert from IME lifecycleScope collector into `EngineViewModel.onTranscription()` with `@Volatile _imeModeEnabled` flag. Fixes race where Rust `nativeFinalizeStream` dispatches CONFIRM then immediately IDLE on the same IO thread, causing StateFlow to conflate CONFIRM before the main-thread collector can process it |
+| 26 | 3 | **Rust idle dispatch after transcription** | Modified `nativeFinalizeStream` to NOT dispatch `STATE_IDLE` after successful transcription — Kotlin manages state transition after auto-injection. Error/no-audio paths still dispatch IDLE for state reset |
+| 27 | 3 | **IME clickable area** | Moved IdleBar clickable from inner Surface to outermost Box so the entire pill (including padding) is a valid touch target |
+| 28 | 3 | **Shared SettingsViewModel** | Unificado en `MainActivity.setContent` — instancia única de SettingsViewModel para generalTabContent, advancedTabContent y postProcessTabContent. Elimina datos fuera de sincronía entre pestañas. |
+| 29 | 3 | **menuAnchor() deprecation** | Reemplazado `Modifier.menuAnchor()` por `Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true)` en SettingsScreen.kt. Cero warnings de compilación. |
+| 30 | 3 | **DictationScreen eliminado** | Archivo `ui/dictation/DictationScreen.kt` y directorio removidos — sin ruta, sin referencias. |
+
+### ✅ Sprint 10 Completado — Rediseño de Interfaz de App
+
+**Objetivo cumplido:** Interfaz premium alineada con el escritorio. Paleta oscura/crema + rosa pastel, BottomNavigationBar con 4 pestañas, TabRow para sub-secciones.
+
+| Componente | Descripción |
+|---|---|
+| `Color.kt` | Nueva paleta: `#252422` fondo, `#2C2B29` surface, `#F48FB1` acento, `#F0EDE9` texto |
+| `Theme.kt` | Tema oscuro fijo (darkColorScheme), sin dynamicColor |
+| `Screen.kt` | 5 rutas: Onboarding, General, Models, History, About |
+| `AppNavigation.kt` | Bottom nav 4 ítems (General ⚙️, Modelos 🔧, Historial 📅, Acerca de ℹ️) + TabRow |
+| `MainActivity.kt` | SettingsViewModel compartido entre 3 pestañas |
+| `SettingsScreen.kt` | 4 composables: GeneralSettingsContent, PostProcessContent, AboutContent (con GitHub link), AdvancedSettingsContent (con 4 secciones desktop) |
+| `DictationScreen.kt` | **Eliminado** — código muerto |
+
+**Settings añadidas (SharedPreferences):**
+- `experimentalEnabled` (Boolean) — Funciones Experimentales
+- `vadEnabled` (Boolean) — Voice Activity Detection
+- `addFinalSpace` (Boolean) — Agregar Espacio Final
+- `postProcessingEnabled` (Boolean) — Post Procesamiento toggle
+- `autoSend` (String: "disabled"|"ime") — Envío automático
 
 ### 📋 Model Catalog — 65 Models (all from Handy PC)
 | Priority | Model | Size | Why |

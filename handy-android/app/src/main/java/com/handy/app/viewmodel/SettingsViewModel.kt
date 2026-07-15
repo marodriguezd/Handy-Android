@@ -28,6 +28,11 @@ class SettingsViewModel(
         val postProcessApiKey: String = "",
         val isApiKeyVisible: Boolean = false,
         val batteryOptimizationExempt: Boolean = false,
+        val experimentalEnabled: Boolean = false,
+        val vadEnabled: Boolean = true,
+        val addFinalSpace: Boolean = false,
+        val postProcessingEnabled: Boolean = true,
+        val autoSend: String = "disabled",
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -40,6 +45,11 @@ class SettingsViewModel(
             postProcessEndpoint = settingsStore.postProcessEndpoint,
             postProcessApiKey = settingsStore.postProcessApiKey,
             batteryOptimizationExempt = settingsStore.batteryOptimizationExempt,
+            experimentalEnabled = settingsStore.experimentalEnabled,
+            vadEnabled = settingsStore.vadEnabled,
+            addFinalSpace = settingsStore.addFinalSpace,
+            postProcessingEnabled = settingsStore.postProcessingEnabled,
+            autoSend = settingsStore.autoSend,
         )
     }
 
@@ -83,11 +93,42 @@ class SettingsViewModel(
         _uiState.update { it.copy(batteryOptimizationExempt = exempt) }
     }
 
+    fun setExperimentalEnabled(enabled: Boolean) {
+        settingsStore.experimentalEnabled = enabled
+        _uiState.update { it.copy(experimentalEnabled = enabled) }
+    }
+
+    fun setVadEnabled(enabled: Boolean) {
+        settingsStore.vadEnabled = enabled
+        _uiState.update { it.copy(vadEnabled = enabled) }
+    }
+
+    fun setAddFinalSpace(enabled: Boolean) {
+        settingsStore.addFinalSpace = enabled
+        _uiState.update { it.copy(addFinalSpace = enabled) }
+    }
+
+    fun setPostProcessingEnabled(enabled: Boolean) {
+        settingsStore.postProcessingEnabled = enabled
+        _uiState.update { it.copy(postProcessingEnabled = enabled) }
+        debounceApplySettings()
+    }
+
+    fun setAutoSend(value: String) {
+        settingsStore.autoSend = value
+        _uiState.update { it.copy(autoSend = value) }
+    }
+
     private fun buildSettings() = AppSettings(
         idleTimeout = _uiState.value.idleTimeout,
         shizukuEnabled = _uiState.value.shizukuEnabled,
         postProcessEndpoint = _uiState.value.postProcessEndpoint,
         postProcessApiKey = _uiState.value.postProcessApiKey,
         batteryOptimizationExempt = _uiState.value.batteryOptimizationExempt,
+        experimentalEnabled = _uiState.value.experimentalEnabled,
+        vadEnabled = _uiState.value.vadEnabled,
+        addFinalSpace = _uiState.value.addFinalSpace,
+        postProcessingEnabled = _uiState.value.postProcessingEnabled,
+        autoSend = _uiState.value.autoSend,
     )
 }
