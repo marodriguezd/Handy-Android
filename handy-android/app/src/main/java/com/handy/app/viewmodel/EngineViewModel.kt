@@ -1,6 +1,7 @@
 package com.handy.app.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.handy.app.bridge.EngineBridge
@@ -25,6 +26,7 @@ class EngineViewModel(
 ) : AndroidViewModel(application), EngineCallback {
 
     companion object {
+        private const val TAG = "EngineVM"
         const val STATE_IDLE = 0
         const val STATE_LOADING = 1
         const val STATE_LISTENING = 2
@@ -93,13 +95,33 @@ class EngineViewModel(
     // ── Public API ─────────────────────────────────────────────
 
     fun startRecording() {
+        val current = _state.value
+        Log.d(TAG, "startRecording: currentState=$current")
+        if (current == STATE_LISTENING || current == STATE_TRANSCRIBING) {
+            Log.w(TAG, "startRecording: already recording, ignoring")
+            return
+        }
         _finalText.value = null
         _partialText.value = ""
+        _lastErrorMessage.value = null
         _state.value = STATE_LISTENING
         RecordingService.start(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
+            Log.d(TAG, "nativeLoadModel starting...")
             EngineBridge.nativeLoadModel()
+            Log.d(TAG, "nativeLoadModel done, checking if model loaded...")
+            val loaded = EngineBridge.nativeIsModelLoaded()
+            if (!loaded) {
+                Log.w(TAG, "nativeLoadModel reported model NOT loaded, checking active model...")
+                val models = EngineBridge.nativeGetAvailableModels()
+                val parsed = ModelInfo.fromJsonArray(models)
+                val active = parsed.firstOrNull { it.isActive }
+                val downloaded = parsed.firstOrNull { it.isDownloaded }
+                Log.w(TAG, "active=$active downloaded=$downloaded models=$models")
+            }
+            Log.d(TAG, "nativeStartRecording starting...")
             EngineBridge.nativeStartRecording(sampleRate = 16000, channelCount = 1)
+            Log.d(TAG, "nativeStartRecording done, isRecording=${EngineBridge.nativeIsRecording()}")
         }
     }
 

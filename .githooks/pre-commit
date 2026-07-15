@@ -1,0 +1,22 @@
+#!/bin/sh
+
+MAX_SIZE=$((100 * 1024 * 1024)) # 100 MB in bytes
+LARGE_FILES=""
+
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+    if [ -f "$file" ]; then
+        file_size=$(wc -c < "$file" | tr -d ' ')
+        if [ "$file_size" -ge "$MAX_SIZE" ]; then
+            LARGE_FILES="${LARGE_FILES}  ${file} ($(numfmt --to=iec $file_size))\n"
+        fi
+    fi
+done
+
+if [ -n "$LARGE_FILES" ]; then
+    echo "ERROR: The following files are >= 100 MB and cannot be committed:"
+    printf "$LARGE_FILES"
+    echo ""
+    echo "Add them to .gitignore or use Git LFS: https://git-lfs.github.com/"
+    echo "To skip this check (not recommended): git commit --no-verify"
+    exit 1
+fi

@@ -42,3 +42,14 @@ blob-report/
 
 # Nix build output
 result
+
+# Android build artifacts
+handy-android/**/build/
+handy-android/**/target/
+handy-android/**/*.apk
+handy-android/**/*.aab
+handy-android/**/*.so
+handy-android/**/*.rlib
+handy-android/**/*.a
+handy-android/**/*.o
+handy-android/.gradle/

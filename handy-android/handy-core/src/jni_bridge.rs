@@ -217,10 +217,14 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeLoadModel<'l
         with_engine(|state| {
             jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 1);
 
+            let active_id = state.model_manager.active_model_id();
+            info!("nativeLoadModel: active_model_id={:?}", active_id);
+
             let path = match state.model_manager.active_model_path() {
                 Some(p) => p,
                 None => {
-                    jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, "No active model selected");
+                    let msg = format!("No active model selected (active_id={:?})", active_id);
+                    jni_callback::dispatch_error(&mut attached_env, &state.callback, 1, &msg);
                     return;
                 }
             };
@@ -305,6 +309,8 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeStartRecordi
         };
 
         with_engine(|state| {
+            info!("nativeStartRecording: model_loaded={}, is_recording={}", state.model_loaded, state.is_recording);
+
             // Stop idle watcher (recording is active now)
             state.idle_watcher.stop();
 

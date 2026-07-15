@@ -1,9 +1,10 @@
 # Handy for Android — Master Technical Specification
 
-**Status:** Implementation in progress (Sprint 7 complete)  
+**Status:** Active development — Diagnóstico de grabación en curso  
 **Version:** 1.7.0  
 **Target:** Android 8.0+ (API 26), `targetSdk 35`  
-**Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
+**Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only  
+**Problem tracker:** See [`SPEC.md`](SPEC.md) for current issues, findings, and fixes applied.
 
 ---
 

@@ -30,6 +30,8 @@ class OnboardingViewModel(
 
     private var modelsViewModel: ModelsViewModel? = null
     private var downloadStarted = false
+    private var downloadTargetId: String? = null
+    private var activated = false
 
     fun nextStep() {
         val next = _uiState.value.currentStep + 1
@@ -70,8 +72,9 @@ class OnboardingViewModel(
     private fun initModelDownload() {
         if (modelsViewModel != null) return
         modelsViewModel = modelsViewModelFactory()
+        val mv = modelsViewModel!!
         viewModelScope.launch {
-            modelsViewModel!!.uiState.collect { modelState ->
+            mv.uiState.collect { modelState ->
                 val event = modelState.activeDownloadId?.let { modelState.downloads[it] }
                 if (event != null) {
                     _uiState.update {
@@ -83,20 +86,37 @@ class OnboardingViewModel(
                         )
                     }
                 }
+
+                // Find any completed download in the map (even if activeDownloadId was consumed)
+                val completedId = modelState.downloads.entries
+                    .firstOrNull { (_, e) -> e.isComplete && e.error == null }
+                    ?.key
+                if (completedId != null && !activated) {
+                    activated = true
+                    _uiState.update { it.copy(isDownloadReady = true, isDownloading = false) }
+                    mv.setActiveModel(completedId)
+                }
+
                 if (!downloadStarted && modelState.models.isNotEmpty() && !modelState.isLoading) {
                     val models = modelState.models
                     val target = models.firstOrNull { it.recommended && !it.isDownloaded }
                         ?: models.firstOrNull { !it.isDownloaded }
                     if (target != null && !modelState.downloads.containsKey(target.id)) {
                         downloadStarted = true
+                        downloadTargetId = target.id
                         _uiState.update { it.copy(isDownloading = true) }
-                        modelsViewModel!!.downloadModel(target.id)
+                        mv.downloadModel(target.id)
                     } else if (models.all { it.isDownloaded }) {
                         _uiState.update { it.copy(isDownloadReady = true) }
+                        val id = downloadTargetId ?: models.firstOrNull { it.isDownloaded }?.id
+                        if (id != null && !activated) {
+                            activated = true
+                            mv.setActiveModel(id)
+                        }
                     }
                 }
             }
         }
-        modelsViewModel!!.loadModels()
+        mv.loadModels()
     }
 }

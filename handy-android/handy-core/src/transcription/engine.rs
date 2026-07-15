@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use log::info;
+use log::{info, warn};
 use transcribe_cpp::{Backend, Model, ModelOptions};
 
 use crate::transcription::router::{StreamCmd, StreamRouter};
@@ -54,8 +54,20 @@ impl TranscriptionEngine {
             gpu_device: -1,
         };
 
-        let model = Model::load_with(path, &model_options)
-            .map_err(|e| format!("Failed to load model: {e}"))?;
+        // Check file exists and is readable
+        match std::fs::metadata(path) {
+            Ok(meta) => info!("[handy-core] model file: {} bytes", meta.len()),
+            Err(e) => warn!("[handy-core] model file metadata failed: {e}"),
+        }
+
+        let model = match Model::load_with(path, &model_options) {
+            Ok(m) => m,
+            Err(e) => {
+                let err_msg = format!("Failed to load model: {e}");
+                warn!("[handy-core] {err_msg}");
+                return Err(err_msg);
+            }
+        };
 
         self.active_model_path = Some(path.clone());
         *self.model.lock().unwrap() = Some(model);
