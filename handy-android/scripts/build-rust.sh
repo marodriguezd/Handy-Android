@@ -16,7 +16,7 @@ fi
 export CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME:-$NDK}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24"
 
 echo "Building for aarch64-linux-android..."
-(cd "$CORE_DIR" && cargo ndk --target aarch64-linux-android --platform 26 -- -p handy-core build --release)
+(cd "$CORE_DIR" && cargo ndk --target aarch64-linux-android --platform 26 build --release)
 
 mkdir -p "$JNILIBS_DIR/arm64-v8a"
 cp "$CORE_DIR/target/aarch64-linux-android/release/libhandy_core.so" "$JNILIBS_DIR/arm64-v8a/libhandy_core.so"
@@ -24,7 +24,7 @@ echo "Copied libhandy_core.so to jniLibs/arm64-v8a/"
 
 if rustup target list --installed | grep -q "x86_64-linux-android"; then
     echo "Building for x86_64-linux-android..."
-    (cd "$CORE_DIR" && cargo ndk --target x86_64-linux-android --platform 26 -- -p handy-core build --release)
+    (cd "$CORE_DIR" && cargo ndk --target x86_64-linux-android --platform 26 build --release)
 
     mkdir -p "$JNILIBS_DIR/x86_64"
     cp "$CORE_DIR/target/x86_64-linux-android/release/libhandy_core.so" "$JNILIBS_DIR/x86_64/libhandy_core.so"

@@ -155,10 +155,8 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeInit<'local>
                 }
             });
 
-            let router = state.transcription_engine.router();
-            state.audio_pipeline.set_audio_callback(move |frame: Vec<f32>| {
-                router.feed(frame);
-            });
+            // No audio callback needed for batch — audio accumulates in pipeline buffer
+            // and will be processed at finalize via transcription_engine.run().
         });
 
         info!("Handy engine initialized");
@@ -181,7 +179,7 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDestroy<'loc
             state.idle_watcher.stop();
             if state.is_recording {
                 let _ = state.audio_pipeline.cancel();
-                state.transcription_engine.cancel_stream();
+                state.transcription_engine.cancel();
                 state.is_recording = false;
             }
             state.transcription_engine.unload_model();
@@ -314,38 +312,16 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeStartRecordi
             // Stop idle watcher (recording is active now)
             state.idle_watcher.stop();
 
-            let cb_partial = state.callback.clone();
-            let on_partial = move |text: String| {
-                if let Ok(mut env) = get_env_attached() {
-                    jni_callback::dispatch_transcription(&mut env, &cb_partial, &text, true);
-                }
-            };
-
-            let cb_final = state.callback.clone();
-            let on_final = move |text: String| {
-                if let Ok(mut env) = get_env_attached() {
-                    jni_callback::dispatch_transcription(&mut env, &cb_final, &text, false);
-                }
-            };
-
-            match state.transcription_engine.start_stream(on_partial, on_final) {
-                Ok(worker_id) => {
-                    state.worker_id = Some(worker_id);
-                }
-                Err(e) => {
-                    jni_callback::dispatch_error(&mut attached_env, &state.callback, 2, &e);
-                    return;
-                }
-            }
+            // No streaming session needed — audio accumulates in pipeline buffer
+            // for batch processing via session.run() at finalize time.
 
             if let Err(e) = state.audio_pipeline.start(sample_rate) {
-                state.transcription_engine.cancel_stream();
                 jni_callback::dispatch_error(&mut attached_env, &state.callback, 2, &e);
                 return;
             }
 
             state.is_recording = true;
-            info!("Recording started with worker_id={}", state.worker_id.unwrap_or(0));
+            info!("Recording started");
             jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 2);
         });
     });
@@ -435,28 +411,27 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStre
                 }
             };
 
-            if !accumulated.is_empty() {
-                state.transcription_engine.router().feed(accumulated);
-            }
+            state.is_recording = false;
 
-            if let Some(worker_id) = state.worker_id.take() {
-                match state.transcription_engine.finalize_stream(worker_id) {
+            if accumulated.is_empty() {
+                warn!("nativeFinalizeStream: no audio captured");
+                jni_callback::dispatch_error(&mut env, &state.callback, 3, "No audio captured");
+            } else {
+                info!("nativeFinalizeStream: {} samples accumulated", accumulated.len());
+
+                // Run batch transcription (correct API for Whisper GGUF models)
+                match state.transcription_engine.run(&accumulated) {
                     Ok(text) => {
                         info!("Final transcription: {}", text);
                         let processed = crate::transcription::engine::post_process(&text);
                         jni_callback::dispatch_transcription(&mut env, &state.callback, &processed, false);
                     }
                     Err(e) => {
-                        warn!("nativeFinalizeStream: finalize failed: {e}");
+                        warn!("nativeFinalizeStream: run failed: {e}");
                         jni_callback::dispatch_error(&mut env, &state.callback, 3, &e);
                     }
                 }
-            } else {
-                warn!("nativeFinalizeStream: no active worker");
-                jni_callback::dispatch_error(&mut env, &state.callback, 3, "No active stream");
             }
-
-            state.is_recording = false;
 
             // Start idle watcher
             state.idle_watcher.start();
@@ -484,8 +459,7 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeCancelRecord
 
         with_engine(|state| {
             let _ = state.audio_pipeline.cancel();
-            state.transcription_engine.cancel_stream();
-            state.worker_id = None;
+            state.transcription_engine.cancel();
             state.is_recording = false;
 
             // Start idle watcher

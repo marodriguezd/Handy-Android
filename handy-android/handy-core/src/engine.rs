@@ -21,7 +21,6 @@ pub struct EngineState {
     pub model_manager: ModelManager,
     pub history_manager: HistoryManager,
     pub idle_watcher: crate::idle_watcher::IdleWatcher,
-    pub worker_id: Option<u64>,
 }
 
 impl EngineState {
@@ -46,7 +45,6 @@ impl EngineState {
             model_manager: ModelManager::new(&model_dir),
             history_manager,
             idle_watcher: crate::idle_watcher::IdleWatcher::new(),
-            worker_id: None,
         }
     }
 

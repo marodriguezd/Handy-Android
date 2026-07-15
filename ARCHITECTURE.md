@@ -1,10 +1,11 @@
 # Handy for Android — Master Technical Specification
 
-**Status:** Active development — Diagnóstico de grabación en curso  
-**Version:** 1.7.0  
-**Target:** Android 8.0+ (API 26), `targetSdk 35`  
-**Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only  
+**Status:** Active development — Dictado funcional (batch transcription con Whisper GGUF via `session.run()`)
+**Version:** 1.8.0
+**Target:** Android 8.0+ (API 26), `targetSdk 35`
+**Architecture:** `aarch64-linux-android` (arm64-v8a) mandatory; `x86_64-linux-android` for emulator only
 **Problem tracker:** See [`SPEC.md`](SPEC.md) for current issues, findings, and fixes applied.
+**Key milestone:** ✅ Model loads, audio captures, batch transcription runs — resultado: "you" (precisión pendiente de mejora)
 
 ---
 
@@ -779,12 +780,15 @@ PipelineInner (process_samples)
 //   2. AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_INPUT)
 //   3. AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_SHARED)
 //   4. AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_FLOAT)
-//   5. AAudioStreamBuilder_setSampleRate(builder, 16000)
-//   6. AAudioStreamBuilder_setChannelCount(builder, 1)
-//   7. AAudioStreamBuilder_setDataCallback(builder, data_callback_thunk, user_data)
-//   8. AAudioStreamBuilder_setErrorCallback(builder, error_callback_thunk, user_data)
-//   9. AAudioStreamBuilder_openStream(builder, &mut stream_ptr)
+//   5. AAudioStreamBuilder_setChannelCount(builder, 1)  // mono
+//   6. AAudioStreamBuilder_setDataCallback(builder, data_callback_thunk, user_data)
+//   7. AAudioStreamBuilder_setErrorCallback(builder, error_callback_thunk, user_data)
+//   8. AAudioStreamBuilder_openStream(builder, &mut stream_ptr)
+//   9. AAudioStream_getSampleRate(stream_ptr)  ← query ACTUAL device rate
 //   10. AAudioStream_requestStart(stream_ptr)
+//
+// KEY: Do NOT call AAudioStreamBuilder_setSampleRate() — use device's native rate.
+// The actual rate is queried after opening and used to configure the resampler.
 ```
 
 **Fallback path:** Stored in `RecordingService.kt` (AudioRecord-based capture via `nativePushAudio`). The RecordingService is NOT started by default — AAudio is the sole capture source. RecordingService serves as a fallback for devices where AAudio is unavailable and can be enabled for troubleshooting.

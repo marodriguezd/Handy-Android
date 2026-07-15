@@ -43,7 +43,9 @@ impl AudioCapture {
         );
     }
 
-    pub fn start(&mut self) -> Result<(), CaptureError> {
+    /// Start capture and return the actual sample rate of the opened stream.
+    /// Does NOT request a specific rate — uses the device's native rate and reports it back.
+    pub fn start(&mut self) -> Result<u32, CaptureError> {
         if self.stream_ptr.is_some() {
             return Err(CaptureError::AlreadyOpen);
         }
@@ -74,7 +76,8 @@ impl AudioCapture {
                 builder_ptr,
                 aaudio_sys::FORMAT_PCM_FLOAT,
             );
-            aaudio_sys::AAudioStreamBuilder_setSampleRate(builder_ptr, 16000);
+            // Do NOT request a specific sample rate — use device's native rate.
+            // We'll query the actual rate after opening and resample to 16kHz.
             aaudio_sys::AAudioStreamBuilder_setChannelCount(builder_ptr, 1);
             aaudio_sys::AAudioStreamBuilder_setDataCallback(
                 builder_ptr,
@@ -104,6 +107,11 @@ impl AudioCapture {
             )));
         }
 
+        // Query the actual sample rate of the opened stream
+        let actual_rate = unsafe { aaudio_sys::AAudioStream_getSampleRate(stream_ptr) };
+        let actual_rate = if actual_rate > 0 { actual_rate as u32 } else { 48000 };
+        log::info!("AAudio stream opened: {} Hz", actual_rate);
+
         let result = unsafe { aaudio_sys::AAudioStream_requestStart(stream_ptr) };
         if result != aaudio_sys::OK {
             unsafe {
@@ -118,7 +126,7 @@ impl AudioCapture {
         self.stream_ptr = Some(stream_ptr);
         self.running.store(true, Ordering::SeqCst);
 
-        Ok(())
+        Ok(actual_rate as u32)
     }
 
     extern "C" fn data_callback_thunk(

@@ -33,17 +33,29 @@ impl std::fmt::Display for ModelError {
 impl std::error::Error for ModelError {}
 
 fn model_download_url(model_id: &str) -> Option<String> {
-    let hf_name = match model_id {
-        "whisper-tiny-q5_1" => "ggml-tiny-q5_1.bin",
-        "whisper-tiny-en-q5_1" => "ggml-tiny.en-q5_1.bin",
-        "whisper-base-q5_1" => "ggml-base-q5_1.bin",
-        "whisper-small-q5_1" => "ggml-small-q5_1.bin",
-        "whisper-medium-q5_1" => "ggml-medium-q5_1.bin",
-        _ => return None,
-    };
-    Some(format!(
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{hf_name}"
-    ))
+    match model_id {
+        "whisper-tiny-Q5_K_M" => Some(
+            "https://huggingface.co/handy-computer/whisper-tiny-gguf/resolve/main/whisper-tiny-Q5_K_M.gguf"
+                .into(),
+        ),
+        "whisper-base-Q5_K_M" => Some(
+            "https://huggingface.co/handy-computer/whisper-base-gguf/resolve/main/whisper-base-Q5_K_M.gguf"
+                .into(),
+        ),
+        "whisper-small-Q5_K_M" => Some(
+            "https://huggingface.co/handy-computer/whisper-small-gguf/resolve/main/whisper-small-Q5_K_M.gguf"
+                .into(),
+        ),
+        "whisper-medium-Q5_K_M" => Some(
+            "https://huggingface.co/handy-computer/whisper-medium-gguf/resolve/main/whisper-medium-Q5_K_M.gguf"
+                .into(),
+        ),
+        "parakeet-unified-en-0.6b-Q4_K_M" => Some(
+            "https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf/resolve/main/parakeet-unified-en-0.6b-Q4_K_M.gguf"
+                .into(),
+        ),
+        _ => None,
+    }
 }
 
 struct DownloadState {

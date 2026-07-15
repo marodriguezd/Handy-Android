@@ -14,35 +14,45 @@ struct PipelineInner {
     audio_buffer: Vec<f32>,
     on_vad_level: Option<Arc<dyn Fn(f32) + Send + Sync>>,
     on_audio_frame: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync>>,
+    /// The actual sample rate of the capture stream (device native rate).
+    capture_sample_rate: u32,
+}
+
+/// Boost quiet audio to [-1, 1] range for better Whisper recognition.
+fn normalize_audio(samples: &mut [f32]) {
+    let peak = samples
+        .iter()
+        .map(|&s| s.abs())
+        .fold(0.0f32, f32::max);
+    if peak > 0.001 && peak < 0.3 {
+        let gain = (0.5 / peak).min(10.0);
+        log::debug!("AGC: boosting audio gain by {:.1}x (peak was {:.4})", gain, peak);
+        for s in samples.iter_mut() {
+            *s *= gain;
+        }
+    }
 }
 
 impl PipelineInner {
     fn process_samples(&mut self, samples: &[f32]) {
-        const MAX_BUFFER_SAMPLES: usize = 300 * 16000; // ~19.2MB float32
+        const MAX_BUFFER_SAMPLES: usize = 300 * 16000; // ~19.2MB float32 (at 16kHz equivalent)
         if self.audio_buffer.len() > MAX_BUFFER_SAMPLES {
             log::warn!("Audio buffer exceeded max ({} samples), truncating", MAX_BUFFER_SAMPLES);
             self.audio_buffer.clear();
         }
         self.resampler.push(samples, &mut |frame| {
-            let vad_result = self.smoothed_vad.push_frame(frame);
-            match vad_result {
-                VadFrame::Speech(data) => {
-                    self.audio_buffer.extend_from_slice(&data);
-                    if let Some(ref cb) = self.on_audio_frame {
-                        cb(data);
-                    }
-                    if let Some(ref cb) = self.on_vad_level {
-                        let energy = frame.iter().map(|&s| s * s).sum::<f32>() / frame.len() as f32;
-                        let level = (energy.sqrt() * 5.0).min(1.0);
-                        cb(level);
-                    }
-                }
-                VadFrame::Noise => {
-                    if let Some(ref cb) = self.on_vad_level {
-                        let energy = frame.iter().map(|&s| s * s).sum::<f32>() / frame.len() as f32;
-                        let level = (energy.sqrt() * 5.0).min(1.0);
-                        cb(level * 0.5);
-                    }
+            let mut frame = frame.to_vec();
+            normalize_audio(&mut frame);
+            self.audio_buffer.extend_from_slice(&frame);
+
+            // VAD still runs for the level meter visualization in the UI.
+            let vad_result = self.smoothed_vad.push_frame(&frame);
+            if let Some(ref cb) = self.on_vad_level {
+                let energy = frame.iter().map(|&s| s * s).sum::<f32>() / frame.len() as f32;
+                let level = (energy.sqrt() * 5.0).min(1.0);
+                match vad_result {
+                    VadFrame::Speech(_) => cb(level),
+                    VadFrame::Noise => cb(level * 0.5),
                 }
             }
         });
@@ -52,7 +62,6 @@ impl PipelineInner {
 pub struct AudioPipeline {
     capture: Option<AudioCapture>,
     inner: Arc<Mutex<PipelineInner>>,
-    sample_rate: u32,
     running: Arc<AtomicBool>,
 }
 
@@ -76,8 +85,8 @@ impl AudioPipeline {
                 audio_buffer: Vec::new(),
                 on_vad_level: None,
                 on_audio_frame: None,
+                capture_sample_rate: 0,
             })),
-            sample_rate: 0,
             running: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -98,18 +107,11 @@ impl AudioPipeline {
         guard.on_audio_frame = Some(Arc::new(cb));
     }
 
-    pub fn start(&mut self, sample_rate: u32) -> Result<(), String> {
+    /// Start capture, query the actual device sample rate, and configure the
+    /// resampler to convert from that rate to 16 kHz for the model.
+    pub fn start(&mut self, _requested_rate: u32) -> Result<(), String> {
         if self.running.load(Ordering::SeqCst) {
             return Err("Pipeline is already running".to_string());
-        }
-
-        self.sample_rate = sample_rate;
-
-        {
-            let mut guard = self.inner.lock().unwrap();
-            guard.resampler = FrameResampler::new(sample_rate, 16000);
-            guard.smoothed_vad.reset();
-            guard.audio_buffer.clear();
         }
 
         let inner = self.inner.clone();
@@ -125,12 +127,24 @@ impl AudioPipeline {
             }
         });
 
-        capture.start().map_err(|e| match e {
-            CaptureError::Aaudio(msg) => format!("AAudio: {}", msg),
+        // Start capture — returns the actual sample rate of the device
+        let actual_rate = capture.start().map_err(|e| match e {
+            CaptureError::Aaudio(msg) => format!("AAudio: {msg}"),
             CaptureError::AlreadyOpen => "Capture already open".to_string(),
             CaptureError::NotOpen => "Capture not open".to_string(),
-            CaptureError::Callback(msg) => format!("Callback: {}", msg),
+            CaptureError::Callback(msg) => format!("Callback: {msg}"),
         })?;
+
+        log::info!("Audio capture started at {} Hz (native device rate)", actual_rate);
+
+        // Configure resampler to convert from device rate → 16 kHz
+        {
+            let mut guard = self.inner.lock().unwrap();
+            guard.resampler = FrameResampler::new(actual_rate, 16000);
+            guard.smoothed_vad.reset();
+            guard.audio_buffer.clear();
+            guard.capture_sample_rate = actual_rate;
+        }
 
         self.capture = Some(capture);
         self.running.store(true, Ordering::SeqCst);
@@ -160,31 +174,25 @@ impl AudioPipeline {
         let mut guard = self.inner.lock().unwrap();
         let mut result = std::mem::take(&mut guard.audio_buffer);
 
+        // Flush resampler and append all remaining audio.
         {
             let mut resampler = std::mem::replace(
                 &mut guard.resampler,
                 FrameResampler::new(16000, 16000),
             );
-            let mut extra = Vec::new();
             resampler.finish(|frame| {
-                extra.extend_from_slice(frame);
+                result.extend_from_slice(frame);
             });
-
-            for frame in extra.chunks(VAD_FRAME_SAMPLES) {
-                if frame.len() == VAD_FRAME_SAMPLES {
-                    let vad_result = guard.smoothed_vad.push_frame(frame);
-                    if let VadFrame::Speech(data) = vad_result {
-                        result.extend_from_slice(&data);
-                    }
-                } else {
-                    result.extend_from_slice(frame);
-                }
-            }
-
             guard.resampler = resampler;
         }
 
         guard.smoothed_vad.reset();
+
+        log::info!(
+            "Pipeline stopped: {} samples ({} s at 16 kHz)",
+            result.len(),
+            result.len() as f64 / 16000.0
+        );
 
         Ok(result)
     }

@@ -1,23 +1,14 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use log::{info, warn};
-use transcribe_cpp::{Backend, Model, ModelOptions};
-
-use crate::transcription::router::{StreamCmd, StreamRouter};
-use crate::transcription::worker::StreamWorker;
+use transcribe_cpp::{Backend, Model, ModelOptions, RunOptions, Task};
 
 pub struct TranscriptionEngine {
-    model_dir: Option<String>,
     active_model_path: Option<PathBuf>,
     model: Mutex<Option<Model>>,
-    router: Arc<StreamRouter>,
-    next_worker_id: AtomicU64,
-    active_worker: Mutex<Option<StreamWorker>>,
     is_loaded: AtomicBool,
-    last_final_result: Arc<Mutex<Option<String>>>,
     post_process_endpoint: Option<String>,
     post_process_api_key: Option<String>,
 }
@@ -25,33 +16,24 @@ pub struct TranscriptionEngine {
 impl TranscriptionEngine {
     pub fn new() -> Self {
         Self {
-            model_dir: None,
             active_model_path: None,
             model: Mutex::new(None),
-            router: Arc::new(StreamRouter::new()),
-            next_worker_id: AtomicU64::new(1),
-            active_worker: Mutex::new(None),
             is_loaded: AtomicBool::new(false),
-            last_final_result: Arc::new(Mutex::new(None)),
             post_process_endpoint: None,
             post_process_api_key: None,
         }
     }
 
-    pub fn router(&self) -> Arc<StreamRouter> {
-        self.router.clone()
-    }
-
-    pub fn set_model_dir(&mut self, dir: &str) {
-        self.model_dir = Some(dir.to_string());
-    }
-
     pub fn load_model(&mut self, path: &PathBuf) -> Result<(), String> {
         info!("[handy-core] loading model from: {:?}", path);
 
+        // Use explicit CPU backend (only backend available on Android).
+        // GPU device 0 is ignored for CPU backend but must NOT be -1, as
+        // whisper.cpp internally asserts gpu_device >= 0.
+        // This matches desktop Handy's convention for explicit CPU selection.
         let model_options = ModelOptions {
             backend: Backend::Cpu,
-            gpu_device: -1,
+            gpu_device: 0,
         };
 
         // Check file exists and is readable
@@ -87,75 +69,40 @@ impl TranscriptionEngine {
         self.is_loaded.load(Ordering::Acquire)
     }
 
-    pub fn start_stream(
-        &self,
-        on_partial: impl Fn(String) + Send + 'static,
-        on_final: impl Fn(String) + Send + 'static,
-    ) -> Result<u64, String> {
-        let worker_id = self.next_worker_id.fetch_add(1, Ordering::Relaxed);
-        let rx = self.router.open_channel();
-
+    /// Run batch transcription on a full PCM buffer using session.run().
+    /// This is the correct API for Whisper GGUF models (they don't support
+    /// streaming via session.stream()).
+    pub fn run(&self, pcm: &[f32]) -> Result<String, String> {
         let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
         let model = model_guard
             .as_mut()
             .ok_or_else(|| "No model loaded".to_string())?;
-        let session = model
+
+        let mut session = model
             .session()
             .map_err(|e| format!("Failed to create session: {e}"))?;
         drop(model_guard);
 
-        let last_result = self.last_final_result.clone();
-        let on_final = move |text: String| {
-            *last_result.lock().unwrap() = Some(text.clone());
-            on_final(text);
+        let run_options = RunOptions {
+            task: Task::Transcribe,
+            language: None,
+            target_language: None,
+            ..Default::default()
         };
 
-        let mut worker = StreamWorker::new(worker_id);
-        let _ret_session = worker.returned_session();
-        worker.spawn(rx, session, on_partial, on_final);
-        *self.active_worker.lock().unwrap() = Some(worker);
+        info!("[handy-core] running transcription on {} samples", pcm.len());
+        let transcript = session
+            .run(pcm, &run_options)
+            .map_err(|e| format!("Transcription run failed: {e}"))?;
 
-        // Store returned session handle for later pickup
-        // (no need to keep a field — the worker holds the Arc)
-
-        Ok(worker_id)
+        info!("[handy-core] transcription complete: {} chars", transcript.text.len());
+        Ok(transcript.text)
     }
 
-    pub fn finalize_stream(&self, worker_id: u64) -> Result<String, String> {
-        let t0 = Instant::now();
-        self.router
-            .send(StreamCmd::Finalize)
-            .map_err(|_| "failed to send Finalize: no active stream".to_string())?;
-
-        let mut guard = self.active_worker.lock().map_err(|e| e.to_string())?;
-        if let Some(mut worker) = guard.take() {
-            if worker.worker_id() != worker_id {
-                return Err("worker_id mismatch".to_string());
-            }
-            // After join, the worker thread has placed the Session back
-            worker.join();
-            // Pick up the returned session and save it in the model... actually,
-            // sessions are created from model on demand. The session was dropped
-            // after Finalize puts it in returned_session. Let's recreate.
-            // But wait — the returned session is lost if we don't save it.
-            // For now we accept creating a fresh session for the next stream.
-        } else {
-            return Err("no active worker".to_string());
-        }
-
-        log::debug!("finalize_stream total_latency_ms={}", t0.elapsed().as_millis());
-
-        self.last_final_result
-            .lock()
-            .map_err(|e| e.to_string())?
-            .take()
-            .ok_or_else(|| "no final result available".to_string())
-    }
-
-    pub fn cancel_stream(&self) {
-        let _ = self.router.send(StreamCmd::Cancel);
-        self.router.close();
-        *self.active_worker.lock().unwrap() = None;
+    pub fn cancel(&self) {
+        // Batch run is synchronous and can't be cancelled mid-flight easily.
+        // For now, just log the request.
+        info!("[handy-core] cancel requested (batch run synchronous)");
     }
 
     pub fn set_post_process_config(
