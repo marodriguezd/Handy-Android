@@ -82,6 +82,12 @@ cd handy-android/handy-core && cargo check
 cd handy-android && ./gradlew :app:compileDebugKotlin
 ```
 
+**Kotlin unit tests (no Android SDK / Robolectric required):**
+
+```bash
+cd handy-android && ./gradlew :app:testDebugUnitTest --tests "com.handy.app.capability.*"
+```
+
 ## Android Architecture Overview
 
 The Android port consists of:
@@ -98,14 +104,19 @@ The Android port consists of:
 - `HandyApplication.kt` — Process-wide singleton for EngineViewModel
 - `MainActivity.kt` — Bottom navigation with 4 tabs (General, Modelos, Historial, Acerca de), shared SettingsViewModel
 - `viewmodel/EngineViewModel.kt` — State management for recording/transcription (6 states: IDLE, LOADING, LISTENING, TRANSCRIBING, CONFIRM, ERROR)
+- `viewmodel/ModelsViewModel.kt` — Capability-tier-aware catalog promotion bucket (Sprint 15)
+- `viewmodel/OnboardingViewModel.kt` — Tier-aware download selection chain (Sprint 15)
 - `bridge/EngineBridge.kt` — JNI external fun declarations
 - `bridge/EngineCallback.kt` — Callback interface (Rust → Kotlin)
 - `ime/HandyInputMethodService.kt` — IME keyboard with dictation UI (5 visual states, animated transitions)
 - `injection/` — Strategy pattern for text injection (IME → Shizuku → Clipboard)
 - `service/RecordingService.kt` — Foreground service for persistent recording
+- `capability/` — DeviceTier / CapabilitySnapshot / ModelCapability / CompatibilityResolver (Sprint 14) + MobileRecommendations (Sprint 15)
+- `assets/mobile_recommended.json` — Curated tier-aware model subset (Sprint 15)
+- `test/` — JUnit 4 unit tests for `capability/` (Sprint 15)
 
 
-## Current State (Checkpoint — July 16, 2026 — Sprint 14 — Capability-Aware Model Catalog + Observability)
+## Current State (Checkpoint — July 16, 2026 — Sprint 15 — Curated Mobile Recommended Subset + Capability Tests)
 
 ### ✅ Working — Functional State
 - Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
@@ -128,6 +139,34 @@ The Android port consists of:
 - Cancel download now properly notifies UI via complete_cb
 - Skip download (onboarding) now cancels Rust download
 - No OOM limit — user can activate any model size
+
+### ✅ Sprint 15 — New Implementations
+
+#### Subset Curado Móvil (`assets/` + `capability/MobileRecommendations.kt`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **`mobile_recommended.json`** | Curated 19-model subset organized by 5 [DeviceTier] (LOW / MID / HIGH / FLAGSHIP / TABLET). Each tier declares a `primary` plus 1–4 `alternatives`. Loaded from Android assets at runtime. Total promoted across tiers: 4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET |
+| 2 | **`MobileRecommendationsFile` + `TierRecommendations`** | Pure data classes — no Android dependencies. Tier-keyed map enables O(1) `forTier(tier)`. Helpers: `isPrimaryFor(tier, id)`, `isAlternativeFor(tier, id)`, `promotionBucket(tier, id)` returns 0 (primary) / 1 (alternative) / 2 (not promoted) |
+| 3 | **`MobileRecommendations.load(context)`** | Thread-safe lazy singleton with `@Volatile cached` + double-checked locking around `synchronized(this)`. Reads asset on first call, returns cached instance thereafter. `resetForTesting()` seam for unit tests |
+| 4 | **`@VisibleForTesting fun parseJson(raw: String)`** | Pure parsing seam extracted from `parseAsset(context)` so JSON parsing is unit-testable on the JVM without Robolectric. Production callers must continue through `load()` |
+| 5 | **`OnboardingViewModel` priority chain** | Selection chain for `initModelDownload`: tier-primary → tier-alternative → catalog `recommended` flag → firstOrNull matching `fitsAndSafe`. Compute `promotion` label (`"tier-primary"`, `"tier-alternative"`, `"global-recommended"`, `"fallback"`) emitted in log line |
+| 6 | **`ModelsViewModel.computeVisibleList` sort chain** | Sort priority: `status.ordinal desc` → `promotionBucket(tier, id)` → `recommended` flag → `sizeBytes asc`. Promoted models float to top of the model catalog without changing the existing capability-tier visual badge system |
+| 7 | **3 new i18n strings** | `badge_tier_primary` ("Recomendado para tu dispositivo"), `badge_tier_alternative` ("Excelente alternativa"), `capability_recommended_for_your_device` |
+
+#### Latent Bug Fix — heavyGate/experimental ID matching (P0)
+| # | Issue | Fix |
+|---|-------|-----|
+| 1 | **`heavyGateIds` no matcheaba los `ModelInfo.id` reales** | Antes: `setOf("Voxtral-Small-24B-2507-Q5_K_M", ...)`. El catálogo entrega IDs como `"handy-computer/Voxtral-Small-24B-2507-gguf"`, así que `isHeavyGate(id)` siempre retornaba `false`. Ahora: `heavyGateSlugs` almacena bare slugs sin quant suffix; `slugOf(id)` normaliza quitando el prefix `"handy-computer/"` y suffix `"-gguf"` antes de matchear |
+| 2 | **`experimentalIds` mismo bug para Moonshine Base** | Idéntica corrección: 7 `moonshine-base-*` slugs |
+| 3 | **Constantes explícitas del namespace** | `CATALOG_ID_PREFIX = "handy-computer/"` y `CATALOG_ID_SUFFIX = "-gguf"` centralizadas en `ModelCapability.Companion` para que un cambio del namespace del catálogo sea un cambio de una línea |
+
+#### Test Infrastructure (JUnit 4, pure JVM, no Robolectric)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **Dependencias de testing** | `libs.versions.toml`: `junit = "4.13.2"`, `json = "20231013"`. `app/build.gradle.kts`: `testImplementation(libs.junit)` + `testImplementation(libs.json.test)` |
+| 2 | **`ModelCapabilityTest.kt`** (11 tests) | Cubre los 3 Voxtral variants heavyGate (Small 24B / Mini 4B Realtime / Mini 3B) + 7 Moonshine Base experimental variants (EN + 6 monolingües: ar / ko / uk / ja / vi / zh) + 8 negative cases (whisper / parakeet / canary / granite / funASR / cohere / moonshine-tiny) + slug-idempotence positive tests |
+| 3 | **`MobileRecommendationsTest.kt`** (10 tests) | Cubre `parseJson` happy path / partial / tier-with-no-alternatives / blank-primary / malformed-JSON / missing-tiers-key + `promotionBucket` para cada uno de los 5 tiers × 3 buckets (primary / alternative / not-promoted) + cross-tier evaluation |
+| 4 | **Ejecución verificada** | 21 / 21 PASS en rig manual con `kotlinc 1.9.24 + JUnit 4.13.2 + org.json 20231013` + Android stubs mínimos. Mismo resultado esperado en `./gradlew :app:testDebugUnitTest` real |
 
 ### ✅ Sprint 14 — New Implementations
 

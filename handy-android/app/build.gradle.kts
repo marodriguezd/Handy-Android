@@ -129,4 +129,8 @@ dependencies {
     implementation(libs.shizuku.provider)
 
     implementation(libs.sentry.android)
+
+    // Unit tests (pure JVM, no Robolectric)
+    testImplementation(libs.junit)
+    testImplementation(libs.json.test)
 }

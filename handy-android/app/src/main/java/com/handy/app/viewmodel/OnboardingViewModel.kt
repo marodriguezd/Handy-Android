@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.handy.app.SettingsStore
 import com.handy.app.capability.CompatibilityStatus
 import com.handy.app.capability.DeviceCapabilityDetector
+import com.handy.app.capability.MobileRecommendations
 import com.handy.app.capability.ModelCapability
 import com.handy.app.capability.computeCompatibility
 import com.handy.app.model.ModelInfo
@@ -50,6 +51,21 @@ class OnboardingViewModel(
 
     /** De-dup sentinel for failure logs (separate from downloadTargetId to avoid collision). */
     private var lastLoggedFailureId: String? = null
+
+    /**
+     * Returns a short tag describing why [target] was picked, for observability
+     * only. Tier-promotion beats global desktop recommendations which beat the
+     * last-resort fallback. Pure function — no side effects.
+     */
+    private fun computePromotionLabel(
+        target: ModelInfo,
+        tierRecs: com.handy.app.capability.TierRecommendations?,
+    ): String = when {
+        target.id == tierRecs?.primary -> "tier-primary"
+        tierRecs?.alternatives?.contains(target.id) == true -> "tier-alternative"
+        target.recommended -> "global-recommended"
+        else -> "fallback"
+    }
 
     /** Cached once at construction to avoid re-detecting device RAM on every state emission. */
     private val cachedSnapshot: com.handy.app.capability.CapabilitySnapshot? by lazy {
@@ -186,9 +202,18 @@ class OnboardingViewModel(
                     if (!downloadStarted && !skipped && modelState.models.isNotEmpty() && !modelState.isLoading) {
                         val models = modelState.models
                         Log.d(TAG, "models loaded: ${models.size} entries; downloads=${modelState.downloads.size}; isLoading=${modelState.isLoading}")
-                        // Tier-aware filter: pick a recommended model that fits the device AND
-                        // does not require user consent (no Voxtral / no extreme). Falling back to
-                        // the first model that fits and is safe, then any not-downloaded model.
+                        // Tier-aware selection with curated mobile recommendations.
+                        //
+                        // Priority chain (highest → lowest, first hit wins):
+                        //   1. mobile_recommended.primary  for this device tier
+                        //   2. mobile_recommended.alternatives[*] for this device tier
+                        //   3. catalog-flag it.recommended (global desktop recommendation)
+                        //   4. any non-downloaded model that fits and is safe
+                        //
+                        // The fitsAndSafe guard rejects heavy-gate (Voxtral*)
+                        // and any model that exceeds device RAM at the
+                        // Computing-status level, so tier promotion cannot
+                        // accidentally expose unsafe downloads.
                         val snapshot = cachedSnapshot
                         val showExp = settingsStore.showExperimentalModels
                         val compatForModel: (ModelInfo) -> Int = { m ->
@@ -203,14 +228,37 @@ class OnboardingViewModel(
                             score <= CompatibilityStatus.EXCEEDS.ordinal &&
                                 !ModelCapability.isHeavyGate(m.id)
                         }
-                        val target = models.firstOrNull { it.recommended && !it.isDownloaded && fitsAndSafe(it) }
+                        val tier = snapshot?.toTier()
+                        val mobileRecs = app?.let { MobileRecommendations.load(it) }
+                        val tierRecs = if (mobileRecs != null && tier != null) mobileRecs.forTier(tier) else null
+                        fun pickById(id: String?): ModelInfo? =
+                            id?.let { wanted ->
+                                models.firstOrNull { it.id == wanted && !it.isDownloaded && fitsAndSafe(it) }
+                            }
+                        val primary = pickById(tierRecs?.primary)
+                        val alternative = if (primary != null) {
+                            null
+                        } else {
+                            tierRecs?.alternatives?.firstNotNullOfOrNull { pickById(it) }
+                        }
+                        val target = primary
+                            ?: alternative
+                            ?: models.firstOrNull { it.recommended && !it.isDownloaded && fitsAndSafe(it) }
                             ?: models.firstOrNull { !it.isDownloaded && fitsAndSafe(it) }
                         val existing = target?.let { modelState.downloads[it.id] }
                         // Start download if: no prior entry exists, OR the prior entry completed (success or failure)
                         if (target != null && (existing == null || existing.isComplete)) {
                             downloadStarted = true
                             downloadTargetId = target.id
-                            Log.d(TAG, "Selected target: ${target.id} (size=${target.sizeBytes / (1024 * 1024)}MB, recommended=${target.recommended}, score=${compatForModel(target)})")
+                            val promotion = computePromotionLabel(target, tierRecs)
+                            Log.d(
+                                TAG,
+                                "Selected target: ${target.id} " +
+                                    "(size=${target.sizeBytes / (1024 * 1024)}MB, " +
+                                    "promotion=$promotion, " +
+                                    "recommended=${target.recommended}, " +
+                                    "score=${compatForModel(target)})",
+                            )
                             _uiState.update { it.copy(isDownloading = true) }
                             mv.downloadModel(target.id)
                         } else if (models.all { it.isDownloaded }) {

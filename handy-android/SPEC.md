@@ -1,9 +1,78 @@
 # Handy Android - UI Redesign Specification (Sprint 10) — ✅ COMPLETED
 
 **Última actualización:** 2026-07-16
-**Checkpoint:** 🟢 Sprint 13 — Persistencia de modelo activo + onComputeInsets + Cancelación batch
+**Checkpoint:** 🟢 Sprint 15 — Curated Mobile Recommended Subset + Capability Tests
 
 ---
+
+## Sprint 15 — Nuevas Implementaciones
+
+### ✅ Subset Móvil Definitive (`assets/mobile_recommended.json` + `MobileRecommendations.kt`)
+
+- **19 modelos promovidos** distribuidos en los 5 DeviceTier (4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET).
+- Cada tier declara **un primary + alternatives (1–4)** que sobresalen en el catálogo por encima de la lista global.
+- **Loader thread-safe** con `@Volatile` cached + doble verificación de bloqueo. El asset (~2 KB) se lee una sola vez por proceso; las llamadas siguientes retornan la instancia cacheada.
+
+**Priority chain** (alta → baja):
+
+```
+LOW  primary: whisper-base-gguf
+           alts: whisper-tiny, moonshine-streaming-tiny, medasr
+MID  primary: nemotron-3.5-asr-streaming-0.6b
+           alts: canary-180m-flash, parakeet-tdt-0.6b-v3, whisper-medium, whisper-small
+HIGH primary: whisper-large-v3-turbo
+           alts: Qwen3-ASR-1.7B, canary-1b-v2, whisper-large-v3
+FLGS primary: whisper-large-v3
+           alts: granite-speech-4.1-2b-plus, canary-qwen-2.5b
+TBLT primary: cohere-transcribe-03-2026
+           alts: granite-speech-4.1-2b, granite-4.0-1b-speech
+```
+
+### ✅ Bug Latente Corregido — heavyGate/experimental ID matching
+
+El bug P0 detectado: las `heavyGateIds` y `experimentalIds` hardcoded en `ModelCapability.kt` usaban IDs con `-Q5_K_M` / `-Q8_0` suffix, mientras que `ModelInfo.id` viene del catálogo como `"handy-computer/<slug>-gguf"`. **Resultado**: `isHeavyGate(id)` siempre retornaba `false`, dejando los Voxtral sin gating en el onboarding.
+
+**Fix**: renombrar a `heavyGateSlugs` / `experimentalSlugs` con bare slugs + helper privado `slugOf(modelId)` que normaliza (quita prefix `"handy-computer/"` y suffix `"-gguf"`). Constantes `CATALOG_ID_PREFIX` y `CATALOG_ID_SUFFIX` explícitas para evolución.
+
+### ✅ Tests Unitarios JUnit 4 (`app/src/test/...`)
+
+Cubre **21 assertions** en dos archivos:
+
+`ModelCapabilityTest.kt` (11 tests):
+- 3 Voxtral `isHeavyGate` (covers Small 24B, Mini 4B Realtime, Mini 3B)
+- 7 Moonshine Base `isExperimental` (en + 6 monolingües: ar, ko, uk, ja, vi, zh)
+- 11 negative cases (whisper, parakeet, canary, granite, funASR, cohere, qwen, mojhshine-tiny)
+- 2 slug-idempotence positive tests (slugs bare matchean correctamente)
+
+`MobileRecommendationsTest.kt` (10 tests):
+- `parseJson` happy path (5 tiers + alternatives)
+- `parseJson` partial (uno de 5 tiers) → los demas null
+- `parseJson` tier sin alternatives (default empty list)
+- `parseJson` tier con primary blank (skip)
+- `parseJson` malformado (throws JSONException)
+- `parseJson` sin `tiers` key (root con sólo `version` → empty file)
+- `promotionBucket` retorna 0 (primary) para cada uno de 5 tiers
+- `promotionBucket` retorna 1 (alternative) para cada uno de 5 tiers
+- `promotionBucket` retorna 2 (not promoted) cross-tier matrix
+- Cross-tier lookup proves que el bucket es relativo al tier del dispositivo
+
+**Ejecución verificada**: 21/21 PASS en rig JVM puro con `kotlinc 1.9.24 + JUnit 4.13.2 + org.json 20231013` + Android stubs mínimos. Sin Robolectric.
+
+### ✅ Integración ViewModels
+
+`OnboardingViewModel.kt`:
+- Priority chain `tier.primary → tier.alternative → recommended.global → firstOrNull`
+- Helper puro `computePromotionLabel(target, tierRecs)` → log `"Selected target: ... promotion=tier-primary"`
+- `fitsAndSafe` filter preservado (heavyGate + EXCEEDS check)
+
+`ModelsViewModel.kt`:
+- `computeVisibleList` sort chain extendido con `recs.promotionBucket(tier, it.first.id)` entre status y recommended
+- Sin cambios al UI badge system existente (deuda pendiente: render visual del badge_tier_*)
+
+### 🟡 Pendiente (no incluido en Sprint 15)
+
+- **Renderizado visual del badge** en `CompatibilityBadge.kt` para tier-primary / tier-alternative (strinngs ya existen pero no se consumen)
+- **`androidTest`** end-to-end para `MobileRecommendations.load(context)` (via Robolectric o androidTest real)
 
 ## Sprint 14 — Nuevas Implementaciones
 

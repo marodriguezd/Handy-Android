@@ -65,6 +65,48 @@ The IME now properly reports its content area to the Android framework:
 - `TOUCHABLE_INSETS_CONTENT` — touches in the transparent background pass through to the host app
 - Prevents the host app from being pushed up by the full IME window height
 
+## Mobile Recommended Subset + Capability Tests (Sprint 15)
+
+### Curated Subset Asset (`app/src/main/assets/mobile_recommended.json`)
+A 19-model curated subset, organized by DeviceTier, co-located conceptually with `src-tauri/src/catalog/catalog.json`. Each tier carries one `primary` plus 1–4 `alternatives` that are promoted above the global catalog when the device belongs to that tier.
+
+| Tier | Primary | Alternatives (count) | Why |
+|---|---|---|---|
+| LOW | whisper-base | 3 | Fits ≤100MB, 99 langs, lang_detect |
+| MID | nemotron-3.5-streaming | 4 | Streaming + 28 langs + lang_detect |
+| HIGH | whisper-large-v3-turbo | 3 | 100 langs, fast turbo, replaces Turbo |
+| FLAGSHIP | whisper-large-v3 | 2 | Top accuracy upgrade from turbo |
+| TABLET | cohere-transcribe | 2 | Top accuracy score (92) for tablets |
+
+### MobileRecommendations Loader (`capability/MobileRecommendations.kt`)
+- **Singleton loader** with thread-safe double-checked locking (`@Volatile cached` + `synchronized(this)`)
+- `@VisibleForTesting fun parseJson(raw: String)` — pure parsing seam for unit tests on the JVM, no Robolectric or Android Context required
+- `MobileRecommendationsFile.promotionBucket(tier, id)` returns 0 (primary) / 1 (alternative) / 2 (not-promoted)
+- `resetForTesting()` allows tests to invalidate the cache
+
+### ViewModel Integration
+- **OnboardingViewModel** selects initial download via priority chain: `tier.primary → tier.alternative → catalog.recommended → firstOrNull fitting fitsAndSafe`. Pure helper `computePromotionLabel(target, tierRecs)` emits a `<tier-primary | tier-alternative | global-recommended | fallback>` tag in the existing OnboardingVM logs.
+- **ModelsViewModel.computeVisibleList** sort chain extended:
+  ```kotlin
+  compareBy<Pair<ModelInfo, ModelCompatibility>>(
+      { -it.second.status.ordinal },                         // ACTIVE > FIT > EXCEEDS
+      { recs.promotionBucket(tier, it.first.id) },           // tier primary/alt first
+      { if (it.first.recommended) 0 else 1 },                // global fallback
+      { it.first.sizeBytes },                                  // smallest first within bucket
+  )
+  ```
+
+### Slug Normalization (P0 latent fix in ModelCapability)
+- `slugOf(modelId)` strips `"handy-computer/"` prefix and `"-gguf"` suffix (via constants `CATALOG_ID_PREFIX` / `CATALOG_ID_SUFFIX`)
+- `heavyGateSlugs` and `experimentalSlugs` are now bare slugs (`"Voxtral-Small-24B-2507"`, `"moonshine-base-zh"`)
+- Slug normalization is idempotent: both prefixed and bare slug inputs match correctly (proven by positive parity tests)
+
+### Test Infrastructure (`app/src/test/java/com/handy/app/capability/`)
+- **JUnit 4** (4.13.2) + **org.json** (20231013) — pure JVM, no Robolectric, no Android SDK required at test time
+- `build.gradle.kts` exposes both as `testImplementation`
+- **21 total tests** split across `ModelCapabilityTest` (11) and `MobileRecommendationsTest` (10)
+- Pure JSON parsing: tests call `MobileRecommendations.parseJson(raw)` directly with inline fixtures; lazy singleton is bypassed by design
+
 ## Capability-Aware Model Catalog (Sprint 14)
 Prevents OOM fatal crashes and guarantees model integrity across fragmented Android hardware by evaluating device capabilities before inference/download.
 

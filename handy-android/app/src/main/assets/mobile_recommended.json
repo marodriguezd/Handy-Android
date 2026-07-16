@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-16",
+  "description": "Subset móvil definitivo de modelos STT recomendados organizados por DeviceTier. Un primary por tier + alternativas (1-4) como backups o casos especiales. Total modelos promovidos: 19 (4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET). Co-localizado con el catálogo para reflejar la propensión móvil: la lista NO incluye los heavyGateIds (Voxtral*) ni los experimentalIds (Moonshine Base monolingües).",
+  "tiers": {
+    "LOW": {
+      "primary": "handy-computer/whisper-base-gguf",
+      "alternatives": [
+        "handy-computer/whisper-tiny-gguf",
+        "handy-computer/moonshine-streaming-tiny-gguf",
+        "handy-computer/medasr-gguf"
+      ]
+    },
+    "MID": {
+      "primary": "handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf",
+      "alternatives": [
+        "handy-computer/canary-180m-flash-gguf",
+        "handy-computer/parakeet-tdt-0.6b-v3-gguf",
+        "handy-computer/whisper-medium-gguf",
+        "handy-computer/whisper-small-gguf"
+      ]
+    },
+    "HIGH": {
+      "primary": "handy-computer/whisper-large-v3-turbo-gguf",
+      "alternatives": [
+        "handy-computer/Qwen3-ASR-1.7B-gguf",
+        "handy-computer/canary-1b-v2-gguf",
+        "handy-computer/whisper-large-v3-gguf"
+      ]
+    },
+    "FLAGSHIP": {
+      "primary": "handy-computer/whisper-large-v3-gguf",
+      "alternatives": [
+        "handy-computer/granite-speech-4.1-2b-plus-gguf",
+        "handy-computer/canary-qwen-2.5b-gguf"
+      ]
+    },
+    "TABLET": {
+      "primary": "handy-computer/cohere-transcribe-03-2026-gguf",
+      "alternatives": [
+        "handy-computer/granite-speech-4.1-2b-gguf",
+        "handy-computer/granite-4.0-1b-speech-gguf"
+      ]
+    }
+  }
+}

@@ -2,6 +2,8 @@
 agp = "8.7.3"
 kotlin = "1.9.24"
 compose-bom = "2025.01.00"
+junit = "4.13.2"
+json = "20231013"
 compose-compiler = "1.5.14"
 activity-compose = "1.9.3"
 lifecycle-viewmodel-compose = "2.8.7"
@@ -26,6 +28,10 @@ lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-runtime", 
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 sentry-android = { group = "io.sentry", name = "sentry-android", version.ref = "sentry" }
+
+# Unit-test only deps
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+json-test = { group = "org.json", name = "json", version.ref = "json" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

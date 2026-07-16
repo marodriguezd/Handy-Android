@@ -183,4 +183,9 @@
     <string name="heavy_dialog_consent">Entiendo los riesgos y quiero continuar</string>
 
     <string name="model_unavailable_on_device">Este modelo excede la capacidad de tu dispositivo</string>
+
+    <!-- Mobile Recommendation Badges (curated subset per DeviceTier) -->
+    <string name="badge_tier_primary">Recomendado para tu dispositivo</string>
+    <string name="badge_tier_alternative">Excelente alternativa</string>
+    <string name="capability_recommended_for_your_device">Recomendado para tu dispositivo</string>
 </resources>

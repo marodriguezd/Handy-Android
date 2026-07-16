@@ -17,14 +17,18 @@ enum class ModelCapability(val maxSizeMb: Int) {
 
         /**
          * Models whose download is mandatory to warn the user about before
-         * proceeding. Includes all Voxtral variants — Voxtral Mini 4B
-         * Realtime is technically stream-capable but still large, while
-         * Voxtral Small 24B is impractical on phones.
+         * proceeding. Stored as bare slugs (no quant suffix, no asset prefix)
+         * and matched against [ModelInfo.id] after slug normalization, so the
+         * set stays in sync with the catalog across quantization variants.
+         *
+         * Includes all Voxtral variants — Voxtral Mini 4B Realtime is
+         * technically stream-capable but still large, while Voxtral Small 24B
+         * is impractical on phones.
          */
-        val heavyGateIds: Set<String> = setOf(
-            "Voxtral-Small-24B-2507-Q5_K_M",
-            "Voxtral-Mini-4B-Realtime-2602-Q4_K_M",
-            "Voxtral-Mini-3B-2507-Q5_K_M",
+        val heavyGateSlugs: Set<String> = setOf(
+            "Voxtral-Small-24B-2507",
+            "Voxtral-Mini-4B-Realtime-2602",
+            "Voxtral-Mini-3B-2507",
         )
 
         /**
@@ -32,17 +36,42 @@ enum class ModelCapability(val maxSizeMb: Int) {
          * end-to-end with transcribe-cpp on Android. Hidden by default,
          * exposed only when the user toggles "Show experimental".
          */
-        val experimentalIds: Set<String> = setOf(
-            "moonshine-base-ar-Q8_0",
-            "moonshine-base-ko-Q8_0",
-            "moonshine-base-uk-Q8_0",
-            "moonshine-base-ja-Q8_0",
-            "moonshine-base-vi-Q8_0",
-            "moonshine-base-zh-Q8_0",
-            "moonshine-base-Q8_0",
+        val experimentalSlugs: Set<String> = setOf(
+            "moonshine-base-ar",
+            "moonshine-base-ko",
+            "moonshine-base-uk",
+            "moonshine-base-ja",
+            "moonshine-base-vi",
+            "moonshine-base-zh",
+            "moonshine-base",
         )
 
-        fun isExperimental(id: String): Boolean = id in experimentalIds
-        fun isHeavyGate(id: String): Boolean = id in heavyGateIds
+        /**
+         * Catalog-side path prefix used by every entry in the desktop
+         * `src-tauri/src/catalog/catalog.json` file. Centralizing it here
+         * makes the slug normalization dependency explicit if the catalog
+         * ever migrates to a different namespace (e.g., an org slug).
+         */
+        private const val CATALOG_ID_PREFIX = "handy-computer/"
+
+        /**
+         * Artifact extension suffix appended by the GGUF catalog pipeline.
+         * Stripped during slug normalization alongside [CATALOG_ID_PREFIX].
+         */
+        private const val CATALOG_ID_SUFFIX = "-gguf"
+
+        /**
+         * Strips the catalog path prefix and `-gguf` artifact suffix from
+         * a [ModelInfo.id] so the resulting slug can be compared against
+         * the curated heavy-gate / experimental sets below.
+         *
+         * Example: `"handy-computer/Voxtral-Mini-3B-2507-gguf"` →
+         *          `"Voxtral-Mini-3B-2507"`.
+         */
+        private fun slugOf(modelId: String): String =
+            modelId.removePrefix(CATALOG_ID_PREFIX).removeSuffix(CATALOG_ID_SUFFIX)
+
+        fun isExperimental(id: String): Boolean = slugOf(id) in experimentalSlugs
+        fun isHeavyGate(id: String): Boolean = slugOf(id) in heavyGateSlugs
     }
 }

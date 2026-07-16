@@ -6,6 +6,7 @@ import com.handy.app.HandyApplication
 import com.handy.app.bridge.EngineBridge
 import com.handy.app.capability.CapabilitySnapshot
 import com.handy.app.capability.DeviceCapabilityDetector
+import com.handy.app.capability.MobileRecommendations
 import com.handy.app.capability.ModelCompatibility
 import com.handy.app.capability.computeCompatibility
 import com.handy.app.model.ModelInfo
@@ -166,8 +167,14 @@ class ModelsViewModel(
     }
 
     /**
-     * Annotate + filter hidden + sort by descending status / recommended / size.
-     * Stable contract: experimental models with `hidden=true` are excluded.
+     * Annotate + filter hidden + sort by descending status / mobile-promotion /
+     * recommended / size. Stable contract: experimental models with
+     * `hidden=true` are excluded.
+     *
+     * Promotion bucket (per [MobileRecommendationsFile.promotionBucket]):
+     *   0 = tier-primary   (curated primary for this DeviceTier)
+     *   1 = tier-alternative (curated alternatives for this DeviceTier)
+     *   2 = not promoted
      */
     private fun computeVisibleList(
         raw: List<ModelInfo>,
@@ -176,12 +183,15 @@ class ModelsViewModel(
     ): List<Pair<ModelInfo, ModelCompatibility>> {
         if (raw.isEmpty()) return emptyList()
         val snap = snapshot ?: return raw.map { it to computeCompatibility(it, snapshotOrFallback(), showExp) }
+        val recs = MobileRecommendations.load(app)
+        val tier = snap.toTier()
         return raw
             .map { it to computeCompatibility(it, snap, showExp) }
             .filterNot { it.second.hidden }
             .sortedWith(
                 compareBy<Pair<ModelInfo, ModelCompatibility>>(
                     { -it.second.status.ordinal },
+                    { recs.promotionBucket(tier, it.first.id) },
                     { if (it.first.recommended) 0 else 1 },
                     { it.first.sizeBytes },
                 )

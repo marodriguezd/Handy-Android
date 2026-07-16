@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.2.0-alpha (Sprint 15 — Curated Mobile Recommended Subset + Capability Tests)
+
+### New Features
+- **`mobile_recommended.json`** — Curated tier-aware model subset covering all 5 [DeviceTier]. 19 models total: 4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET. Each tier has one primary recommendation plus 1–4 alternatives. Asset is co-located with the catalog at `app/src/main/assets/`.
+- **`MobileRecommendations`** — Thread-safe lazy loader singleton (double-checked `@Volatile cached` + `synchronized(this)`). Reads asset on first call, caches for process lifetime. Exposes `load(context)` for production callers and `@VisibleForTesting fun parseJson(raw: String)` as a pure-JVM testing seam.
+- **`MobileRecommendationsFile.promotionBucket(tier, id)`** — Returns 0 (tier-primary), 1 (tier-alternative), 2 (not-promoted). Used by `ModelsViewModel.computeVisibleList` to float promoted models above global recommendations.
+- **Tier-aware onboarding selection** — `OnboardingViewModel` now picks the device tier's primary model first, falls back to alternatives, then to the global catalog `recommended` flag, then `firstOrNull` matching `fitsAndSafe`. Log line extended with `promotion=tier-primary|tier-alternative|global-recommended|fallback`.
+- **3 new i18n strings** — `badge_tier_primary`, `badge_tier_alternative`, `capability_recommended_for_your_device`.
+
+### Bug Fixes
+- **P0 — Latent bug: `heavyGateIds` / `experimentalIds` slug mismatch** — Sets were hardcoded with `-Q5_K_M` / `-Q8_0` quant suffixes, but `ModelInfo.id` arrives as `handy-computer/<slug>-gguf`. The match never worked in practice, leaving the 3 Voxtral (heavyGate) and 7 Moonshine Base (experimental) flag sets as no-ops. Renamed to `heavyGateSlugs` / `experimentalSlugs` with bare slugs, plus private `slugOf(modelId)` helper that strips prefix and suffix via explicit `CATALOG_ID_PREFIX` / `CATALOG_ID_SUFFIX` constants. Idempotent for already-slug strings.
+
+### Testing
+- **21 new JUnit 4 unit tests** added to `app/src/test/java/com/handy/app/capability/`:
+  - `ModelCapabilityTest` (11 tests): 3 Voxtral heavyGate + 7 Moonshine Base experimental + 11 negative parity + 2 slug-idempotence positive tests.
+  - `MobileRecommendationsTest` (10 tests): `parseJson` happy path / partial / no-alternatives / blank-primary / malformed / missing-tiers-key + `promotionBucket` for all 5 tiers × 3 buckets + cross-tier matrix.
+- **Test deps** — `junit:4.13.2` and `org.json:json:20231013` added as `testImplementation` in `app/build.gradle.kts`. Pure JVM runnable with no Android SDK or Robolectric.
+
+### Verified
+- 21/21 tests pass in a manual JVM rig (kotlinc 1.9.24 + JUnit + org.json + Android stubs).
+- Forward-compatible with AGP — `./gradlew :app:testDebugUnitTest --tests "com.handy.app.capability.*"` should run identically in the real build.
+
 ## v1.1.0-alpha4 (Sprint 9 — IME Redesign: PC-Overlay UI + Auto-Commit + Crash Fix)
 
 ### New Features
