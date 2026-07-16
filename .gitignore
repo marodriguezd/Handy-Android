@@ -56,22 +56,3 @@ test_dir.txt
 # Scratch / temp files
 ORIGINAL_REQUEST.md
 cron_data.txt
-handy-android/handy-core/src/audio/t.txt
-handy-android/app/src/main/java/com/handy/app/ime/TestOwner.kt
-
-# Android build artifacts
-handy-android/**/build/
-
-# Vendored Vulkan/SPIRV headers (downloaded at build time via build-rust.sh --vulkan)
-handy-android/deps/
-
-# Visual verification screenshots (regenerated via scripts/capture_*.sh)
-handy-android/screenshots/
-handy-android/**/target/
-handy-android/**/*.apk
-handy-android/**/*.aab
-handy-android/**/*.so
-handy-android/**/*.rlib
-handy-android/**/*.a
-handy-android/**/*.o
-handy-android/.gradle/

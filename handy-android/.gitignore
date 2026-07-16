@@ -1,0 +1,47 @@
+# --- Gradle & Build ---
+build/
+.gradle/
+local.properties
+*.apk
+*.aab
+*.aar
+
+# --- Rust / Native Build ---
+target/
+*.so
+*.rlib
+*.a
+*.o
+*.d
+
+# --- Keystores & Signing (SENSITIVE - never commit) ---
+*.keystore
+*.jks
+
+# --- IDE ---
+.idea/
+*.iml
+
+# --- OS ---
+.DS_Store
+*.sw?
+
+# --- Vendored Dependencies (downloaded at build time) ---
+deps/
+
+# --- Visual Verification (regenerated via scripts/capture_*.sh) ---
+screenshots/
+
+# --- Android Studio / CMake ---
+.cxx/
+.idea/
+*.hprof
+captures/
+
+# --- Scratch / temp files ---
+handy-core/src/audio/t.txt
+app/src/main/java/com/handy/app/ime/TestOwner.kt
+
+# --- Misc ---
+*.log
+*.tmp
