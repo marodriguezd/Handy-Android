@@ -359,6 +359,9 @@ adb -s "$DEVICE" shell am broadcast -a com.handy.app.action.SET_ACTIVE_MODEL -n 
 
 ## 📝 Open Items / Next Steps
 
+> **🚨 Priority 0 — Original user request, still unaddressed (Session 2026-07-17 interruption):**
+> Before being sidetracked by the Wispr Flow rename + release-body hygiene, the user asked for a *comprehensive Material Design 3 migration plan* for Handy-Android, full-source-aware + PC Handy reference as the design baseline, **using the same palette that is currently in use**. The plan was neither designed nor presented this session. **Next session must deliver this plan first thing**, before resuming any post-Sprint 23 sprint work below. See `## 📌 Session 2026-07-17` further down for the auth/CLI environmental context that informs the plan execution.
+
 > **Sprint 22 → 29 ordering authority:** see `handy-android/PROGRESS.md` (Sprint 21 section, immediately below the file-inventory table). The `MIGRATION_PLAN_MD3.md` plan itself contains two conflicting enumerations of post-Sprint 21 work; the "Reordenación del plan (Sprint 21.x)" block is the authoritative correction (Models=22, About=23, History=24, Advanced-refinement=25, Post-processing=26, Onboarding=27, Debug=28, Polish=29).
 
 ### Remaining MD3 Migration Sprints (23 → 29)
@@ -400,6 +403,40 @@ adb -s "$DEVICE" shell am broadcast -a com.handy.app.action.SET_ACTIVE_MODEL -n 
 4. **IME Visual Verification** — screenshots in all 6 states on A059 Android 16 (now greatly simplified: pill is uniform `PillShape`, IconButton targets are 48dp).
 5. **Onboarding Visual Verification** — screenshots each step post-clean-install (post-Sprint 27).
 6. **TestCommandReceiver Hardening** — reassess after Sprint 28 close.
+
+---
+
+## 📌 Session 2026-07-17 — Docs + Release-Body Hygiene (post-Sprint 23)
+
+Not a Sprint feature pass. This session was a docs/branding/shipping hygiene pass.
+
+### ✅ Done this session
+
+- **Wispr Flow → HandyPC rename batch (commit `c6aecbf`)** — replaced the final residual "Wispr Flow" references in `CHANGELOG.md`, `SPEC.md`, and `handy-android/ARCHITECTURE.md`. Combined with the earlier rename already applied in `AGENTS.md`, `PROGRESS.md`, and `handy-android/PROGRESS.md`, **zero "Wispr Flow" refs remain in any tracked doc** in the repo.
+  - Local verification: `grep -in 'wispr' … touched_files` → 0 matches per file.
+  - Pushed to `origin/main` (HEAD == origin/main == `c6aecbf312644519c8850912710c41c2c5c3a16c`).
+- **v0.2.0-preview release body** — body was emptied by repeated `503` attempts during automated updates. **Manually updated via GitHub web UI** by user (Plan D, see ladder below). Body currently reflects HandyPC content (paste-back line confirmed: `• Floating IME pill (Handy PC style) with 6 visual states as above — STATE_CONFIRM collapses the keyboard waveform + adds copy/insert`).
+
+### 🔒 Auth/CLI Environmental Notes (read before any `gh` ops from inside an agent subprocess)
+
+1. **Subprocesses do NOT inherit OS keyring access.** `gh auth status` returns `Failed to log in to github.com account $USER (keyring)` inside agent subprocesses even when `~/.config/gh/hosts.yml` holds a valid token. Subprocess-only API calls (e.g. `gh release edit` from a basher) hit HTTP 503 from `/releases/*`, because gh re-classifies the auth-check failure. **The user's interactive terminal is the canonical auth context for `gh` operations in this environment.** Subprocess-driven release work is not reliable.
+2. **`gh` requires `--repo <owner>/<repo>` or `gh repo set-default`** for any command that resolves a repo by default. Failure mode: `X No default remote repository has been set`. Fix once per fresh checkout: `gh repo set-default <owner>/<repo>`.
+3. **GitHub `/releases/...` endpoint returned intermittent HTTP 503** during this session — confirmed via direct `gh api` (returned the GitHub "Unicorn" 503 HTML page, not JSON). Likely transient infra issue, independent of auth.
+4. **Release-body update ladder (top-down, fallback to next):**
+   - **Plan A** — `gh release edit <tag> --notes-file /tmp/release-notes.md` (run from the user's interactive shell, not a subprocess).
+   - **Plan B** — if `No default remote repository`, run `gh repo set-default <owner>/<repo>`, then retry Plan A.
+   - **Plan C** — direct REST PATCH (bypasses the `gh release edit` wrapper):
+     ```bash
+     REL_ID=$(gh api repos/$OWNER/$REPO/releases/tags/$TAG --jq '.id')
+     jq -n --rawfile body /tmp/release-notes.md '{body: $body}' > /tmp/payload.json
+     gh api -X PATCH repos/$OWNER/$REPO/releases/$REL_ID --input /tmp/payload.json
+     ```
+   - **Plan D (most reliable)** — Web UI manual edit: open `https://github.com/$OWNER/$REPO/releases/edit/$TAG`, paste the content of `/tmp/release-notes.md` into the "Describe this release" textarea, click `Update release`. Bypasses the API entirely — works even when `/releases/*` is degraded.
+
+### 🧠 Decision log for the next session
+
+- **The original user task — a comprehensive MD3 migration plan for Handy-Android** (full source-aware review + PC Handy reference + same current palette) — **was not designed this session**. Pick it up FIRST next session, before Sprints 24+.
+- When implementing the plan, do **not** attempt Plan A/B/C for `gh` operations from agent subprocesses. The Plan-D Web UI step is the only reliable closure path on this machine; for code commits use the user's terminal directly. If `git push` is needed from the agent, the user must do it (or grant auth propagation explicitly).
 
 ---
 

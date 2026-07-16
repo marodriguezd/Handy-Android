@@ -1,11 +1,25 @@
 # Handy Android — Progress & Current State
 
-**Last updated:** 2026-07-17
+**Last updated:** 2026-07-17 (post-session: rename batch + release body finalized)
 **Current checkpoint:** Pre-Sprint 24 hygiene closed + **v0.2.0-preview (Second Pre-Release) shipped**. Lint trajectory 86 → 77 → 84 → 84 (5/5 target compile warnings zeroed). Próximo sprint: **Sprint 24 — History con audio + retry**.
+
+> **⚠️ Outstanding agenda item for next session**: The original user task this session — a *comprehensive Material Design 3 migration plan for Handy-Android*, full source-aware + PC Handy reference as design baseline, **using the same palette that is currently in use** — was deferred for the Wispr rename + release body hygiene pass. **Next session must design and deliver that plan first thing**, before resuming Sprints 24+. See AGENTS.md `## 📌 Session 2026-07-17` for the auth/CLI environmental notes and the Release-Body-Update ladder discovered this session.
 
 ---
 
 ## ✅ Completed Work — Sprints 16 → 21
+
+### 📌 Session 2026-07-17 — Wispr rename + v0.2.0-preview release body (post-Sprint 23 hygiene pass)
+
+Not a feature Sprint. Hygiene pass.
+
+| Item | Status | Detail |
+|------|--------|--------|
+| Rename batch (`Wispr Flow` → `HandyPC`) | ✅ pushed commit `c6aecbf` | Touched files: `CHANGELOG.md`, `SPEC.md`, `handy-android/ARCHITECTURE.md`. Combined with earlier rename already in `AGENTS.md`, `PROGRESS.md`, and `handy-android/PROGRESS.md`, **zero residual `Wispr Flow` refs in any tracked doc**. |
+| `v0.2.0-preview` release body | ✅ finalized via GitHub web UI (Plan D) | Body was emptied by repeated `503`s during automated update attempts; user manually pasted the new content at `https://github.com/marodriguezd/Handy-Android/releases/edit/v0.2.0-preview`. Body now contains HandyPC/Handy-PC wording (paste-back confirmed: `• Floating IME pill (Handy PC style) with 6 visual states as above — STATE_CONFIRM collapses the keyboard waveform + adds copy/insert`). |
+| Auth/CLI environmental quirks documented | ✅ see AGENTS.md | Subprocess keyring isolation (user shell is canonical auth context); `gh` default-repo requirement; `/releases/...` endpoint intermittent 503; Plan A/B/C/D release-body-update ladder. All captured in the `Session 2026-07-17` section of `AGENTS.md`. |
+
+> **🧠 Original user task — comprehensive MD3 migration plan — deferred.** Pick it up first thing next session.
 
 ### Sprint 16 — MD3 Redesign + ADB Test Hooks
 
