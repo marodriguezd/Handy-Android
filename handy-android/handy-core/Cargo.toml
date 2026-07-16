@@ -45,6 +45,9 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 
 # Speech-to-text inference (GGML/Whisper via whisper.cpp)
+# Vulkan support is temporarily disabled while the vendored Vulkan/SPIRV
+# headers are being wired up. Re-enable by adding features = ["vulkan"] and
+# ensuring GGML_VULKAN=ON with the correct include paths.
 transcribe-cpp = { version = "0.1.3", default-features = false }
 
 [profile.release]

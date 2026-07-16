@@ -29,6 +29,8 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
@@ -126,53 +128,55 @@ fun GeneralSettingsContent(viewModel: SettingsViewModel) {
 
     val app = LocalContext.current.applicationContext as HandyApplication
 
-    SettingsRow(
-        title = stringResource(R.string.settings_shizuku),
-        subtitle = stringResource(R.string.settings_shizuku_description),
-        trailing = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val shizukuStatus = try {
-                    val pingOk = Shizuku.pingBinder()
-                    val hasPerm = Shizuku.checkSelfPermission() == 0
-                    val svcConnected = app.shizukuInjector.isAvailable()
-                    when {
-                        !pingOk || !hasPerm -> androidx.compose.ui.graphics.Color.Red
-                        svcConnected -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
-                        else -> androidx.compose.ui.graphics.Color(0xFFFF9800)
-                    }
-                } catch (_: Exception) {
-                    androidx.compose.ui.graphics.Color.Red
-                }
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(shizukuStatus)
-                )
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = uiState.shizukuEnabled,
-                    onCheckedChange = { enabled ->
-                        if (enabled) {
-                            try {
-                                val pingOk = Shizuku.pingBinder()
-                                val hasPerm = Shizuku.checkSelfPermission() == 0
-                                if (!pingOk || !hasPerm) {
-                                    showShizukuDialog = true
-                                } else {
-                                    viewModel.setShizukuEnabled(true)
-                                }
-                            } catch (_: Exception) {
-                                showShizukuDialog = true
-                            }
-                        } else {
-                            viewModel.setShizukuEnabled(false)
+    if (!BuildConfig.DEBUG) {
+        SettingsRow(
+            title = stringResource(R.string.settings_shizuku),
+            subtitle = stringResource(R.string.settings_shizuku_description),
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val shizukuStatus = try {
+                        val pingOk = Shizuku.pingBinder()
+                        val hasPerm = Shizuku.checkSelfPermission() == 0
+                        val svcConnected = app.shizukuInjector.isAvailable()
+                        when {
+                            !pingOk || !hasPerm -> androidx.compose.ui.graphics.Color.Red
+                            svcConnected -> androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                            else -> androidx.compose.ui.graphics.Color(0xFFFF9800)
                         }
-                    },
-                )
-            }
-        },
-    )
+                    } catch (_: Exception) {
+                        androidx.compose.ui.graphics.Color.Red
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(shizukuStatus)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = uiState.shizukuEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                try {
+                                    val pingOk = Shizuku.pingBinder()
+                                    val hasPerm = Shizuku.checkSelfPermission() == 0
+                                    if (!pingOk || !hasPerm) {
+                                        showShizukuDialog = true
+                                    } else {
+                                        viewModel.setShizukuEnabled(true)
+                                    }
+                                } catch (_: Exception) {
+                                    showShizukuDialog = true
+                                }
+                            } else {
+                                viewModel.setShizukuEnabled(false)
+                            }
+                        },
+                    )
+                }
+            },
+        )
+    }
 
     SettingsRow(
         title = stringResource(R.string.settings_switch_keyboard),
@@ -457,26 +461,22 @@ fun SettingsRow(
     trailing: @Composable RowScope.() -> Unit,
     onClick: (() -> Unit)? = null,
 ) {
-    Row(
+    ListItem(
+        headlineContent = { Text(text = title, style = MaterialTheme.typography.bodyLarge) },
+        supportingContent = subtitle?.let { {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } },
+        leadingContent = leadingContent,
+        trailingContent = { Row(verticalAlignment = Alignment.CenterVertically) { trailing() } },
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (leadingContent != null) {
-            Box(modifier = Modifier.padding(end = 16.dp)) { leadingContent() }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        trailing()
-    }
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+    )
 }

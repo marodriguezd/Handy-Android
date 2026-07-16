@@ -11,11 +11,14 @@ android {
         applicationId = "com.handy.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.0-alpha1"
+        versionCode = 3
+        versionName = "1.0.0-alpha2"
 
         // Sentry DSN — override via SENTRY_DSN env var (used in CI)
         buildConfigField("String", "SENTRY_DSN", "\"${System.getenv("SENTRY_DSN") ?: "https://examplePublicKey@o0.ingest.sentry.io/0"}\"")
+
+        // TestCommandReceiver is enabled only in debug builds.
+        manifestPlaceholders["debugReceiverEnabled"] = "true"
     }
 
     signingConfigs {
@@ -35,11 +38,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Disable the test-only receiver in release builds.
+            manifestPlaceholders["debugReceiverEnabled"] = "false"
         }
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            manifestPlaceholders["debugReceiverEnabled"] = "true"
         }
     }
 
@@ -73,8 +79,23 @@ val buildRust by tasks.registering(Exec::class) {
     val ndkDir = android.ndkDirectory.absolutePath
     environment("ANDROID_NDK_HOME", ndkDir)
     environment("CMAKE_TOOLCHAIN_FILE", "${ndkDir}/build/cmake/android.toolchain.cmake")
-    environment("TRANSCRIBE_CMAKE_ARGS", "-DGGML_NATIVE=OFF")
-    environment("CMAKE_ARGS", "-DCMAKE_TOOLCHAIN_FILE=${ndkDir}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DGGML_NATIVE=OFF")
+    // SPIRV-Headers and Vulkan-Headers are vendored because the build host may
+    // not have the system packages installed (required when GGML_VULKAN=ON).
+    // Vulkan is only enabled for release builds to keep debug iteration fast and
+    // avoid requiring a fully configured Vulkan toolchain during development.
+    val spirvHeadersDir = file("${rootDir}/deps/spirv-install")
+    val spirvCmakeDir = file("${spirvHeadersDir}/share/cmake/SPIRV-Headers")
+    val vulkanHeadersDir = file("${rootDir}/deps/Vulkan-Headers")
+    val vulkanInclude = "${vulkanHeadersDir}/include"
+    val spirvInclude = "${spirvHeadersDir}/include"
+    val commonFlags = "-I${vulkanInclude} -I${spirvInclude}"
+    val vulkanArgs = if (isRelease) {
+        "-DGGML_VULKAN=ON -DSPIRV-Headers_DIR=${spirvCmakeDir.absolutePath} -DCMAKE_CXX_FLAGS=${commonFlags} -DCMAKE_C_FLAGS=${commonFlags}"
+    } else {
+        "-DGGML_VULKAN=OFF"
+    }
+    environment("TRANSCRIBE_CMAKE_ARGS", "-DGGML_NATIVE=OFF ${vulkanArgs}")
+    environment("CMAKE_ARGS", "-DCMAKE_TOOLCHAIN_FILE=${ndkDir}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DGGML_NATIVE=OFF ${vulkanArgs}")
     if (isRelease) {
         commandLine("cargo", "ndk", "--target", "aarch64-linux-android", "--platform", "26", "--link-libcxx-shared", "--", "build", "-p", "handy-core", "--release")
     } else {

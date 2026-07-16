@@ -37,8 +37,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val app = (application as HandyApplication)
+        if (intent?.getBooleanExtra("skip_onboarding", false) == true) {
+            app.settingsStore.onboardingCompleted = true
+        }
+
         if (intent?.getBooleanExtra("start_dictation", false) == true) {
-            (application as HandyApplication).engineViewModel.startRecording()
+            app.engineViewModel.startRecording()
         }
 
         setContent {

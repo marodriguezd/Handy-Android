@@ -40,7 +40,7 @@ fun CompatibilityBadgeChip(badge: CompatibilityBadge, modifier: Modifier = Modif
     Surface(
         modifier = modifier,
         color = accent.copy(alpha = 0.15f),
-        shape = RoundedCornerShape(4.dp),
+        shape = MaterialTheme.shapes.extraSmall,
         border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
     ) {
         Text(
@@ -59,7 +59,7 @@ fun ActiveBadge(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.primary,
-        shape = RoundedCornerShape(4.dp),
+        shape = MaterialTheme.shapes.extraSmall,
     ) {
         Text(
             text = label,

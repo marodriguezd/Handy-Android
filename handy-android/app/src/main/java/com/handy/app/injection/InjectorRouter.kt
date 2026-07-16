@@ -1,6 +1,7 @@
 package com.handy.app.injection
 
 import android.util.Log
+import com.handy.app.BuildConfig
 import com.handy.app.SettingsStore
 
 class InjectorRouter(
@@ -24,7 +25,7 @@ class InjectorRouter(
 
     private fun selectStrategy(): InjectorStrategy = when {
         imeInjector.isAvailable() -> imeInjector
-        settingsStore.shizukuEnabled && shizukuInjector.isAvailable() -> shizukuInjector
+        !BuildConfig.DEBUG && settingsStore.shizukuEnabled && shizukuInjector.isAvailable() -> shizukuInjector
         else -> clipboardInjector
     }
 }

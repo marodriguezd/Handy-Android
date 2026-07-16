@@ -61,6 +61,20 @@
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
+        <!--
+            Test-only receiver for ADB automation. Disabled in release builds via
+            manifest placeholder and guarded at runtime by BuildConfig.DEBUG.
+        -->
+        <receiver
+            android:name=".TestCommandReceiver"
+            android:exported="true"
+            android:enabled="${debugReceiverEnabled}">
+            <intent-filter>
+                <action android:name="com.handy.app.action.DOWNLOAD_MODEL" />
+                <action android:name="com.handy.app.action.SET_ACTIVE_MODEL" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

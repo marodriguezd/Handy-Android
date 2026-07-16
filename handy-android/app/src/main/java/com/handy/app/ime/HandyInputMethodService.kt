@@ -221,9 +221,16 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
         if (height > 0) {
             outInsets.contentTopInsets = height
             outInsets.visibleTopInsets = height
-            // Only the pill area is touchable; taps in the transparent
-            // background area pass through to the host app below.
-            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_CONTENT
+            // Use a touchable region so taps inside the pill are routed to the
+            // IME, while taps in the transparent background pass through to
+            // the host app below. TOUCHABLE_INSETS_CONTENT would treat the
+            // area above contentTopInsets as pass-through, which for a
+            // wrap-content floating pill excludes the entire IME window.
+            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+            val width = window?.window?.decorView?.width
+                .takeIf { it != null && it > 0 }
+                ?: resources.displayMetrics.widthPixels
+            outInsets.touchableRegion.set(0, 0, width, height)
         }
     }
 
@@ -349,7 +356,7 @@ private fun HandyVoiceBar(
                     scaleY = popScale
                     this.alpha = popAlpha
                 },
-            shape = RoundedCornerShape(28.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             color = surfaceColor,
             border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
             shadowElevation = 8.dp,
@@ -552,8 +559,8 @@ private fun RecordingBar(vadLevel: Float, partialText: String, onStop: () -> Uni
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.clip(RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.clip(MaterialTheme.shapes.large),
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -571,7 +578,7 @@ private fun RecordingBar(vadLevel: Float, partialText: String, onStop: () -> Uni
 
                     // Timer badge
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     ) {
                         Text(
@@ -589,7 +596,7 @@ private fun RecordingBar(vadLevel: Float, partialText: String, onStop: () -> Uni
                     // Stop button
                     FilledIconButton(
                         onClick = { stopClick.onClick() },
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(48.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = errorColor(),
                         ),
@@ -606,7 +613,7 @@ private fun RecordingBar(vadLevel: Float, partialText: String, onStop: () -> Uni
                 // Partial text preview in a separated surface
                 if (partialText.isNotEmpty()) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = MaterialTheme.shapes.medium,
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                         modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
                     ) {
@@ -641,8 +648,8 @@ private fun TranscribingBar(partialText: String, onCancel: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.clip(RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.clip(MaterialTheme.shapes.large),
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -734,8 +741,8 @@ private fun ConfirmBar(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.clip(RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.clip(MaterialTheme.shapes.large),
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -836,8 +843,8 @@ private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.clip(RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.clip(MaterialTheme.shapes.large),
+            shape = MaterialTheme.shapes.large,
             color = errorColor().copy(alpha = 0.08f),
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
@@ -1013,7 +1020,7 @@ private fun WaveformBars(level: Float) {
                 modifier = Modifier
                     .width(4.dp)
                     .height(barHeight.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(MaterialTheme.shapes.extraSmall)
                     .background(accentColor())
             )
         }

@@ -9,6 +9,7 @@ import com.handy.app.capability.DeviceCapabilityDetector
 import com.handy.app.capability.MobileRecommendations
 import com.handy.app.capability.ModelCompatibility
 import com.handy.app.capability.computeCompatibility
+import com.handy.app.capability.computeVisibleCatalog
 import com.handy.app.model.ModelInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -167,7 +168,7 @@ class ModelsViewModel(
     }
 
     /**
-     * Annotate + filter hidden + sort by descending status / mobile-promotion /
+     * Annotate + filter hidden + sort by status / mobile-promotion /
      * recommended / size. Stable contract: experimental models with
      * `hidden=true` are excluded.
      *
@@ -182,20 +183,9 @@ class ModelsViewModel(
         showExp: Boolean,
     ): List<Pair<ModelInfo, ModelCompatibility>> {
         if (raw.isEmpty()) return emptyList()
-        val snap = snapshot ?: return raw.map { it to computeCompatibility(it, snapshotOrFallback(), showExp) }
+        val snap = snapshot ?: snapshotOrFallback()
         val recs = MobileRecommendations.load(app)
-        val tier = snap.toTier()
-        return raw
-            .map { it to computeCompatibility(it, snap, showExp) }
-            .filterNot { it.second.hidden }
-            .sortedWith(
-                compareBy<Pair<ModelInfo, ModelCompatibility>>(
-                    { -it.second.status.ordinal },
-                    { recs.promotionBucket(tier, it.first.id) },
-                    { if (it.first.recommended) 0 else 1 },
-                    { it.first.sizeBytes },
-                )
-            )
+        return computeVisibleCatalog(raw, snap, recs, showExp)
     }
 
     private fun snapshotOrFallback(): CapabilitySnapshot =

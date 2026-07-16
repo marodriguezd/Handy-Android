@@ -16,6 +16,7 @@ import com.handy.app.injection.ClipboardInjector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.injection.ShizukuInjector
 import com.handy.app.viewmodel.EngineViewModel
+import com.handy.app.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,6 +52,11 @@ class HandyApplication : Application(), ComponentCallbacks2 {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** Run a debug-only test command using the application coroutine scope. */
+    fun runTestCommand(block: suspend () -> Unit) {
+        appScope.launch(Dispatchers.IO) { block() }
+    }
+
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.SENTRY_DSN.isNotEmpty() && !BuildConfig.SENTRY_DSN.contains("examplePublicKey")) {
@@ -58,16 +64,18 @@ class HandyApplication : Application(), ComponentCallbacks2 {
                 options.dsn = BuildConfig.SENTRY_DSN
             }
         }
-        Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
-            if (grantResult == 0) {
-                Log.i("HandyApp", "Shizuku permission granted (code=$requestCode)")
-                shizukuInjector.bindService()
+        if (!BuildConfig.DEBUG) {
+            Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
+                if (grantResult == 0) {
+                    Log.i("HandyApp", "Shizuku permission granted (code=$requestCode)")
+                    shizukuInjector.bindService()
+                }
             }
-        }
-        Shizuku.addBinderReceivedListenerSticky {
-            shizukuInjector.bindService()
-            if (Shizuku.checkSelfPermission() != 0) {
-                Shizuku.requestPermission(1001)
+            Shizuku.addBinderReceivedListenerSticky {
+                shizukuInjector.bindService()
+                if (Shizuku.checkSelfPermission() != 0) {
+                    Shizuku.requestPermission(1001)
+                }
             }
         }
         engineViewModel
@@ -149,6 +157,7 @@ class HandyApplication : Application(), ComponentCallbacks2 {
     }
 
     override fun onLowMemory() {
+        super.onLowMemory()
         Log.w("HandyApp", "onLowMemory - unloading model")
         appScope.launch(Dispatchers.IO) {
             EngineBridge.nativeUnloadModel()

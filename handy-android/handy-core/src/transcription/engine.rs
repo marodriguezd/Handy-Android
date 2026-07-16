@@ -75,6 +75,11 @@ impl TranscriptionEngine {
             }
         };
 
+        // Log the backend that transcribe-cpp actually bound to. On Android
+        // this is typically "cpu" today, but if the build ever includes
+        // Vulkan/QNN support, Auto will bind to the best available backend.
+        info!("[handy-core] model loaded, backend='{}'", model.backend());
+
         self.active_model_path = Some(path.clone());
         *self.model.lock().unwrap() = Some(model);
         self.is_loaded.store(true, Ordering::Release);
