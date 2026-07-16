@@ -17,6 +17,9 @@ import org.junit.Test
  *  - Voxtral-like EXTREME models (FIT/EXCEEDS) appear after TIER_RECOMMENDED.
  *  - Experimental models are hidden unless showExp=true.
  *  - Within the same bucket, smaller models come first.
+ *  - **Sprint 22** — search query, language filter, and onlyRecommended
+ *    flags from the catalog header are evaluated *before* capability
+ *    computation (user filter is cheaper than compat).
  */
 class CatalogSorterTest {
 
@@ -54,14 +57,17 @@ class CatalogSorterTest {
         isActive: Boolean = false,
         isDownloaded: Boolean = false,
         recommended: Boolean = false,
+        language: String = "en",
+        description: String? = null,
+        displayName: String = id,
     ): ModelInfo = ModelInfo(
         id = id,
-        displayName = id,
+        displayName = displayName,
         sizeBytes = sizeBytes,
-        language = "en",
+        language = language,
         quant = "Q4_K_M",
         license = null,
-        description = null,
+        description = description,
         isDownloaded = isDownloaded,
         isActive = isActive,
         recommended = recommended,
@@ -254,5 +260,346 @@ class CatalogSorterTest {
 
         assertEquals(listOf(experimental.id), ids(resultShown))
         assertTrue(resultShown.first().second.badges.contains(CompatibilityBadge.EXPERIMENTAL))
+    }
+
+    // ── Sprint 22: search query (Sprint 22 action #6) ─────────────────
+
+    @Test
+    fun `blank search returns every model unchanged`() {
+        val a = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L)
+        val b = model(id = "handy-computer/whisper-large-v3-gguf", sizeBytes = 1_200_000_000L)
+
+        val resultBlank = computeVisibleCatalog(
+            raw = listOf(a, b),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "",
+        )
+        val resultWhitespace = computeVisibleCatalog(
+            raw = listOf(a, b),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "   ",
+        )
+
+        assertEquals(listOf(a.id, b.id), ids(resultBlank))
+        assertEquals(listOf(a.id, b.id), ids(resultWhitespace))
+    }
+
+    @Test
+    fun `search filter matches model id case insensitively`() {
+        val canary = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L)
+        val whisper = model(id = "handy-computer/whisper-large-v3-gguf", sizeBytes = 1_200_000_000L)
+
+        val resultLower = computeVisibleCatalog(
+            raw = listOf(canary, whisper),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "canary",
+        )
+        val resultUpper = computeVisibleCatalog(
+            raw = listOf(canary, whisper),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "CANARY",
+        )
+
+        assertEquals(listOf(canary.id), ids(resultLower))
+        assertEquals(listOf(canary.id), ids(resultUpper))
+    }
+
+    @Test
+    fun `search filter matches description case insensitively`() {
+        val described = model(
+            id = "handy-computer/canary-180m-flash-gguf",
+            sizeBytes = 139_000_000L,
+            description = "Fast multilingual streaming ASR from NVIDIA.",
+        )
+        val undescribed = model(
+            id = "handy-computer/whisper-large-v3-gguf",
+            sizeBytes = 1_200_000_000L,
+            description = "OpenAI Whisper large v3.",
+        )
+
+        val result = computeVisibleCatalog(
+            raw = listOf(described, undescribed),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "nvidia",
+        )
+
+        assertEquals(listOf(described.id), ids(result))
+    }
+
+    @Test
+    fun `search filter matches displayName when it differs from id`() {
+        // Regression guard for the displayName branch: when a model exposes a
+        // human-readable displayName distinct from its catalog id, a query
+        // matching the displayName must still hit. Using `displayName="Canary"`
+        // vs `id="handy-computer/canary-180m-flash-gguf"` proves the id branch
+        // alone isn't doing all the work.
+        val canary = model(
+            id = "handy-computer/canary-180m-flash-gguf",
+            sizeBytes = 139_000_000L,
+            displayName = "Canary 180M Flash",
+        )
+        val whisper = model(
+            id = "handy-computer/whisper-large-v3-gguf",
+            sizeBytes = 1_200_000_000L,
+            displayName = "Whisper Large v3",
+        )
+
+        val result = computeVisibleCatalog(
+            raw = listOf(canary, whisper),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "canary",
+        )
+
+        assertEquals(listOf(canary.id), ids(result))
+    }
+
+    @Test
+    fun `search filter trims surrounding whitespace`() {
+        // Defensive: leading / trailing whitespace in the query should not
+        // block matches. We only need to confirm trim() runs before the
+        // contains-checks fire.
+        val canary = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L)
+        val whisper = model(id = "handy-computer/whisper-large-v3-gguf", sizeBytes = 1_200_000_000L)
+
+        val result = computeVisibleCatalog(
+            raw = listOf(canary, whisper),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "  canary  ",
+        )
+
+        assertEquals(listOf(canary.id), ids(result))
+    }
+
+    @Test
+    fun `search filter searches mid-token not just prefix`() {
+        val canary = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L)
+        val whisper = model(id = "handy-computer/whisper-large-v3-gguf", sizeBytes = 1_200_000_000L)
+
+        // "can" is a mid-token of "canary" — neither a prefix of the full id
+        // ("handy-computer/...") nor a suffix. "can" does not appear anywhere
+        // in the whisper id.
+        val result = computeVisibleCatalog(
+            raw = listOf(canary, whisper),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "can",
+        )
+
+        assertEquals(listOf(canary.id), ids(result))
+    }
+
+    @Test
+    fun `search filter returns empty when nothing matches`() {
+        val a = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L)
+
+        val result = computeVisibleCatalog(
+            raw = listOf(a),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            query = "totally-nonexistent-token-xyz",
+        )
+
+        assertTrue(result.isEmpty())
+    }
+
+    // ── Sprint 22: language filter (Sprint 22 action #6) ──────────────
+
+    @Test
+    fun `null language filter returns all models regardless of tag`() {
+        val enOnly = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L, language = "en")
+        val esOnly = model(id = "handy-computer/whisper-large-v3-gguf", sizeBytes = 1_200_000_000L, language = "es")
+        val multi = model(id = "handy-computer/granite-speech-4.1-2b-plus-gguf", sizeBytes = 1_500_000_000L, language = "multi")
+
+        val result = computeVisibleCatalog(
+            raw = listOf(enOnly, esOnly, multi),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            languageFilter = null,
+        )
+
+        assertEquals(listOf(enOnly.id, esOnly.id, multi.id), ids(result))
+    }
+
+    @Test
+    fun `language filter keeps models tagged with the requested language`() {
+        val enOnly = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L, language = "en")
+        val esOnly = model(id = "handy-computer/whisper-large-v3-gguf", sizeBytes = 1_200_000_000L, language = "es")
+
+        val result = computeVisibleCatalog(
+            raw = listOf(enOnly, esOnly),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            languageFilter = "en",
+        )
+
+        assertEquals(listOf(enOnly.id), ids(result))
+    }
+
+    @Test
+    fun `language filter splits comma separated catalog tags and matches case insensitively`() {
+        val multilingual = model(
+            id = "handy-computer/canary-180m-flash-gguf",
+            sizeBytes = 139_000_000L,
+            language = "en, es, fr, multilingual",
+        )
+        val spanishOnly = model(
+            id = "handy-computer/whisper-large-v3-gguf",
+            sizeBytes = 1_200_000_000L,
+            language = "es",
+        )
+        val germanOnly = model(
+            id = "handy-computer/granite-speech-4.1-2b-plus-gguf",
+            sizeBytes = 1_500_000_000L,
+            language = "de",
+        )
+
+        val resultUpper = computeVisibleCatalog(
+            raw = listOf(multilingual, spanishOnly, germanOnly),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            languageFilter = "ES",
+        )
+        val resultMixed = computeVisibleCatalog(
+            raw = listOf(multilingual, spanishOnly, germanOnly),
+            snapshot = flagshipSnapshot,
+            recs = emptyRecs,
+            showExp = false,
+            languageFilter = "fr",
+        )
+
+        assertEquals(listOf(multilingual.id, spanishOnly.id), ids(resultUpper))
+        assertEquals(listOf(multilingual.id), ids(resultMixed))
+    }
+
+    // ── Sprint 22: onlyRecommended (Sprint 22 action #6) ───────────────
+
+    @Test
+    fun `onlyRecommended true hides non-recommended models but preserves sort within the kept set`() {
+        val primary = model(
+            id = "handy-computer/whisper-large-v3-gguf",
+            sizeBytes = 1_200_000_000L,
+            recommended = true,
+        )
+        val alternative = model(
+            id = "handy-computer/granite-speech-4.1-2b-plus-gguf",
+            sizeBytes = 1_500_000_000L,
+            recommended = true,
+        )
+        val bogStandard = model(
+            id = "handy-computer/canary-180m-flash-gguf",
+            sizeBytes = 139_000_000L,
+            recommended = false,
+        )
+
+        val result = computeVisibleCatalog(
+            raw = listOf(primary, alternative, bogStandard),
+            snapshot = flagshipSnapshot,
+            recs = flagshipRecs,
+            showExp = false,
+            onlyRecommended = true,
+        )
+
+        assertEquals(listOf(primary.id, alternative.id), ids(result))
+    }
+
+    @Test
+    fun `onlyRecommended false returns the full sorted catalog`() {
+        val primary = model(id = "handy-computer/whisper-large-v3-gguf", sizeBytes = 1_200_000_000L)
+        val bogStandard = model(id = "handy-computer/canary-180m-flash-gguf", sizeBytes = 139_000_000L)
+
+        val resultOff = computeVisibleCatalog(
+            raw = listOf(primary, bogStandard),
+            snapshot = flagshipSnapshot,
+            recs = flagshipRecs,
+            showExp = false,
+            onlyRecommended = false,
+        )
+        val resultDefault = computeVisibleCatalog(
+            raw = listOf(primary, bogStandard),
+            snapshot = flagshipSnapshot,
+            recs = flagshipRecs,
+            showExp = false,
+        )
+
+        assertEquals(listOf(primary.id, bogStandard.id), ids(resultOff))
+        assertEquals(listOf(primary.id, bogStandard.id), ids(resultDefault))
+    }
+
+    // ── Sprint 22: filters compose AND the sort chain still applies ────
+
+    @Test
+    fun `filters compose and status sort invariant applies to the kept set`() {
+        // Two tiers of matching items with DIFFERENT compatibility status so a
+        // genuine sort invariant is in play:
+        //   * `activeItem` — ACTIVE status (must float above everything).
+        //   * `primary`    — TIER_RECOMMENDED via flagshipRecs.
+        //   * `alternative`— TIER_RECOMMENDED (alternative) via flagshipRecs.
+        //   * `bogStandard`— does NOT match the search query.
+        // After applying all three filters, the ACTIVE item must come first
+        // and the TIER_RECOMMENDED primary must come before the
+        // TIER_RECOMMENDED alternative (promotion bucket order).
+        val activeItem = model(
+            id = "handy-computer/canary-180m-flash-gguf",
+            sizeBytes = 139_000_000L,
+            isActive = true,
+            language = "en",
+            recommended = true,
+        )
+        val primary = model(
+            id = "handy-computer/whisper-large-v3-gguf",
+            sizeBytes = 1_200_000_000L,
+            language = "en",
+            recommended = true,
+        )
+        val alternative = model(
+            id = "handy-computer/granite-speech-4.1-2b-plus-gguf",
+            sizeBytes = 1_500_000_000L,
+            language = "en",
+            recommended = true,
+        )
+        val unrelated = model(
+            id = "handy-computer/voxtral-mini-3b-gguf",
+            sizeBytes = 3_000_000_000L,
+            language = "es",
+            recommended = false,
+        )
+
+        val result = computeVisibleCatalog(
+            raw = listOf(unrelated, alternative, primary, activeItem),
+            snapshot = flagshipSnapshot,
+            recs = flagshipRecs,
+            showExp = false,
+            query = "gguf",
+            languageFilter = "en",
+            onlyRecommended = true,
+        )
+
+        assertEquals(
+            listOf(activeItem.id, primary.id, alternative.id),
+            ids(result),
+        )
+        // The unrelated model was filtered out by all three predicates
+        // (search keeps it, but it fails onlyRecommended → status regresses,
+        // languageFilter drops it via `es ≠ en`, so test the boundary).
+        assertTrue("unrelated model must be filtered out by languageFilter", result.none { it.first.id == unrelated.id })
     }
 }

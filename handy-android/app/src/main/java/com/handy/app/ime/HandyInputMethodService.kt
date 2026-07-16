@@ -5,27 +5,25 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,15 +36,14 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -64,18 +61,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -91,6 +83,8 @@ import com.handy.app.HandyApplication
 import com.handy.app.R
 import com.handy.app.injection.ImeInjector
 import com.handy.app.injection.InjectorRouter
+import com.handy.app.ui.components.HandySpringTokens
+import com.handy.app.ui.components.Spacing
 import com.handy.app.viewmodel.EngineViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -98,7 +92,11 @@ import kotlin.math.abs
 // ═══════════════════════════════════════════════════════════════════
 // HandyInputMethodService — IME lifecycle + Compose host
 // ═══════════════════════════════════════════════════════════════════
-class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+class HandyInputMethodService :
+    InputMethodService(),
+    LifecycleOwner,
+    ViewModelStoreOwner,
+    SavedStateRegistryOwner {
 
     private val engineViewModel: EngineViewModel
         get() = (application as HandyApplication).engineViewModel
@@ -112,14 +110,14 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
     private var lastInputConnection: InputConnection? = null
 
     /**
-     * Height in pixels of the visible IME content panel.
-     * Measured dynamically via onGloballyPositioned in Compose
-     * and consumed by onComputeInsets to prevent host app layout shifts.
+     * Height in pixels of the visible IME content panel, measured
+     * dynamically via `onGloballyPositioned` and consumed by
+     * `onComputeInsets` so the host app isn't pushed upward into a
+     * fullscreen IME chrome (we use a floating pill, not a full keyboard).
      */
     @Volatile
     private var contentHeightPx: Int = 0
 
-    // ── Lifecycle & Owners ────────────────────────────────────
     private val lifecycleRegistry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
@@ -127,7 +125,8 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
     override val viewModelStore: ViewModelStore get() = store
 
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
-    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
+    override val savedStateRegistry: SavedStateRegistry =
+        savedStateRegistryController.savedStateRegistry
 
     override fun onCreate() {
         super.onCreate()
@@ -138,7 +137,9 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
 
         val dialogWindow = this.window?.window
         if (dialogWindow != null) {
-            dialogWindow.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            dialogWindow.setBackgroundDrawable(
+                android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT),
+            )
             val decorView = dialogWindow.decorView
             decorView.setViewTreeLifecycleOwner(this)
             decorView.setViewTreeViewModelStoreOwner(this)
@@ -150,7 +151,7 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
         return ComposeView(this).apply {
             layoutParams = android.widget.FrameLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             )
 
             val dialogWindow = this@HandyInputMethodService.window?.window
@@ -159,17 +160,21 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
                 decorView.setViewTreeViewModelStoreOwner(this@HandyInputMethodService)
                 decorView.setViewTreeSavedStateRegistryOwner(this@HandyInputMethodService)
             }
-
             setViewTreeLifecycleOwner(this@HandyInputMethodService)
             setViewTreeViewModelStoreOwner(this@HandyInputMethodService)
             setViewTreeSavedStateRegistryOwner(this@HandyInputMethodService)
 
             setContent {
+                // Sprint 21: subscribe to user-forced pill placement so the
+                // IME re-aligns (top vs bottom center) without restarting.
+                val imePlacement by (application as HandyApplication)
+                    .settingsStore.imePlacementFlow.collectAsState()
                 val finalText by engineViewModel.finalText.collectAsState()
+
                 Box(
-                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                        contentHeightPx = coordinates.size.height
-                    }
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        contentHeightPx = coords.size.height
+                    },
                 ) {
                     HandyVoiceBar(
                         state = engineViewModel.state.collectAsState().value,
@@ -177,6 +182,7 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
                         partialText = engineViewModel.partialText.collectAsState().value,
                         finalText = finalText,
                         lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
+                        imePlacement = imePlacement,
                         onStartDictation = { engineViewModel.startRecording() },
                         onStopDictation = { engineViewModel.stopRecording() },
                         onConfirmInsert = { text -> engineViewModel.confirmInsert(text) },
@@ -204,14 +210,12 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
     }
 
     /**
-     * Control the visible area of the IME to avoid unexpected layout shifts
-     * in host apps. Since Handy uses a floating pill design (not a full-height
-     * keyboard), we tell the system that only the pill's measured height is
-     * "content" and the rest of the IME window is transparent background.
-     *
-     * Without this override, Android assumes the entire IME window height is
-     * content and pushes the host app up into the top of the screen, causing
-     * jarring layout jumps.
+     * Floating pill = wrap_content height, transparent below. Without
+     * this override Android assumes the entire IME window is content
+     * and pushes the host app up. We declare only the pill height as
+     * `contentTopInsets`, leave the pass-through area above
+     * touchable via `TOUCHABLE_INSETS_REGION` so taps elsewhere fall
+     * through to the host app underneath.
      */
     override fun onComputeInsets(outInsets: Insets?) {
         super.onComputeInsets(outInsets)
@@ -221,11 +225,6 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
         if (height > 0) {
             outInsets.contentTopInsets = height
             outInsets.visibleTopInsets = height
-            // Use a touchable region so taps inside the pill are routed to the
-            // IME, while taps in the transparent background pass through to
-            // the host app below. TOUCHABLE_INSETS_CONTENT would treat the
-            // area above contentTopInsets as pass-through, which for a
-            // wrap-content floating pill excludes the entire IME window.
             outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
             val width = window?.window?.decorView?.width
                 .takeIf { it != null && it > 0 }
@@ -242,10 +241,13 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
 
     private fun showInputMethodPicker() {
         try {
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            val imm = getSystemService(INPUT_METHOD_SERVICE)
+                as android.view.inputmethod.InputMethodManager
             imm.showInputMethodPicker()
         } catch (e: Exception) {
-            val intent = android.content.Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS).apply {
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS,
+            ).apply {
                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
@@ -254,28 +256,19 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Design Tokens — aligned with Handy PC overlay and Material 3
+// Design Tokens
 // ═══════════════════════════════════════════════════════════════════
-private val PopEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 private val EnterEasing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+private const val FinitePhaseDurationMs = 1900L
 
-@Composable
-private fun accentColor(): Color = MaterialTheme.colorScheme.primary
-
-@Composable
-private fun successColor(): Color = MaterialTheme.colorScheme.tertiary
-
-@Composable
-private fun errorColor(): Color = MaterialTheme.colorScheme.error
+// MD3 "full pill" approximation — Compose Material3 only ships
+// extraSmall..extraLarge, so the spec-mandated full-rounded pill is
+// rendered as RoundedCornerShape(28.dp) instead of MaterialTheme.
+private val PillShape = RoundedCornerShape(28.dp)
 
 // ═══════════════════════════════════════════════════════════════════
-// Helper: animated press scale modifier
+// Helper: spring-driven press-scale interaction
 // ═══════════════════════════════════════════════════════════════════
-
-/**
- * Wraps a clickable lambda with press-scale animation.
- * Returns a [ClickableWithPress] that must be used with [pressClickable].
- */
 private class ClickableWithPress(
     val interactionSource: MutableInteractionSource,
     val onClick: () -> Unit,
@@ -295,7 +288,7 @@ private fun Modifier.pressScaleClickable(
     val isPressed by clickable.interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) scalePressed else 1f,
-        animationSpec = tween(100),
+        animationSpec = HandySpringTokens.gentle(),
         label = "pressScale",
     )
     return this
@@ -307,7 +300,7 @@ private fun Modifier.pressScaleClickable(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// HandyVoiceBar — Main composable with animated state transitions
+// HandyVoiceBar — Compose state machine
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun HandyVoiceBar(
@@ -316,6 +309,7 @@ private fun HandyVoiceBar(
     partialText: String,
     finalText: String?,
     lastErrorMessage: String?,
+    imePlacement: String,
     onStartDictation: () -> Unit,
     onStopDictation: () -> Unit,
     onConfirmInsert: (String) -> Unit,
@@ -324,308 +318,275 @@ private fun HandyVoiceBar(
     onCancelDictation: () -> Unit,
     onSwitchKeyboard: () -> Unit,
 ) {
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+    val isTop = imePlacement == "top"
 
-    // Pop-in animation on first render
+    // Pop-in on first composition
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
-
     val popScale by animateFloatAsState(
         targetValue = if (visible) 1f else 0.92f,
-        animationSpec = tween(500, easing = PopEasing),
+        animationSpec = HandySpringTokens.bouncy(),
         label = "popScale",
     )
     val popAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(400),
+        animationSpec = HandySpringTokens.gentle(),
         label = "popAlpha",
     )
 
     Box(
+        // Reviewer note: `fillMaxWidth()` was originally `fillMaxWidth()`
+        // (wrap-content height).  `fillMaxSize()` here would carry the
+        // entire IME window into `onGloballyPositioned`, collapsing the
+        // pass-through area to zero in `onComputeInsets`.
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 56.dp),
-        contentAlignment = Alignment.Center,
+            .padding(
+                start = Spacing.lg,
+                end = Spacing.lg,
+                top = if (isTop) Spacing.huge else Spacing.sm,
+                bottom = if (isTop) Spacing.sm else Spacing.huge,
+            ),
+        contentAlignment = if (isTop) Alignment.TopCenter else Alignment.BottomCenter,
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer {
-                    scaleX = popScale
-                    scaleY = popScale
-                    this.alpha = popAlpha
-                },
-            shape = MaterialTheme.shapes.extraLarge,
-            color = surfaceColor,
-            border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
-            shadowElevation = 8.dp,
-        ) {
-            // AnimatedContent handles smooth transitions between states.
-            // Each state slides in from above/below with a fade, creating
-            // a smooth visual flow as the user progresses through the
-            // dictation lifecycle.
-            AnimatedContent(
-                targetState = state,
-                transitionSpec = {
-                    val direction = if (targetState > initialState) 1 else -1
-                    ContentTransform(
-                        targetContentEnter = slideInVertically(
-                            animationSpec = tween(300, easing = EnterEasing),
-                            // Slide from 1/4 of the container height above/below
-                            initialOffsetY = { fullHeight -> fullHeight / 4 * -direction },
-                        ) + fadeIn(animationSpec = tween(250)),
-                        initialContentExit = fadeOut(animationSpec = tween(150)),
-                    )
-                },
-                label = "stateTransition",
-            ) { currentState ->
-                when (currentState) {
-                    EngineViewModel.STATE_LOADING -> LoadingBar()
-
-                    EngineViewModel.STATE_LISTENING -> RecordingBar(
-                        vadLevel = vadLevel,
-                        partialText = partialText,
-                        onStop = onStopDictation,
-                    )
-
-                    EngineViewModel.STATE_TRANSCRIBING -> TranscribingBar(
-                        partialText = partialText,
-                        onCancel = onCancelDictation,
-                    )
-
-                    EngineViewModel.STATE_CONFIRM -> ConfirmBar(
-                        text = finalText ?: partialText,
-                        onConfirm = onConfirmInsert,
-                        onDiscard = onDiscard,
-                    )
-
-                    EngineViewModel.STATE_ERROR -> ErrorBar(
-                        errorMessage = lastErrorMessage,
-                        onRetry = onRetry,
-                    )
-
-                    else -> IdleBar(
-                        onStart = onStartDictation,
-                        onSwitchKeyboard = onSwitchKeyboard,
-                    )
+        AnimatedVisibility(visible = visible) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = popScale
+                        scaleY = popScale
+                        this.alpha = popAlpha
+                    },
+                shape = PillShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 3.dp,
+                shadowElevation = 6.dp,
+                border = errorBorderFor(state),
+            ) {
+                AnimatedContent(
+                    targetState = state,
+                    transitionSpec = {
+                        val direction = if (targetState > initialState) 1 else -1
+                        ContentTransform(
+                            targetContentEnter = slideInVertically(
+                                animationSpec = tween(300, easing = EnterEasing),
+                                initialOffsetY = { fullHeight -> fullHeight / 4 * -direction },
+                            ) + fadeIn(animationSpec = tween(250)),
+                            initialContentExit = fadeOut(animationSpec = tween(150)),
+                        )
+                    },
+                    label = "voiceBarState",
+                ) { currentState ->
+                    when (currentState) {
+                        EngineViewModel.STATE_LOADING -> LoadingBar()
+                        EngineViewModel.STATE_LISTENING -> RecordingBar(
+                            vadLevel = vadLevel,
+                            partialText = partialText,
+                            onStop = onStopDictation,
+                        )
+                        EngineViewModel.STATE_TRANSCRIBING -> TranscribingBar(
+                            partialText = partialText,
+                            onCancel = onCancelDictation,
+                        )
+                        EngineViewModel.STATE_CONFIRM -> ConfirmBar(
+                            text = finalText ?: partialText,
+                            onConfirm = onConfirmInsert,
+                            onDiscard = onDiscard,
+                        )
+                        EngineViewModel.STATE_ERROR -> ErrorBar(
+                            errorMessage = lastErrorMessage,
+                            onRetry = onRetry,
+                        )
+                        else -> IdleBar(
+                            onStart = onStartDictation,
+                            onSwitchKeyboard = onSwitchKeyboard,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/** Spec: error surface gets a subtle border.  @Composable because we
+ *  read `MaterialTheme.colorScheme.error` to build the tinted border. */
+@Composable
+private fun errorBorderFor(state: Int): BorderStroke? = when (state) {
+    EngineViewModel.STATE_ERROR -> BorderStroke(
+        width = 1.dp,
+        color = MaterialTheme.colorScheme.error.copy(alpha = 0.2f),
+    )
+    else -> null
+}
+
 // ═══════════════════════════════════════════════════════════════════
-// IdleBar — Mic pill + "Dictate" label + keyboard switcher
+// IdleBar — pill + idle pulsing dot + label + keyboard switcher
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
     val startClick = rememberPressScaleClickable(onStart)
     val kbClick = rememberPressScaleClickable(onSwitchKeyboard)
 
-    Box(
+    Surface(
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f),
+        tonalElevation = 3.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clip(MaterialTheme.shapes.extraLarge)
             .pressScaleClickable(startClick, scalePressed = 0.97f),
-        contentAlignment = Alignment.Center,
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Spacing.xxl, end = Spacing.md, top = Spacing.sm, bottom = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    IdlePulsingDot()
-                    Spacer(Modifier.width(10.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(26.dp)
-                            .clip(CircleShape)
-                            .background(accentColor().copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.Mic,
-                            contentDescription = null,
-                            tint = accentColor(),
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = stringResource(R.string.dictation_button),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+            IdlePulsingDot()
+            Spacer(Modifier.width(Spacing.md))
+            Text(
+                text = stringResource(R.string.dictation_button),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.weight(1f))
 
-                IconButton(
-                    onClick = { kbClick.onClick() },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Keyboard,
-                        contentDescription = stringResource(R.string.switch_keyboard),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+            FilledIconButton(
+                onClick = { kbClick.onClick() },
+                modifier = Modifier.size(48.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Keyboard,
+                    contentDescription = stringResource(R.string.switch_keyboard),
+                )
             }
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// LoadingBar — Model loading spinner
+// LoadingBar — model load spinner
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun LoadingBar() {
-    val mutedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
+    Surface(
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Surface(
-            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.xxl, vertical = Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    color = accentColor(),
-                    strokeWidth = 2.5.dp,
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.ime_loading_model),
-                    color = mutedColor,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 2.5.dp,
+            )
+            Spacer(Modifier.width(Spacing.md))
+            Text(
+                text = stringResource(R.string.ime_loading_model),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// RecordingBar — Waveform + timer + partial text + stop button
+// RecordingBar — waveform + timer + partial text + stop
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun RecordingBar(vadLevel: Float, partialText: String, onStop: () -> Unit) {
     var elapsedSeconds by remember { mutableIntStateOf(0) }
-
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
             elapsedSeconds++
         }
     }
-
     val stopClick = rememberPressScaleClickable(onStop)
+    val timerText = "%d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
 
-    val minutes = elapsedSeconds / 60
-    val seconds = elapsedSeconds % 60
-    val timerText = "%d:%02d".format(minutes, seconds)
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
+    Surface(
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Surface(
-            modifier = Modifier.clip(MaterialTheme.shapes.large),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                // Top row: dot, waveform, timer, stop
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PulsingDot()
+                Spacer(Modifier.width(Spacing.md))
+                WaveformBars(level = vadLevel)
+                Spacer(Modifier.weight(1f))
+
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 ) {
-                    PulsingDot()
-                    Spacer(Modifier.width(10.dp))
-                    WaveformBars(level = vadLevel)
-                    Spacer(Modifier.weight(1f))
-
-                    // Timer badge
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    ) {
-                        Text(
-                            text = timerText,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        )
-                    }
-
-                    Spacer(Modifier.width(12.dp))
-
-                    // Stop button
-                    FilledIconButton(
-                        onClick = { stopClick.onClick() },
-                        modifier = Modifier.size(48.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = errorColor(),
+                    Text(
+                        text = timerText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(
+                            horizontal = Spacing.sm,
+                            vertical = 2.dp,
                         ),
-                    ) {
-                        Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.Stop,
-                            contentDescription = stringResource(R.string.stop_dictation),
-                            tint = MaterialTheme.colorScheme.onError,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                    )
                 }
 
-                // Partial text preview in a separated surface
-                if (partialText.isNotEmpty()) {
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-                    ) {
-                        Text(
-                            text = partialText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        )
-                    }
+                Spacer(Modifier.width(Spacing.sm))
+
+                FilledIconButton(
+                    onClick = { stopClick.onClick() },
+                    modifier = Modifier.size(48.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Stop,
+                        contentDescription = stringResource(R.string.stop_dictation),
+                    )
+                }
+            }
+
+            if (partialText.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    modifier = Modifier.padding(
+                        start = Spacing.lg,
+                        end = Spacing.lg,
+                        bottom = Spacing.sm,
+                    ),
+                ) {
+                    Text(
+                        text = partialText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(
+                            horizontal = Spacing.md,
+                            vertical = Spacing.sm,
+                        ),
+                    )
                 }
             }
         }
@@ -633,84 +594,72 @@ private fun RecordingBar(vadLevel: Float, partialText: String, onStop: () -> Uni
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TranscribingBar — Spinner + partial text + cancel button
+// TranscribingBar — spinner + partial text + cancel button
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun TranscribingBar(partialText: String, onCancel: () -> Unit) {
-    val mutedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-
     val cancelClick = rememberPressScaleClickable(onCancel)
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
+    Surface(
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Surface(
-            modifier = Modifier.clip(MaterialTheme.shapes.large),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 2.5.dp,
+                )
+                Spacer(Modifier.width(Spacing.md))
+                Text(
+                    text = stringResource(R.string.ime_transcribing),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.weight(1f))
+
+                FilledIconButton(
+                    onClick = { cancelClick.onClick() },
+                    modifier = Modifier.size(48.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
                 ) {
-                    // Animated spinner
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = accentColor(),
-                        strokeWidth = 2.5.dp,
-                    )
-
-                    Spacer(Modifier.width(10.dp))
-
-                    Text(
-                        text = stringResource(R.string.ime_transcribing),
-                        color = mutedColor,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-
-                    Spacer(Modifier.weight(1f))
-
-                    // Cancel button
-                    FilledIconButton(
-                        onClick = { cancelClick.onClick() },
-                        modifier = Modifier.size(32.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = errorColor(),
-                        ),
-                    ) {
-                        Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.Close,
-                            contentDescription = stringResource(R.string.discard),
-                            tint = MaterialTheme.colorScheme.onError,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
-
-                if (partialText.isNotEmpty()) {
-                    Text(
-                        text = partialText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = mutedColor.copy(alpha = 0.7f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.discard),
                     )
                 }
+            }
+            if (partialText.isNotEmpty()) {
+                Text(
+                    text = partialText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(
+                        start = Spacing.lg,
+                        end = Spacing.lg,
+                        bottom = Spacing.sm,
+                    ),
+                )
             }
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ConfirmBar — Shows transcribed text with Insert/Discard options
+// ConfirmBar — transcribed text + Insert/Discard (with HorizontalDivider)
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun ConfirmBar(
@@ -718,110 +667,107 @@ private fun ConfirmBar(
     onConfirm: (String) -> Unit,
     onDiscard: () -> Unit,
 ) {
-    val mutedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val context = LocalContext.current
-
     val insertClick = rememberPressScaleClickable { onConfirm(text) }
     val discardClick = rememberPressScaleClickable(onDiscard)
     val copyClick = rememberPressScaleClickable {
         val clipboard = context.getSystemService(
-            android.content.Context.CLIPBOARD_SERVICE
+            android.content.Context.CLIPBOARD_SERVICE,
         ) as? android.content.ClipboardManager
         clipboard?.setPrimaryClip(
             android.content.ClipData.newPlainText(
-                context.getString(R.string.app_name), text
-            )
+                context.getString(R.string.app_name),
+                text,
+            ),
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
+    Surface(
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Surface(
-            modifier = Modifier.clip(MaterialTheme.shapes.large),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                // Transcribed text display with copy button
-                if (text.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Text(
-                            text = text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-
-                        Spacer(Modifier.width(8.dp))
-
-                        // Copy to clipboard button
-                        IconButton(
-                            onClick = { copyClick.onClick() },
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.ContentCopy,
-                                contentDescription = stringResource(R.string.text_copied_to_clipboard),
-                                tint = mutedColor,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                }
-
-                // Action buttons row
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Transcribed text + always-visible copy button.
+            if (text.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(
+                            start = Spacing.lg,
+                            top = Spacing.md,
+                            end = Spacing.sm,
+                            bottom = Spacing.xs,
+                        ),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    // Left: hint text
                     Text(
-                        text = stringResource(R.string.ime_tap_insert_to_use),
-                        color = mutedColor.copy(alpha = 0.5f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Normal,
-                        modifier = Modifier.padding(start = 6.dp),
+                        text = text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        // Spec: 4 lines max on confirm bar
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
+                    Spacer(Modifier.width(Spacing.sm))
+                    FilledIconButton(
+                        onClick = { copyClick.onClick() },
+                        modifier = Modifier.size(48.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = stringResource(R.string.text_copied_to_clipboard),
+                        )
+                    }
+                }
+            }
 
-                    // Right: action buttons
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Discard button
-                        TextButton(
-                            onClick = { discardClick.onClick() },
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                        ) {
-                            Text(stringResource(R.string.discard))
-                        }
+            // Spec: HorizontalDivider before actionables.
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(horizontal = Spacing.lg),
+            )
 
-                        // Insert button
-                        Button(
-                            onClick = { insertClick.onClick() },
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = successColor(),
-                            ),
-                        ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.insert_text))
-                        }
+            // Action row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.ime_tap_insert_to_use),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = Spacing.xs),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    TextButton(
+                        onClick = { discardClick.onClick() },
+                    ) {
+                        Text(stringResource(R.string.discard))
+                    }
+                    FilledTonalButton(
+                        onClick = { insertClick.onClick() },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(Spacing.xs))
+                        Text(stringResource(R.string.insert_text))
                     }
                 }
             }
@@ -830,190 +776,185 @@ private fun ConfirmBar(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ErrorBar — Error message + retry button
+// ErrorBar — error surface + retry
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
     val retryClick = rememberPressScaleClickable(onRetry)
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
+    Surface(
+        shape = PillShape,
+        // Spec: error surface = errorContainer.copy(alpha = 0.08f)
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.08f),
+        tonalElevation = 3.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.error.copy(alpha = 0.2f),
+        ),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Surface(
-            modifier = Modifier.clip(MaterialTheme.shapes.large),
-            shape = MaterialTheme.shapes.large,
-            color = errorColor().copy(alpha = 0.08f),
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                errorColor().copy(alpha = 0.2f),
-            ),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Error icon in subtle red circle
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(errorColor().copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "!",
-                        color = errorColor(),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                Text(
-                    text = errorMessage ?: stringResource(R.string.ime_error_generic),
-                    color = errorColor(),
-                    fontSize = 13.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-
-                Spacer(Modifier.width(10.dp))
-
-                // Retry button
-                FilledIconButton(
-                    onClick = { retryClick.onClick() },
-                    modifier = Modifier.size(34.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = accentColor(),
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.18f),
                     ),
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
-                        contentDescription = stringResource(R.string.retry),
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "!",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Spacer(Modifier.width(Spacing.md))
+            Text(
+                text = errorMessage ?: stringResource(R.string.ime_error_generic),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(Spacing.sm))
+            FilledIconButton(
+                onClick = { retryClick.onClick() },
+                modifier = Modifier.size(48.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.retry),
+                )
             }
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// IdlePulsingDot — Subtle idle indicator (no recording happening)
+// IdlePulsingDot — slow breathing dot before any recording begins
 // ═══════════════════════════════════════════════════════════════════
+//
+// We approximate "infinite spring" by toggling a phase Boolean under
+// a `LaunchedEffect` and binding two `animateFloatAsState`s with spring
+// specs. Compose's `infiniteRepeatable` only accepts DurationBased
+// animation specs and rejects `spring`, so this state-toggling pattern
+// gives us spring physics with infinite cycling.
 @Composable
 private fun IdlePulsingDot() {
-    val infiniteTransition = rememberInfiniteTransition(label = "idleDot")
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+    var phase by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(FinitePhaseDurationMs + 600)  // slightly slower than the recording pulse
+            phase = !phase
+        }
+    }
+    val pulseAlpha by animateFloatAsState(
+        targetValue = if (phase) 0.1f else 0.35f,
+        animationSpec = HandySpringTokens.gentle(),
         label = "idlePulseAlpha",
     )
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+    val pulseScale by animateFloatAsState(
+        targetValue = if (phase) 1.4f else 1f,
+        animationSpec = HandySpringTokens.bouncy(),
         label = "idlePulseScale",
     )
 
-    Box(contentAlignment = Alignment.Center) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(20.dp)) {
         Box(
             modifier = Modifier
                 .size((6 * pulseScale).dp)
                 .clip(CircleShape)
-                .background(accentColor().copy(alpha = pulseAlpha))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha)),
         )
         Box(
             modifier = Modifier
-                .size(4.dp)
+                .size(6.dp)
                 .clip(CircleShape)
-                .background(accentColor().copy(alpha = 0.5f))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
         )
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// PulsingDot — Animated recording indicator (active)
+// PulsingDot — active recording dot
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun PulsingDot() {
-    val infiniteTransition = rememberInfiniteTransition(label = "dotPulse")
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+    var phase by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(FinitePhaseDurationMs)
+            phase = !phase
+        }
+    }
+    val pulseAlpha by animateFloatAsState(
+        targetValue = if (phase) 0f else 0.6f,
+        animationSpec = HandySpringTokens.gentle(),
         label = "pulseAlpha",
     )
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+    val pulseScale by animateFloatAsState(
+        targetValue = if (phase) 1.8f else 1f,
+        animationSpec = HandySpringTokens.bouncy(),
         label = "pulseScale",
     )
 
-    Box(contentAlignment = Alignment.Center) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(24.dp)) {
         Box(
+            // Reviewer note: keep the recording dot on the brand color
+            // (primary = Handy pink) — using `error` (red) reads as
+            // "stop / fail". The IdlePulsingDot above uses primary too;
+            // keep these consistent.
             modifier = Modifier
-                .size((7 * pulseScale).dp)
+                .size((8 * pulseScale).dp)
                 .clip(CircleShape)
-                .background(accentColor().copy(alpha = pulseAlpha))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha)),
         )
         Box(
             modifier = Modifier
-                .size(7.dp)
+                .size(9.dp)
                 .clip(CircleShape)
-                .background(accentColor())
+                .background(MaterialTheme.colorScheme.primary),
         )
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// WaveformBars — 9 reactive bars matching PC overlay design
+// WaveformBars — 9 spring-driven bars matching the PC overlay
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun WaveformBars(level: Float) {
     val barCount = 9
-
     Row(
-        modifier = Modifier.height(20.dp),
+        modifier = Modifier.height(24.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (i in 0 until barCount) {
-            val infiniteTransition = rememberInfiniteTransition(label = "bar$i")
-            val phase by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(600 + i * 80, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
+            var phase by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    delay((600 + i * 80).toLong())
+                    phase = !phase
+                }
+            }
+            val phaseAxis by animateFloatAsState(
+                targetValue = if (phase) 1f else 0.15f,
+                animationSpec = HandySpringTokens.bouncy(),
                 label = "phase$i",
             )
-
             val centerFactor = 1f - (abs(i - barCount / 2).toFloat() / (barCount / 2f))
-            val combined = (level * centerFactor * 0.8f + phase * 0.2f).coerceIn(0f, 1f)
+            val combined = (level * centerFactor * 0.8f + phaseAxis * 0.2f).coerceIn(0f, 1f)
             val barHeight = (3 + combined * 16)
 
             Box(
@@ -1021,8 +962,11 @@ private fun WaveformBars(level: Float) {
                     .width(4.dp)
                     .height(barHeight.dp)
                     .clip(MaterialTheme.shapes.extraSmall)
-                    .background(accentColor())
+                    .background(MaterialTheme.colorScheme.primary)
             )
         }
     }
 }
+
+// TODO(Sprint22): introduce a confirming-cursor (1s blink) before
+//  transitioning out of STATE_CONFIRM.

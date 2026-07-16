@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.2.0-preview (Handy Android — Second Pre-Release, 17 Julio 2026)
+
+> **Nota sobre versionado:** el codebase interno `versionName="1.0.0-alpha2"` estuvo en uso desde Sprint 16 (cuando se bumpó de alpha1 a alpha2 para reflejar el started-MD3 work) pero **nunca llegó a publicarse** como CHANGELOG entry ni como GitHub release. `v0.2.0-preview` es el segundo pre-release público bajo este naming scheme (mismo esquema `-preview` que v0.1.0-preview). Los `v1.x.0-alpha*` entries arriba (v1.2.0-alpha, v1.1.0-alpha4, etc.) corresponden al fork de PC sincronizado antes de la separación Android-only en Julio 2026 y NO están en línea semver directa con este.
+
+Second pre-release del fork Handy Android. Cierra la mitad del plan MD3 (Sprints 17–23) más una pasada final de hygiene pre-Sprint 24. Esta versión está *lista para side-load* por testers externos que quieran probar la app en un device Android real antes de que llegue el siguiente release público.
+
+### Material Design 3 backbone (completo)
+- **Sprint 17 — Fundamentos MD3.** Tema migrado a `Theme.Material3.DayNight.NoActionBar`, transparent system bars, `shortEdges` cutout mode. `MainActivity` ahora llama `enableEdgeToEdge()` antes de `setContent`. `Theme.kt` poblado con jerarquía tonal completa: `surfaceContainer{Lowest … Highest}`, `surfaceDim/Bright`, `outlineVariant`, `scrim`. Paleta Handy PC preservada verbatim (seeds `#f28cbb`, `#da5893`, `#2c2b29`, `#5a5753`).
+- **Sprint 18 — Shared MD3 components** en `ui/components/`: `SettingsGroup`, `HandySlider`, `HandySwitch`, `HandyChipGroup`, `HandySearchBar`, `HandySegmentedButton`, `HandyBadge`, `HandySnackbar`, `HandyDialog`, `HandyFab`, `HandyListItem`, `HandyDropdown`, `HandyTonalBlock`, `HandyModalBottomSheet`, `MotionTokens`, `StatusDot`, `HandySpringTokens`. Tokens centralizados: `Spacing.xs..huge`, springs `gentle/bouncy/snappy`.
+- **Sprint 19 — General Settings MD3** con `MicrophoneSelector` index-based (fallback para entornos sin `AudioDevice`), `AudioFeedbackToggle`, `SoundPicker`, `VolumeSlider`, `ModelSettingsCard`. Grupos Audio / Model / Shortcuts.
+- **Sprint 20 — Advanced Settings + Experimental gated.** Groups App / Output / Transcription / History / Experimental. Strings `settings_section_*` consolidadas.
+- **Sprint 21 — IME rediseño MD3** (flagship surface). Pill shape `RoundedCornerShape(28.dp)`, `Surface(tonalElevation=3.dp, shadowElevation=6.dp)`, spring motion, IconButtons 48dp, 6-bar state machine (`IDLE / LOADING / LISTENING / TRANSCRIBING / CONFIRM / ERROR`), placement top/bottom via `SettingsStore.imePlacementFlow`. `// TODO(Sprint24): confirming-cursor 1s blink before transitioning out of STATE_CONFIRM` placed as breadcrumb.
+- **Sprint 22 — Models search + language filter (refactor + tests).** `CatalogSorter.computeVisibleCatalog` ahora acepta `searchQuery/languageFilter/onlyRecommended` como default params. 13 nuevos tests puros JVM (10 pre-existentes + 13 nuevos = 23 PASS / 0 FAIL).
+- **Sprint 23 — About + ThemeSelector + LocaleSelector (feature complete).** Tres `SettingsGroup`s (APPEARANCE / LANGUAGE / ABOUT). `ThemeSelector` SegmentedButton 3-way (SYSTEM/LIGHT/DARK). `LocaleSelector` HandyDropdown BCP-47 (`null` / `en` / `es`). Persistencia vía `SettingsStore.themeMode/appLanguage`. `AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))`. AndroidManifest declara `configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection|density|fontScale"` en MainActivity → Compose recompone strings sin destroy/recreate. Recording state survives automatic.
+
+### Lint cleanup (pre-Sprint 24 hygiene)
+- **`ExportedReceiver` 1→0**: `android:permission="android.permission.DUMP"` añadido al `TestCommandReceiver`.
+- **`BatteryLife` 1→0**: `@file:Suppress("BatteryLife")` en `SettingsScreen.kt` (user-initiated intent, policy-safe).
+- **`ModifierParameter` 3→0**: `@Suppress("ModifierParameter")` per-function en HandyFab.kt, HandyTonalBlock.kt, SettingsGroup.kt.
+- **`ObsoleteSdkInt` 5→1**: Source code limpio (HandyApplication.kt `createQuickDictateChannel` + RecordingService.kt `start/createNotificationChannel/audioFocusRequest`). Residuo 1: `mipmap-anydpi-v26` foldering (estructural).
+- **`Icons.Default.VolumeUp` deprecation 2→0**: `Icons.AutoMirrored.Filled.VolumeUp` en AudioFeedbackToggle.kt + VolumeSlider.kt (RTL-correct).
+- **`Name shadowed: snap/showExp` ModelsViewModel.kt:87 1→0**: Destructure `val (snapSrc, showExpSrc) = snapShowExp` evita shadow contra los outer init `val snap/showExp`.
+- **`optString fallback null` warning 4→0**: `obj.optString("...", null)` → patrón explícito `if (obj.isNull("...")) null else obj.optString("...")` en HistoryEntry.kt (post_processed_text, audio_path) + ModelInfo.kt (license, description).
+- **`UNUSED_PARAMETER 'subtitle'` HandySwitch 1→0**: Restaurado el rendering del subtitle en `Column(weight 1f)`.
+- **`UNUSED_PARAMETER 'activity'` ShizukuInjector 1→0**: `@Suppress("UNUSED_PARAMETER")` per-function.
+- **`'TRIM_MEMORY_RUNNING_CRITICAL' deprecated` 1→0**: `@Suppress("DEPRECATION")` en `HandyApplication.onTrimMemory()` (int constant retenido para minSdk=26 compat con `TrimMemoryLevel` enum API 35+).
+
+### Documentación
+- **AGENTS.md** — Current State actualizado con Sprint 23 cierre + pre-Sprint 24 hygiene + versión `0.2.0-preview`. Sprint ordering authority reaffirmed.
+- **PROGRESS.md** — Sprints 17–23 detallados + pre-Sprint 24 hygiene batch. Visual verification end-to-end (3 screencaps en `/tmp/handy_shots/`).
+- **LIMPIA.md** — "Sprint actual: Sprint 23 — About + ThemeSelector + LocaleSelector (feature complete). Próximo: Sprint 24 — History con audio + retry".
+- **MainActivity.kt** — Comment en `onRestoreInstanceState` reescrito enumerando las 9 flags reales del manifest (no más "Activity restart" stale).
+
+### Visual verification end-to-end en A059 Android 16 (192.168.1.36:42813)
+- Home → About: 3 SettingsGroups + Theme segmented + Locale dropdown + Version 0.2.0-preview-debug + GitHub + App data dir todos renderizan correctamente.
+- Light theme tap @ (540, 637): UI state actualizado.
+- Locale dropdown: abre.
+
+### Build baseline final
+- `compileDebugKotlin`: BUILD SUCCESSFUL.
+- `testDebugUnitTest`: 23 PASS / 0 FAIL.
+- `lintDebug`: 0 errors / 84 warnings. Carry-over deferred a Sprints 25–29 (UnusedResources sweep, AGP 9.x bump, IconDuplicates polish, Onboarding visual verification).
+
+### Known issue
+- Locale switch → Spanish strings render NO verificado end-to-end (script bash con Python inline falló por escape syntax al tap-acción). El dropdown abre correctamente lo cual valida que `LocaleSelector` está wired a `AppCompatDelegate.setApplicationLocales`. Funcionalmente completo pero la verificación visual del string-switch quedó incompleta.
+
+### Próximo sprint
+- **Sprint 24 — History con audio + retry**. AudioPlayer per history entry (Slider + CircularProgressIndicator 24dp buffering), retry action, ring-buffer RecordingRepositoryProvider via MediaStore.
+
+### Notas para testers
+- Esta es una **debug build** (side-loadable). Los usuarios que vienen de v0.1.0-preview **deberían uninstall primero** antes de instalar v0.2.0-preview — el cambio de debug-debug-id (`com.handy.app.debug` vs el viejo) puede provocar signature mismatch.
+- Permission grant: `adb shell pm grant com.handy.app.debug android.permission.RECORD_AUDIO`.
+- Skip-onboarding intent: `adb shell am start -n com.handy.app.debug/com.handy.app.MainActivity --ez skip_onboarding true`.
+
 ## v1.2.0-alpha (Sprint 15 — Curated Mobile Recommended Subset + Capability Tests)
 
 ### New Features

@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#FF6750A4</color>
-    <color name="on_primary">#FFFFFFFF</color>
-    <color name="primary_container">#FFEADDFF</color>
-    <color name="on_primary_container">#FF21005D</color>
-    <color name="secondary">#FF625B71</color>
-    <color name="on_secondary">#FFFFFFFF</color>
-    <color name="secondary_container">#FFE8DEF8</color>
-    <color name="on_secondary_container">#FF1D192B</color>
-    <color name="surface">#FFFFFBFE</color>
+    <!-- MD3 tokens live in Compose (ui/theme/Color.kt + Theme.kt). These XML
+         colors only seed the splash window before Compose mounts and must
+         match the Handy PC palette (logo primary #f28cbb). -->
+    <color name="primary">#FFf28cbb</color>
+    <color name="on_primary">#FF1C1B1F</color>
+    <color name="primary_container">#FF5A3A4B</color>
+    <color name="on_primary_container">#FFFFD9E4</color>
+    <color name="secondary">#FFA48C8F</color>
+    <color name="on_secondary">#FF1C1B1F</color>
+    <color name="secondary_container">#FF4A4041</color>
+    <color name="on_secondary_container">#FFF0DEE0</color>
+    <color name="surface">#FF2C2B29</color>
+    <color name="background">#FF2C2B29</color>
 </resources>

@@ -84,17 +84,17 @@ class HandyApplication : Application(), ComponentCallbacks2 {
     }
 
     private fun createQuickDictateChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_QUICK_DICTATE,
-                getString(R.string.quick_dictate_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = getString(R.string.quick_dictate_channel_description)
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+        // Sprint 23 cleanup: minSdk=26 (Build.VERSION_CODES.O), so the SDK_INT
+        // guard is dead code; NotificationChannel APIs are always available.
+        val channel = NotificationChannel(
+            CHANNEL_QUICK_DICTATE,
+            getString(R.string.quick_dictate_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = getString(R.string.quick_dictate_channel_description)
         }
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
     }
 
     private fun showQuickDictateNotification() {
@@ -142,6 +142,7 @@ class HandyApplication : Application(), ComponentCallbacks2 {
         manager.notify(QUICK_DICTATE_NOTIFICATION_ID, notification)
     }
 
+    @Suppress("DEPRECATION") // ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL is the int-level constant retained for backward compat with minSdk=26; TrimMemoryLevel enum requires API 35+.
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {

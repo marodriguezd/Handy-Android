@@ -10,7 +10,7 @@ Use este documento al arrancar una sesión nueva para continuar exactamente desd
 - **Módulos principales:**
   - `handy-android/handy-core/` — librería Rust con JNI (`libhandy_core.so`).
   - `handy-android/app/` — app Kotlin/Jetpack Compose.
-- **Sprint actual:** Sprint 16 — Material Design 3 Redesign + ADB Test Automation Hooks + Backend Investigation.
+- **Sprint actual:** Sprint 23 — About + ThemeSelector + LocaleSelector (feature complete). Próximo sprint: **Sprint 24 — History con audio + retry**.
 - **Documentos clave:**
   - `handy-android/PROGRESS.md` — estado actual y pasos pendientes.
   - `handy-android/SPEC.md` — especificación de UI/UX.

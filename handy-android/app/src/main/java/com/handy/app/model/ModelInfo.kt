@@ -28,8 +28,10 @@ data class ModelInfo(
                         sizeBytes = obj.getLong("size_bytes"),
                         language = obj.getString("language"),
                         quant = obj.optString("quant", ""),
-                        license = obj.optString("license", null),
-                        description = obj.optString("description", null),
+                        license = if (obj.isNull("license")) null
+                            else obj.optString("license"),
+                        description = if (obj.isNull("description")) null
+                            else obj.optString("description"),
                         isDownloaded = obj.getBoolean("downloaded"),
                         isActive = obj.getBoolean("active"),
                         recommended = obj.optBoolean("recommended", false),

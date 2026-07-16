@@ -11,8 +11,8 @@ android {
         applicationId = "com.handy.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.0-alpha2"
+        versionCode = 5
+        versionName = "0.2.0-preview"  // Second pre-release (Sprint 17-23 + pre-Sprint 24 hygiene, 17 Julio 2026)
 
         // Sentry DSN — override via SENTRY_DSN env var (used in CI)
         buildConfigField("String", "SENTRY_DSN", "\"${System.getenv("SENTRY_DSN") ?: "https://examplePublicKey@o0.ingest.sentry.io/0"}\"")
@@ -136,6 +136,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.material3)
+    implementation(libs.material)
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
@@ -145,6 +146,12 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.coroutines.android)
     implementation(libs.lifecycle.runtime)
+
+    // Sprint 23 — About/Theme/Locale picker uses AppCompatDelegate
+    // setApplicationLocales() which needs androidx.appcompat. core-ktx
+    // brings LocaleListCompat used to express the BCP-47 list.
+    implementation(libs.appcompat)
+    implementation(libs.core.ktx)
 
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)

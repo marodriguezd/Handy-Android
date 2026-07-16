@@ -26,10 +26,12 @@ data class HistoryEntry(
                     HistoryEntry(
                         id = obj.getLong("id"),
                         text = obj.getString("text"),
-                        postProcessedText = obj.optString("post_processed_text", null),
+                        postProcessedText = if (obj.isNull("post_processed_text")) null
+                            else obj.optString("post_processed_text"),
                         timestamp = obj.getLong("timestamp"),
                         isSaved = obj.getBoolean("is_saved"),
-                        audioPath = obj.optString("audio_path", null),
+                        audioPath = if (obj.isNull("audio_path")) null
+                            else obj.optString("audio_path"),
                     )
                 )
             }

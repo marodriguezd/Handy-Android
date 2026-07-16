@@ -15,6 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -24,32 +27,28 @@ class ModelsViewModel(
 ) : ViewModel() {
 
     data class UiState(
-        /** Raw list of models as returned by JNI (no annotations). */
         val models: List<ModelInfo> = emptyList(),
-        /** Capability-annotated, sorted, filtered list for the catalog UI. */
         val visibleModels: List<Pair<ModelInfo, ModelCompatibility>> = emptyList(),
-        /** Device capability snapshot (null until first detect() completes). */
         val snapshot: CapabilitySnapshot? = null,
         val isLoading: Boolean = false,
         val activeDownloadId: String? = null,
         val downloads: Map<String, EngineViewModel.DownloadProgressEvent> = emptyMap(),
         val showExperimental: Boolean = false,
         val showLargeModelDialogFor: ModelInfo? = null,
+        // ── Sprint 20 — Catalog filters (single source of truth) ──
+        val searchQuery: String = "",
+        val languageFilter: String? = null,
+        val onlyRecommended: Boolean = false,
     )
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
-        // Eager snapshot + restored preference
         val snap = DeviceCapabilityDetector.detect(app)
         val showExp = app.settingsStore.showExperimentalModels
         _uiState.update {
-            it.copy(
-                snapshot = snap,
-                showExperimental = showExp,
-                visibleModels = computeVisibleList(emptyList(), snap, showExp),
-            )
+            it.copy(snapshot = snap, showExperimental = showExp)
         }
 
         viewModelScope.launch {
@@ -64,13 +63,38 @@ class ModelsViewModel(
         }
         viewModelScope.launch {
             engineViewModel.availableModels.collect { raw ->
-                _uiState.update {
-                    it.copy(
-                        models = raw,
-                        isLoading = false,
-                        visibleModels = computeVisibleList(raw, it.snapshot, it.showExperimental),
-                    )
+                _uiState.update { it.copy(models = raw, isLoading = false) }
+            }
+        }
+
+        // Catalog pipeline — derived purely from `_uiState` so every
+        // (snapshot, filter, raw) change triggers exactly one recomputation.
+        // Wrapping each input in `distinctUntilChanged()` prevents feedback
+        // loops when our own emission replaces the same value with itself.
+        viewModelScope.launch {
+            val snapshotAndShowExp = combine(
+                _uiState.map { it.snapshot }.distinctUntilChanged(),
+                _uiState.map { it.showExperimental }.distinctUntilChanged(),
+            ) { snapOuter, showExpOuter -> snapOuter to showExpOuter }
+
+            combine(
+                _uiState.map { it.searchQuery }.distinctUntilChanged(),
+                _uiState.map { it.languageFilter }.distinctUntilChanged(),
+                _uiState.map { it.onlyRecommended }.distinctUntilChanged(),
+                engineViewModel.availableModels,
+                snapshotAndShowExp,
+            ) { query, lang, recOnly, raw, snapShowExp ->
+                val (snapSrc, showExpSrc) = snapShowExp
+                if (snapSrc == null || raw.isEmpty()) {
+                    return@combine emptyList<Pair<ModelInfo, ModelCompatibility>>()
                 }
+                val recs = MobileRecommendations.load(app)
+                // Sprint 22: filters are evaluated inside `computeVisibleCatalog`
+                // (pure, unit-tested). The 10 existing tests still pass because
+                // the filter params default to "no filter".
+                computeVisibleCatalog(raw, snapSrc, recs, showExpSrc, query, lang, recOnly)
+            }.collect { sorted ->
+                _uiState.update { it.copy(visibleModels = sorted) }
             }
         }
     }
@@ -84,29 +108,46 @@ class ModelsViewModel(
 
     fun setShowExperimental(show: Boolean) {
         app.settingsStore.showExperimentalModels = show
-        _uiState.update {
-            it.copy(
-                showExperimental = show,
-                visibleModels = computeVisibleList(it.models, it.snapshot, show),
-            )
-        }
+        _uiState.update { it.copy(showExperimental = show) }
     }
 
-    /** Re-reads memory info from the OS. */
     fun refreshCapability() {
         val snap = DeviceCapabilityDetector.detect(app)
-        _uiState.update {
-            it.copy(
-                snapshot = snap,
-                visibleModels = computeVisibleList(it.models, snap, it.showExperimental),
-            )
-        }
+        _uiState.update { it.copy(snapshot = snap) }
+    }
+
+    fun updateSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    fun setLanguageFilter(language: String?) {
+        _uiState.update { it.copy(languageFilter = language) }
+    }
+
+    fun setOnlyRecommended(onlyRecommended: Boolean) {
+        _uiState.update { it.copy(onlyRecommended = onlyRecommended) }
     }
 
     /**
-     * Triggers a download unless the model is gated. If the model is heavy
-     * / extreme, surfaces the consent dialog instead.
+     * Returns the top-N most-frequent language tags present in the raw
+     * catalog.  Used by the catalog UI to build the language filter row.
+     * The result is intentionally not cached here because callers
+     * already key their `remember(...)` on `uiState.models`.
      */
+    fun availableLanguages(limit: Int = 5): List<String> {
+        return _uiState.value.models.asSequence()
+            .flatMap { it.language.split(",").asSequence() }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(limit)
+            .map { it.key }
+            .toList()
+    }
+
     fun attemptDownload(model: ModelInfo) {
         val compat = compatFor(model) ?: return
         if (compat.requiresConsent) {
@@ -116,11 +157,6 @@ class ModelsViewModel(
         }
     }
 
-    /**
-     * Imperative (non-gating) download. Used by flows like onboarding that
-     * run an autonomous step and can't interrupt the user with a consent
-     * dialog. Catalog UI must use [attemptDownload] instead.
-     */
     fun downloadModel(modelId: String) {
         actuallyDownload(modelId)
     }
@@ -166,28 +202,4 @@ class ModelsViewModel(
             EngineBridge.nativeDownloadModel(modelId)
         }
     }
-
-    /**
-     * Annotate + filter hidden + sort by status / mobile-promotion /
-     * recommended / size. Stable contract: experimental models with
-     * `hidden=true` are excluded.
-     *
-     * Promotion bucket (per [MobileRecommendationsFile.promotionBucket]):
-     *   0 = tier-primary   (curated primary for this DeviceTier)
-     *   1 = tier-alternative (curated alternatives for this DeviceTier)
-     *   2 = not promoted
-     */
-    private fun computeVisibleList(
-        raw: List<ModelInfo>,
-        snapshot: CapabilitySnapshot?,
-        showExp: Boolean,
-    ): List<Pair<ModelInfo, ModelCompatibility>> {
-        if (raw.isEmpty()) return emptyList()
-        val snap = snapshot ?: snapshotOrFallback()
-        val recs = MobileRecommendations.load(app)
-        return computeVisibleCatalog(raw, snap, recs, showExp)
-    }
-
-    private fun snapshotOrFallback(): CapabilitySnapshot =
-        _uiState.value.snapshot ?: DeviceCapabilityDetector.detect(app)
 }

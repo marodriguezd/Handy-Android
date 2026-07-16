@@ -73,6 +73,8 @@
     <string name="content_desc_toggle">Toggle</string>
     <string name="content_desc_save">Save</string>
     <string name="content_desc_delete">Delete</string>
+    <string name="content_desc_clear">Clear search</string>
+    <string name="settings_refresh">Refresh</string>
 
     <!-- Quick Dictate Notification -->
     <string name="quick_dictate_channel_name">Quick Dictate</string>
@@ -88,6 +90,14 @@
     <string name="settings_version">Version</string>
     <string name="settings_licenses">Open Source Licenses</string>
     <string name="settings_licenses_text">Licensed under Apache 2.0 and MIT.</string>
+
+    <!-- Sprint 20: Models search + language filter -->
+    <string name="models_search_placeholder">Search models by name or description</string>
+    <string name="models_filter_all_languages">All languages</string>
+    <string name="models_section_your_models">Your models</string>
+    <string name="models_section_available_models">Available models</string>
+    <string name="models_filter_recommended_only">Recommended for this device</string>
+    <string name="models_empty_search">No models match your criteria</string>
 
     <!-- History Screen -->
     <string name="history_title">History</string>
@@ -184,8 +194,50 @@
 
     <string name="model_unavailable_on_device">Este modelo excede la capacidad de tu dispositivo</string>
 
+    <!-- Sprint 19: General settings (mic, audio, model) -->
+    <string name="settings_audio_section_label">Audio</string>
+    <string name="settings_microphone_label">Microphone</string>
+    <string name="settings_microphone_default">System default</string>
+    <string name="settings_microphone_desc">Choose which input device Handy records from.</string>
+    <string name="settings_audio_feedback_label">Sound feedback</string>
+    <string name="settings_audio_feedback_desc">Play a tone when dictation starts and stops.</string>
+    <string name="settings_sound_picker_label">Sound theme</string>
+    <string name="settings_sound_picker_desc">Marimba, soft chime, or narrator cue.</string>
+    <string name="settings_sound_normal">Marimba</string>
+    <string name="settings_sound_soft">Soft chime</string>
+    <string name="settings_sound_narrator">Narrator cue</string>
+    <string name="settings_volume_label">Volume</string>
+    <string name="settings_volume_desc">Volume of the dictation start/stop sound.</string>
+    <string name="settings_model_section_label">Active model</string>
+    <string name="settings_model_section_desc">Currently loaded speech model. Unload to free memory.</string>
+    <string name="settings_no_active_model">No model loaded</string>
+    <string name="settings_unload_model">Unload now</string>
+    <string name="settings_shortcuts_label">Keyboard shortcuts</string>
+    <string name="settings_shortcuts_desc">Handy uses the floating pill in the IME and the notification quick-action to start dictation. Volume-key trigger is planned for a future build.</string>
+
     <!-- Mobile Recommendation Badges (curated subset per DeviceTier) -->
     <string name="badge_tier_primary">Recomendado para tu dispositivo</string>
     <string name="badge_tier_alternative">Excelente alternativa</string>
     <string name="capability_recommended_for_your_device">Recomendado para tu dispositivo</string>
+
+    <!-- Sprint 23: About + ThemeSelector + LocaleSelector -->
+    <string name="about_section_appearance">APPEARANCE</string>
+    <string name="about_section_language">LANGUAGE</string>
+    <string name="about_section_about">ABOUT</string>
+    <string name="about_theme_label">Theme</string>
+    <string name="about_theme_subtitle">System, Always Light, or Always Dark.</string>
+    <string name="about_theme_system">System</string>
+    <string name="about_theme_light">Light</string>
+    <string name="about_theme_dark">Dark</string>
+    <string name="about_dynamic_color">Dynamic color</string>
+    <string name="about_dynamic_color_desc">Use Material You colors from your wallpaper (Android 12+).</string>
+    <string name="about_locale_label">App language</string>
+    <string name="about_locale_subtitle">Affects every string in Handy, including the IME.</string>
+    <string name="about_locale_system">System default</string>
+    <string name="about_locale_en">English</string>
+    <string name="about_locale_es">Español</string>
+    <string name="about_app_data_dir">App data directory</string>
+    <string name="about_log_dir">Log directory</string>
+    <string name="about_log_dir_missing">Logs folder will be created on first use.</string>
+    <string name="about_acknowledgments_text">Handy Android is licensed under Apache 2.0. Transcribe-cpp / ggml / whisper.cpp are MIT-licensed. See the GitHub repository for the full list of dependencies.</string>
 </resources>

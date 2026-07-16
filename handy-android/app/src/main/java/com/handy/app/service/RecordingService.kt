@@ -34,11 +34,8 @@ class RecordingService : Service() {
 
         fun start(context: Context) {
             val intent = Intent(context, RecordingService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            // minSdk=26 (Build.VERSION_CODES.O); startForegroundService is always available.
+            context.startForegroundService(intent)
         }
 
         fun stop(context: Context) {
@@ -94,17 +91,15 @@ class RecordingService : Service() {
     // ── Notification ───────────────────────────────────────────
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.recording_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = getString(R.string.recording_channel_description)
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.recording_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = getString(R.string.recording_channel_description)
         }
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
     }
 
     private fun buildNotification(): Notification {
@@ -190,17 +185,11 @@ class RecordingService : Service() {
                 }
             }
         }
-        audioFocusRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(attributes)
-                .setAcceptsDelayedFocusGain(true)
-                .setOnAudioFocusChangeListener(focusListener, Handler(Looper.getMainLooper()))
-                .build()
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager?.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
-            null
-        }
+        audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attributes)
+            .setAcceptsDelayedFocusGain(true)
+            .setOnAudioFocusChangeListener(focusListener, Handler(Looper.getMainLooper()))
+            .build()
         audioFocusRequest?.let {
             audioManager?.requestAudioFocus(it)
         }

@@ -150,6 +150,7 @@ class ShizukuInjector(
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun requestPermissionIfNeeded(activity: android.app.Activity) {
         if (Shizuku.checkSelfPermission() == 0) return
         Shizuku.requestPermission(requestPermissionCode)

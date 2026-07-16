@@ -4,23 +4,26 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.handy.app.di.ViewModelFactory
 import com.handy.app.navigation.AppNavigation
 import com.handy.app.ui.history.HistoryScreen
 import com.handy.app.ui.models.ModelCatalogScreen
 import com.handy.app.ui.onboarding.OnboardingScreen
-import com.handy.app.ui.settings.AboutContent
+import com.handy.app.ui.about.AboutContent
 import com.handy.app.ui.settings.AdvancedSettingsContent
 import com.handy.app.ui.settings.GeneralSettingsContent
 import com.handy.app.ui.settings.PostProcessContent
 import com.handy.app.ui.theme.HandyTheme
+import com.handy.app.ui.theme.ThemeMode
 import com.handy.app.viewmodel.HistoryViewModel
 import com.handy.app.viewmodel.ModelsViewModel
 import com.handy.app.viewmodel.OnboardingViewModel
@@ -36,6 +39,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // MD3 edge-to-edge: lets `surfaceContainer*` reach behind the status
+        // and navigation bars. The XML theme already declares them transparent
+        // (themes.xml), this flips the WindowCompat flag.
+        enableEdgeToEdge()
 
         val app = (application as HandyApplication)
         if (intent?.getBooleanExtra("skip_onboarding", false) == true) {
@@ -47,12 +54,29 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val app = remember { (application as HandyApplication) }
+            // Subscribe to themeMode + dynamicColor via the StateFlow exposed
+            // by SettingsStore. `collectAsState()` returns a Compose `State<T>`
+            // that is re-emitted whenever the underlying flow changes, so
+            // user picks from the About screen propagate without an Activity
+            // restart.
+            // SettingsStore is a process-wide singleton, so `collectAsState()`
+            // captures the live themeMode/dynamicColor value at the first
+            // composition and continues to emit whenever the About screen
+            // mutates `settingsStore.themeMode/dynamicColor`. No Activity
+            // restart is needed after a user-driven theme switch.
+            val themeModeState: State<ThemeMode> =
+                app.settingsStore.themeModeFlow.collectAsState()
+            val dynamicColorState: State<Boolean> =
+                app.settingsStore.dynamicColorFlow.collectAsState()
+
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = ViewModelFactory.create(app)
             )
 
-            HandyTheme {
+            HandyTheme(
+                themeModeState = themeModeState,
+                dynamicColorState = dynamicColorState,
+            ) {
                 AppNavigation(
                     onboardingCompleted = app.settingsStore.onboardingCompleted,
                     onboardingContent = { onComplete ->
@@ -134,8 +158,21 @@ class MainActivity : ComponentActivity() {
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
         savedIsDictating = savedInstanceState.getBoolean(SAVED_IS_DICTATING, false)
+        // NOTE (Sprint 23 fix): AndroidManifest.xml declares the full flag set
+        // `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection|density|fontScale"`
+        // on MainActivity. Two consequences:
+        // 1. `AppCompatDelegate.setApplicationLocales(...)` does NOT force an
+        //    Activity restart — Compose recompiles strings via LocalConfiguration.
+        // 2. `HandyTheme(themeModeState = ...)` propagates themeMode changes
+        //    through `uiMode` instead of an Activity recreate too.
+        // The engine singleton is preserved by HandyApplication regardless,
+        // and the IME InputConnection reattaches cleanly because there is no
+        // destroy/recreate cycle for either locale or theme switches.
         if (savedIsDictating) {
-            android.util.Log.w("HandyMain", "Recording state lost during config change")
+            android.util.Log.i(
+                "HandyMain",
+                "Recording state preserved across config change (engine singleton)",
+            )
         }
     }
 }
