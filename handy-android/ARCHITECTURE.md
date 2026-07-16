@@ -44,6 +44,27 @@ The JNI bridge acts as the communication layer between Kotlin and Rust.
 - `EngineCallback`: Interface implemented by `EngineViewModel` for Rust → Kotlin callbacks (state changes, transcription, VAD level, errors, download progress).
 - UI state naturally updates when JNI callbacks alter the `EngineViewModel`.
 
+### Active Model Persistence (Sprint 13)
+The active model ID is persisted to `model_dir/.active_model` between app restarts:
+- `ModelManager::new()` loads the persisted ID on startup, verifying the `.gguf` exists
+- `set_active_model()` writes the ID to the file on each activation
+- `delete_model()` removes the file when the active model is deleted
+- Stale files (`.gguf` missing) are cleaned up automatically
+
+### Batch Transcription Cancellation (Sprint 13)
+A shared `cancel_flag: Arc<AtomicBool>` allows cancelling in-progress batch transcriptions:
+- `TranscriptionEngine.run()` checks before/after `session.run()`, discarding results when cancelled
+- `PeriodicWorker` checks before each partial `session.run()` (~3s intervals) and exits the loop
+- Flag is reset in `start_stream()`/`start_periodic()` at the start of each new recording
+- `cancel()`, `cancel_stream()`, `cancel_periodic()` all set the flag
+
+## IME — onComputeInsets (Sprint 13)
+The IME now properly reports its content area to the Android framework:
+- Content height measured dynamically via `onGloballyPositioned` in Compose
+- `contentTopInsets` set to the pill's measured height — only the floating pill is "IME content"
+- `TOUCHABLE_INSETS_CONTENT` — touches in the transparent background pass through to the host app
+- Prevents the host app from being pushed up by the full IME window height
+
 ## Text Injection Strategy
 Handy Android supports multiple mechanisms to insert recognized text into third-party apps:
 1. **IME (Input Method Service):** Acts as a custom keyboard (Wispr Flow style). Auto-commits text directly to `InputConnection`.

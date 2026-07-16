@@ -1,5 +1,38 @@
 # Handy Android - UI Redesign Specification (Sprint 10) — ✅ COMPLETED
 
+**Última actualización:** 2026-07-16
+**Checkpoint:** 🟢 Sprint 13 — Persistencia de modelo activo + onComputeInsets + Cancelación batch
+
+---
+
+## Sprint 13 — Nuevas Implementaciones
+
+### ✅ Persistencia de modelo activo (`model/manager.rs`)
+
+El modelo activo se persiste en `model_dir/.active_model` entre reinicios de la app.
+
+- **Carga automática:** `ModelManager::new()` lee el archivo y restaura `active_model_id` si el `.gguf` existe
+- **Guardado:** `set_active_model()` escribe el ID en el archivo
+- **Limpieza:** `delete_model()` borra el archivo si el modelo eliminado era el activo
+- **Defensa:** Si el `.gguf` fue borrado externamente, se limpia el archivo huérfano
+
+### ✅ IME — onComputeInsets restaurado (`HandyInputMethodService.kt`)
+
+- `contentHeightPx` medida dinámicamente vía `onGloballyPositioned`
+- `onComputeInsets` fija `contentTopInsets`/`visibleTopInsets` a la altura del pill
+- `TOUCHABLE_INSETS_CONTENT`: toques fuera del pill pasan a la app host
+- Elimina layout shifts inesperados en apps host
+
+### ✅ Cancelación de batch transcription (`transcription/engine.rs` + `periodic.rs`)
+
+- `cancel_flag: Arc<AtomicBool>` compartido entre `TranscriptionEngine` y `PeriodicWorker`
+- `run()` verifica el flag antes de `session.run()` y descarta el resultado si se activó durante la inferencia
+- `PeriodicWorker` verifica el flag antes y después de cada `session.run()` parcial (~3s)
+- El flag se resetea en `start_stream()` y `start_periodic()` al iniciar nueva grabación
+- `cancel()`, `cancel_stream()`, y `cancel_periodic()` activan el flag
+
+---
+
 ## Overview
 The goal of this specification was to align the Android Jetpack Compose UI with the premium aesthetic of the Handy Desktop application. This involved adopting a new dark/cream color palette with pastel pink accents, and simplifying the main navigation into a 4-item bottom navigation bar, while utilizing top tabs to group sub-sections.
 

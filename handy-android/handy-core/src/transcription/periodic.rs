@@ -1,4 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -38,12 +40,16 @@ impl PeriodicWorker {
     /// streaming API, we run `session.run()` every few seconds on the growing
     /// audio buffer, dispatching the result as partial text.
     ///
+    /// `cancel_flag` is shared with `TranscriptionEngine` — when set to true,
+    /// the worker aborts any in-progress or queued `session.run()` and exits.
+    ///
     /// On `Finalize`, the final accumulated audio is transcribed and the result
     /// is sent back via the reply channel.
     pub fn spawn(
         &mut self,
         rx: mpsc::Receiver<StreamCmd>,
         mut session: transcribe_cpp::Session,
+        cancel_flag: Arc<AtomicBool>,
         on_partial: impl Fn(String) + Send + 'static,
     ) -> u64 {
         let worker_id = self.worker_id;
@@ -76,11 +82,21 @@ impl PeriodicWorker {
                             if accumulated.len() >= min_audio_samples
                                 && last_partial_time.elapsed() >= interval
                             {
+                                // Check cancellation before expensive inference
+                                if cancel_flag.load(Ordering::SeqCst) {
+                                    log::info!("[handy-core] periodic partial cancelled");
+                                    break 'recv;
+                                }
                                 last_partial_time = Instant::now();
                                 let t0 = Instant::now();
                                 let normalized = normalize_peak(&accumulated);
                                 match session.run(&normalized, &run_options) {
                                     Ok(transcript) => {
+                                        // Discard result if cancelled during inference
+                                        if cancel_flag.load(Ordering::SeqCst) {
+                                            log::info!("[handy-core] periodic partial result discarded (cancelled)");
+                                            break 'recv;
+                                        }
                                         let text = transcript.text;
                                         if !text.is_empty() {
                                             log::debug!(
@@ -132,11 +148,21 @@ impl PeriodicWorker {
                         if accumulated.len() >= min_audio_samples
                             && last_partial_time.elapsed() >= interval
                         {
+                            // Check cancellation before expensive inference
+                            if cancel_flag.load(Ordering::SeqCst) {
+                                log::info!("[handy-core] periodic partial cancelled (timeout branch)");
+                                break 'recv;
+                            }
                             last_partial_time = Instant::now();
                             let t0 = Instant::now();
                             let normalized = normalize_peak(&accumulated);
                             match session.run(&normalized, &run_options) {
                                 Ok(transcript) => {
+                                    // Discard result if cancelled during inference
+                                    if cancel_flag.load(Ordering::SeqCst) {
+                                        log::info!("[handy-core] periodic partial result discarded (cancelled)");
+                                        break 'recv;
+                                    }
                                     let text = transcript.text;
                                     if !text.is_empty() {
                                         log::debug!(

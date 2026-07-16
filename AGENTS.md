@@ -105,7 +105,7 @@ The Android port consists of:
 - `service/RecordingService.kt` — Foreground service for persistent recording
 
 
-## Current State (Checkpoint — July 16, 2026 — Sprint 12 — Post-Refinement)
+## Current State (Checkpoint — July 16, 2026 — Sprint 13 — Persistence + IME + Cancellation)
 
 ### ✅ Working — Functional State
 - Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
@@ -129,7 +129,35 @@ The Android port consists of:
 - Skip download (onboarding) now cancels Rust download
 - No OOM limit — user can activate any model size
 
-### ✅ Sprint 12 — New Implementations
+### ✅ Sprint 13 — New Implementations
+
+#### Persistencia de modelo activo (`manager.rs`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **Archivo .active_model** | El modelo activo se persiste en `model_dir/.active_model` entre reinicios de la app |
+| 2 | **Carga automática** | `ModelManager::new()` lee `.active_model` y restaura el modelo activo si el `.gguf` existe |
+| 3 | **Guardado en set_active_model()** | Cada activación persiste el ID automáticamente |
+| 4 | **Limpieza en delete_model()** | Si se borra el modelo activo, se elimina el archivo `.active_model` |
+| 5 | **Defensa contra borrados externos** | Si el `.gguf` no existe en disco, se limpia el archivo huérfano |
+
+#### IME — onComputeInsets Restaurado (`HandyInputMethodService.kt`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **Altura dinámica** | `contentHeightPx` medida vía `onGloballyPositioned` en Compose |
+| 2 | **contentTopInsets** | Solo el área del pill flotante se reporta como contenido IME |
+| 3 | **TOUCHABLE_INSETS_CONTENT** | Toques en el fondo transparente pasan directamente a la app host |
+| 4 | **Sin layout shifts** | La app host ya no es empujada hacia arriba por la ventana completa del IME |
+
+#### Cancelación de Batch Transcription (`engine.rs` + `periodic.rs`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **cancel_flag (Arc\<AtomicBool\>)** | Flag compartido entre `TranscriptionEngine` y `PeriodicWorker` |
+| 2 | **Triple verificación en run()** | Antes de crear session, antes de `session.run()`, y después (descarta resultado) |
+| 3 | **Verificación en PeriodicWorker** | Antes y después de cada `session.run()` parcial (~3s); sale del loop si está activo |
+| 4 | **Reset entre grabaciones** | `start_stream()` y `start_periodic()` resetean el flag al iniciar nueva sesión |
+| 5 | **cancel_stream() también activa el flag** | Seguridad adicional: el Cancel del canal + el flag atómico |
+
+### ✅ Sprint 12 — New Implementations (previous)
 
 #### Rendimiento Rust (pipeline + VAD optimizations)
 | # | Optimization | Details |
@@ -189,10 +217,11 @@ The Android port consists of:
 - Some Whisper models (English-only variants) show duplicate entries alongside multilingual variants
 - Moonshine Base models not yet verified to work with transcribe-cpp on Android
 - Voxtral Small 24B (17 GB) is listed but impractical for most mobile devices
-- `onComputeInsets` removed — IME height may cause unexpected layout shifts in host apps
+- ~~`onComputeInsets` removed~~ ✅ RESTORED (Sprint 13) — IME height now properly reported to host apps
 - Gradle `buildRust` task rebuilds Rust in debug mode without `RUSTFLAGS`, overwriting release `.so`
 - Periodic transcription (~3s intervals) is slower than native streaming for partial updates
 - No Gradle wrapper committed — requires `gradle` command directly
+- `session.run()` is still blocking during batch transcription (cancel_flag discards result post-hoc but can't interrupt C++ mid-inference)
 
 ### 🔧 Critical Fixes Applied
 
@@ -225,6 +254,7 @@ The Android port consists of:
 | **25** | **5** | **Periodic loses initial audio** 🔴 | Added `drain_buffer()` + `router.feed(acc)` in periodic path — pre-streaming audio was discarded |
 | **26** | **5** | **AppNavigation composable context** 🔴 | Fixed `remember { stringResource() }` — composable calls inside non-composable lambda → direct calls |
 | **27** | **5** | **IME context/roundToPx** 🔴 | `context` not available in Composable → `LocalContext.current`; `dp.roundToPx()` not available → `fullHeight / 4` lambda |
+| **28** | **6** | **Cancel flag stuck between recordings** 🔴 | `cancel_flag` was only reset in `run()`, not in `start_stream()`/`start_periodic()` — new recording would start with stale `true` flag → fixed by resetting in both start methods |
 
 ### 📋 Model Catalog — 65 Models (all from Handy PC)
 

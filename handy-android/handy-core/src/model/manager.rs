@@ -291,6 +291,9 @@ fn tokio_runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
+/// Nombre del archivo que persiste el modelo activo entre reinicios de la app.
+const ACTIVE_MODEL_FILE: &str = ".active_model";
+
 impl ModelManager {
     pub fn new(model_dir: &str) -> Self {
         // Clean up any orphaned .tmp files from crashed downloads
@@ -308,11 +311,61 @@ impl ModelManager {
                 }
             }
         }
+
+        // Cargar el modelo activo persistido entre reinicios de la app.
+        // Si existe el archivo .active_model y contiene un ID válido
+        // cuyo .gguf correspondiente existe en disco, se restaura.
+        let active_model_id = Self::load_active_model_from_file(&dir);
+        if let Some(ref id) = active_model_id {
+            info!("Restored active model from {}: {}", ACTIVE_MODEL_FILE, id);
+        }
+
         Self {
             model_dir: dir,
-            active_model_id: Mutex::new(None),
+            active_model_id: Mutex::new(active_model_id),
             active_download: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Lee el archivo .active_model del directorio de modelos.
+    /// Devuelve Some(model_id) si el archivo existe, contiene un ID válido,
+    /// y el archivo .gguf correspondiente existe en disco.
+    fn load_active_model_from_file(dir: &Path) -> Option<String> {
+        let path = dir.join(ACTIVE_MODEL_FILE);
+        let content = std::fs::read_to_string(&path).ok()?;
+        let model_id = content.trim().to_string();
+        if model_id.is_empty() {
+            let _ = std::fs::remove_file(&path);
+            return None;
+        }
+        // Verificar que el .gguf existe (sanity check: no restaurar un modelo borrado)
+        let gguf_path = dir.join(format!("{}.gguf", model_id));
+        if !gguf_path.exists() {
+            warn!(
+                "Active model {} persisted but .gguf missing, clearing",
+                model_id
+            );
+            let _ = std::fs::remove_file(&path);
+            return None;
+        }
+        Some(model_id)
+    }
+
+    /// Persiste el modelo activo en el archivo .active_model.
+    fn save_active_model_to_file(&self, model_id: &str) {
+        let path = self.model_dir.join(ACTIVE_MODEL_FILE);
+        if let Err(e) = std::fs::write(&path, model_id) {
+            warn!("Failed to persist active model to {:?}: {}", path, e);
+        } else {
+            info!("Active model persisted: {}", model_id);
+        }
+    }
+
+    /// Elimina el archivo de persistencia del modelo activo.
+    fn clear_active_model_file(&self) {
+        let path = self.model_dir.join(ACTIVE_MODEL_FILE);
+        let _ = std::fs::remove_file(&path);
+        info!("Active model persistence cleared");
     }
 
     pub fn list_models(&self) -> Vec<ModelInfo> {
@@ -564,6 +617,7 @@ impl ModelManager {
         let mut active = self.active_model_id.lock().unwrap();
         if active.as_deref() == Some(model_id) {
             *active = None;
+            self.clear_active_model_file();
             info!("Active model cleared (deleted: {model_id})");
         }
         Ok(())
@@ -582,6 +636,7 @@ impl ModelManager {
         }
 
         *self.active_model_id.lock().unwrap() = Some(model_id.to_string());
+        self.save_active_model_to_file(model_id);
         info!("Active model set to {model_id}");
         Ok(())
     }

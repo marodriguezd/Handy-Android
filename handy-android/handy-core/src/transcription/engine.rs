@@ -26,6 +26,10 @@ pub struct TranscriptionEngine {
     stream_worker: Mutex<Option<StreamWorkerOrPeriodic>>,
     is_streaming: AtomicBool,
     worker_id_counter: std::sync::atomic::AtomicU64,
+    /// Shared flag to signal cancellation of a running batch transcription.
+    /// Checked before and after session.run() to skip/discard results when
+    /// the user cancels recording while inference is queued or in progress.
+    cancel_flag: Arc<AtomicBool>,
 }
 
 impl TranscriptionEngine {
@@ -40,6 +44,7 @@ impl TranscriptionEngine {
             stream_worker: Mutex::new(None),
             is_streaming: AtomicBool::new(false),
             worker_id_counter: std::sync::atomic::AtomicU64::new(1),
+            cancel_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -91,7 +96,19 @@ impl TranscriptionEngine {
     /// Run batch transcription on a full PCM buffer using session.run().
     /// This is the correct API for Whisper GGUF models (they don't support
     /// streaming via session.stream()).
+    ///
+    /// Checks `cancel_flag` before and after `session.run()`. If cancellation
+    /// was requested, the call returns early or discards the result.
     pub fn run(&self, pcm: &[f32]) -> Result<String, String> {
+        // Reset cancel flag at the start of a fresh run
+        self.cancel_flag.store(false, Ordering::SeqCst);
+
+        // Check cancellation before doing any work
+        if self.cancel_flag.load(Ordering::SeqCst) {
+            info!("[handy-core] batch run cancelled before inference");
+            return Err("Transcription cancelled".to_string());
+        }
+
         let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
         let model = model_guard
             .as_mut()
@@ -103,14 +120,9 @@ impl TranscriptionEngine {
         drop(model_guard);
 
         // Peak-normalize the audio so Whisper gets a full-range signal.
-        // This is critical: raw microphone float32 samples can be very quiet
-        // (peak < 0.1), which causes Whisper to output silence or garbage.
         let normalized = normalize_peak(pcm);
-
-        // Compute RMS level for diagnostic logging
         let rms = compute_rms(&normalized);
 
-        // Force Spanish language to avoid auto-detection issues with tiny models
         let run_options = RunOptions {
             task: Task::Transcribe,
             language: Some("es".to_string()),
@@ -118,10 +130,22 @@ impl TranscriptionEngine {
             ..Default::default()
         };
 
+        // Check cancellation again before the expensive inference call
+        if self.cancel_flag.load(Ordering::SeqCst) {
+            info!("[handy-core] batch run cancelled before session.run()");
+            return Err("Transcription cancelled".to_string());
+        }
+
         info!("[handy-core] running transcription on {} samples, rms={:.4}, language=es", pcm.len(), rms);
         let transcript = session
             .run(&normalized, &run_options)
             .map_err(|e| format!("Transcription run failed: {e}"))?;
+
+        // Discard the result if cancellation was requested during inference
+        if self.cancel_flag.load(Ordering::SeqCst) {
+            info!("[handy-core] batch run result discarded (cancelled during inference)");
+            return Err("Transcription cancelled".to_string());
+        }
 
         info!("[handy-core] transcription complete: {} chars: '{}'", transcript.text.len(), transcript.text);
         Ok(transcript.text)
@@ -146,6 +170,9 @@ impl TranscriptionEngine {
         if self.is_streaming_active() {
             return Err("A stream is already active".to_string());
         }
+
+        // Reset cancel flag for the new recording session
+        self.cancel_flag.store(false, Ordering::SeqCst);
 
         let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
         let model = model_guard
@@ -227,6 +254,7 @@ impl TranscriptionEngine {
     }
 
     pub fn cancel_stream(&self) {
+        self.cancel_flag.store(true, Ordering::SeqCst);
         let _ = self.stream_router.send(StreamCmd::Cancel);
         self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
         *self.stream_worker.lock().unwrap() = None;
@@ -247,6 +275,9 @@ impl TranscriptionEngine {
             return Err("A stream is already active".to_string());
         }
 
+        // Reset cancel flag for the new recording session
+        self.cancel_flag.store(false, Ordering::SeqCst);
+
         let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
         let model = model_guard
             .as_mut()
@@ -260,7 +291,7 @@ impl TranscriptionEngine {
         let rx = self.stream_router.open_channel();
         let worker_id = self.worker_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let mut worker = PeriodicWorker::new(worker_id);
-        worker.spawn(rx, session, on_partial);
+        worker.spawn(rx, session, self.cancel_flag.clone(), on_partial);
 
         *self.stream_worker.lock().unwrap() = Some(StreamWorkerOrPeriodic::Periodic(worker));
         self.is_streaming.store(true, std::sync::atomic::Ordering::Release);
@@ -288,9 +319,8 @@ impl TranscriptionEngine {
     }
 
     pub fn cancel(&self) {
-        // Batch run is synchronous and can't be cancelled mid-flight easily.
-        // For now, just log the request.
-        info!("[handy-core] cancel requested (batch run synchronous)");
+        self.cancel_flag.store(true, Ordering::SeqCst);
+        info!("[handy-core] cancel requested — cancel_flag set");
     }
 
     pub fn set_post_process_config(

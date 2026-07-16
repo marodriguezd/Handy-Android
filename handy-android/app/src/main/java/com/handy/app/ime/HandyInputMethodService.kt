@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +95,14 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
 
     @Volatile
     private var lastInputConnection: InputConnection? = null
+
+    /**
+     * Height in pixels of the visible IME content panel.
+     * Measured dynamically via onGloballyPositioned in Compose
+     * and consumed by onComputeInsets to prevent host app layout shifts.
+     */
+    @Volatile
+    private var contentHeightPx: Int = 0
 
     // ── Lifecycle & Owners ────────────────────────────────────
     private val lifecycleRegistry = LifecycleRegistry(this)
@@ -142,20 +151,26 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
 
             setContent {
                 val finalText by engineViewModel.finalText.collectAsState()
-                HandyVoiceBar(
-                    state = engineViewModel.state.collectAsState().value,
-                    vadLevel = engineViewModel.vadLevel.collectAsState().value,
-                    partialText = engineViewModel.partialText.collectAsState().value,
-                    finalText = finalText,
-                    lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
-                    onStartDictation = { engineViewModel.startRecording() },
-                    onStopDictation = { engineViewModel.stopRecording() },
-                    onConfirmInsert = { text -> engineViewModel.confirmInsert(text) },
-                    onDiscard = { engineViewModel.resetPartialText() },
-                    onRetry = { engineViewModel.resetPartialText() },
-                    onCancelDictation = { engineViewModel.cancelRecording() },
-                    onSwitchKeyboard = { showInputMethodPicker() },
-                )
+                Box(
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        contentHeightPx = coordinates.size.height
+                    }
+                ) {
+                    HandyVoiceBar(
+                        state = engineViewModel.state.collectAsState().value,
+                        vadLevel = engineViewModel.vadLevel.collectAsState().value,
+                        partialText = engineViewModel.partialText.collectAsState().value,
+                        finalText = finalText,
+                        lastErrorMessage = engineViewModel.lastErrorMessage.collectAsState().value,
+                        onStartDictation = { engineViewModel.startRecording() },
+                        onStopDictation = { engineViewModel.stopRecording() },
+                        onConfirmInsert = { text -> engineViewModel.confirmInsert(text) },
+                        onDiscard = { engineViewModel.resetPartialText() },
+                        onRetry = { engineViewModel.resetPartialText() },
+                        onCancelDictation = { engineViewModel.cancelRecording() },
+                        onSwitchKeyboard = { showInputMethodPicker() },
+                    )
+                }
             }
         }
     }
@@ -171,6 +186,30 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
         super.onFinishInput()
         lastInputConnection = null
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+    }
+
+    /**
+     * Control the visible area of the IME to avoid unexpected layout shifts
+     * in host apps. Since Handy uses a floating pill design (not a full-height
+     * keyboard), we tell the system that only the pill's measured height is
+     * "content" and the rest of the IME window is transparent background.
+     *
+     * Without this override, Android assumes the entire IME window height is
+     * content and pushes the host app up into the top of the screen, causing
+     * jarring layout jumps.
+     */
+    override fun onComputeInsets(outInsets: Insets?) {
+        super.onComputeInsets(outInsets)
+        if (outInsets == null) return
+
+        val height = contentHeightPx
+        if (height > 0) {
+            outInsets.contentTopInsets = height
+            outInsets.visibleTopInsets = height
+            // Only the pill area is touchable; taps in the transparent
+            // background area pass through to the host app below.
+            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_CONTENT
+        }
     }
 
     override fun onDestroy() {
