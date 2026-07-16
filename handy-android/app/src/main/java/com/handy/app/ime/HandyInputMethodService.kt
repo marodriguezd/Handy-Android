@@ -33,10 +33,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -232,20 +247,19 @@ class HandyInputMethodService : InputMethodService(), LifecycleOwner, ViewModelS
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Design Tokens
+// Design Tokens — aligned with Handy PC overlay and Material 3
 // ═══════════════════════════════════════════════════════════════════
-private val AccentPink = Color(0xFFE85D75)
-private val AccentPinkDark = Color(0xFFD04A60)
-private val GreenSuccess = Color(0xFF4CAF50)
-private val GreenSuccessDark = Color(0xFF388E3C)
-private val ErrorRed = Color(0xFFE53935)
-private val TranscribingPurple = Color(0xFF9C27B0)
-
-/** Easing for pop/spring-like animations — overshoot then settle */
 private val PopEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
-
-/** Easing for smooth entrances — fast start, slow end */
 private val EnterEasing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+
+@Composable
+private fun accentColor(): Color = MaterialTheme.colorScheme.primary
+
+@Composable
+private fun successColor(): Color = MaterialTheme.colorScheme.tertiary
+
+@Composable
+private fun errorColor(): Color = MaterialTheme.colorScheme.error
 
 // ═══════════════════════════════════════════════════════════════════
 // Helper: animated press scale modifier
@@ -399,8 +413,6 @@ private fun HandyVoiceBar(
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
-    val faintColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-
     val startClick = rememberPressScaleClickable(onStart)
     val kbClick = rememberPressScaleClickable(onSwitchKeyboard)
 
@@ -409,13 +421,13 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
             .fillMaxWidth()
             .height(52.dp)
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(MaterialTheme.shapes.extraLarge)
             .pressScaleClickable(startClick, scalePressed = 0.97f),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         ) {
             Row(
@@ -429,18 +441,21 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f),
                 ) {
-                    // Subtle idle pulsing dot
                     IdlePulsingDot()
                     Spacer(Modifier.width(10.dp))
-                    // Microphone icon in subtle pink circle
                     Box(
                         modifier = Modifier
                             .size(26.dp)
                             .clip(CircleShape)
-                            .background(AccentPink.copy(alpha = 0.12f)),
+                            .background(accentColor().copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(text = "\uD83C\uDF99", fontSize = 14.sp)
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = accentColor(),
+                            modifier = Modifier.size(16.dp),
+                        )
                     }
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -451,15 +466,16 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
                     )
                 }
 
-                // Keyboard switcher button
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .pressScaleClickable(kbClick, scalePressed = 0.88f),
-                    contentAlignment = Alignment.Center,
+                IconButton(
+                    onClick = { kbClick.onClick() },
+                    modifier = Modifier.size(32.dp),
                 ) {
-                    Text(text = "\u2328", fontSize = 15.sp, color = faintColor)
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Keyboard,
+                        contentDescription = stringResource(R.string.switch_keyboard),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
         }
@@ -471,7 +487,7 @@ private fun IdleBar(onStart: () -> Unit, onSwitchKeyboard: () -> Unit) {
 // ═══════════════════════════════════════════════════════════════════
 @Composable
 private fun LoadingBar() {
-    val mutedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val mutedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 
     Box(
         modifier = Modifier
@@ -481,8 +497,8 @@ private fun LoadingBar() {
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier.clip(RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge),
+            shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         ) {
             Row(
@@ -494,7 +510,7 @@ private fun LoadingBar() {
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(16.dp),
-                    color = AccentPink,
+                    color = accentColor(),
                     strokeWidth = 2.5.dp,
                 )
                 Spacer(Modifier.width(10.dp))
@@ -570,26 +586,19 @@ private fun RecordingBar(vadLevel: Float, partialText: String, onStop: () -> Uni
 
                     Spacer(Modifier.width(12.dp))
 
-                    // Stop button with red glow shadow
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .shadow(
-                                elevation = 6.dp,
-                                shape = CircleShape,
-                                ambientColor = ErrorRed.copy(alpha = 0.3f),
-                                spotColor = ErrorRed.copy(alpha = 0.3f),
-                            )
-                            .clip(CircleShape)
-                            .background(ErrorRed)
-                            .pressScaleClickable(stopClick, scalePressed = 0.85f),
-                        contentAlignment = Alignment.Center,
+                    // Stop button
+                    FilledIconButton(
+                        onClick = { stopClick.onClick() },
+                        modifier = Modifier.size(34.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = errorColor(),
+                        ),
                     ) {
-                        Text(
-                            text = "\u25A0",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Stop,
+                            contentDescription = stringResource(R.string.stop_dictation),
+                            tint = MaterialTheme.colorScheme.onError,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
@@ -643,10 +652,10 @@ private fun TranscribingBar(partialText: String, onCancel: () -> Unit) {
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Animated purple spinner
+                    // Animated spinner
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
-                        color = TranscribingPurple,
+                        color = accentColor(),
                         strokeWidth = 2.5.dp,
                     )
 
@@ -662,19 +671,18 @@ private fun TranscribingBar(partialText: String, onCancel: () -> Unit) {
                     Spacer(Modifier.weight(1f))
 
                     // Cancel button
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(ErrorRed)
-                            .pressScaleClickable(cancelClick, scalePressed = 0.85f),
-                        contentAlignment = Alignment.Center,
+                    FilledIconButton(
+                        onClick = { cancelClick.onClick() },
+                        modifier = Modifier.size(32.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = errorColor(),
+                        ),
                     ) {
-                        Text(
-                            text = "\u2715",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Close,
+                            contentDescription = stringResource(R.string.discard),
+                            tint = MaterialTheme.colorScheme.onError,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
@@ -751,15 +759,16 @@ private fun ConfirmBar(
                         Spacer(Modifier.width(8.dp))
 
                         // Copy to clipboard button
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(mutedColor.copy(alpha = 0.08f))
-                                .pressScaleClickable(copyClick, scalePressed = 0.88f),
-                            contentAlignment = Alignment.Center,
+                        IconButton(
+                            onClick = { copyClick.onClick() },
+                            modifier = Modifier.size(28.dp),
                         ) {
-                            Text(text = "\uD83D\uDCCB", fontSize = 13.sp)
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.ContentCopy,
+                                contentDescription = stringResource(R.string.text_copied_to_clipboard),
+                                tint = mutedColor,
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                     }
                 }
@@ -783,53 +792,28 @@ private fun ConfirmBar(
 
                     // Right: action buttons
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Discard button (outlined style)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(mutedColor.copy(alpha = 0.12f))
-                                .pressScaleClickable(discardClick, scalePressed = 0.92f)
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                        // Discard button
+                        TextButton(
+                            onClick = { discardClick.onClick() },
+                            modifier = Modifier.padding(horizontal = 4.dp),
                         ) {
-                            Text(
-                                text = stringResource(R.string.discard),
-                                color = mutedColor,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
+                            Text(stringResource(R.string.discard))
                         }
 
-                        // Insert button (filled green with shadow)
-                        Box(
-                            modifier = Modifier
-                                .shadow(
-                                    elevation = 4.dp,
-                                    shape = RoundedCornerShape(16.dp),
-                                    ambientColor = GreenSuccess.copy(alpha = 0.3f),
-                                    spotColor = GreenSuccess.copy(alpha = 0.3f),
-                                )
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(GreenSuccess)
-                                .pressScaleClickable(insertClick, scalePressed = 0.92f)
-                                .padding(horizontal = 18.dp, vertical = 7.dp),
+                        // Insert button
+                        Button(
+                            onClick = { insertClick.onClick() },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = successColor(),
+                            ),
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    text = "\u2713",
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                Text(
-                                    text = stringResource(R.string.insert_text),
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.insert_text))
                         }
                     }
                 }
@@ -854,10 +838,10 @@ private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
         Surface(
             modifier = Modifier.clip(RoundedCornerShape(20.dp)),
             shape = RoundedCornerShape(20.dp),
-            color = ErrorRed.copy(alpha = 0.08f),
+            color = errorColor().copy(alpha = 0.08f),
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
-                ErrorRed.copy(alpha = 0.2f),
+                errorColor().copy(alpha = 0.2f),
             ),
         ) {
             Row(
@@ -871,12 +855,12 @@ private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
                     modifier = Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(ErrorRed.copy(alpha = 0.12f)),
+                        .background(errorColor().copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "!",
-                        color = ErrorRed,
+                        color = errorColor(),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -886,7 +870,7 @@ private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
 
                 Text(
                     text = errorMessage ?: stringResource(R.string.ime_error_generic),
-                    color = ErrorRed,
+                    color = errorColor(),
                     fontSize = 13.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -896,19 +880,18 @@ private fun ErrorBar(errorMessage: String?, onRetry: () -> Unit) {
                 Spacer(Modifier.width(10.dp))
 
                 // Retry button
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(AccentPink)
-                        .pressScaleClickable(retryClick, scalePressed = 0.88f),
-                    contentAlignment = Alignment.Center,
+                FilledIconButton(
+                    onClick = { retryClick.onClick() },
+                    modifier = Modifier.size(34.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = accentColor(),
+                    ),
                 ) {
-                    Text(
-                        text = "\u21BB",
-                        color = Color.White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.retry),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -946,13 +929,13 @@ private fun IdlePulsingDot() {
             modifier = Modifier
                 .size((6 * pulseScale).dp)
                 .clip(CircleShape)
-                .background(AccentPink.copy(alpha = pulseAlpha))
+                .background(accentColor().copy(alpha = pulseAlpha))
         )
         Box(
             modifier = Modifier
                 .size(4.dp)
                 .clip(CircleShape)
-                .background(AccentPink.copy(alpha = 0.5f))
+                .background(accentColor().copy(alpha = 0.5f))
         )
     }
 }
@@ -987,13 +970,13 @@ private fun PulsingDot() {
             modifier = Modifier
                 .size((7 * pulseScale).dp)
                 .clip(CircleShape)
-                .background(AccentPink.copy(alpha = pulseAlpha))
+                .background(accentColor().copy(alpha = pulseAlpha))
         )
         Box(
             modifier = Modifier
                 .size(7.dp)
                 .clip(CircleShape)
-                .background(AccentPink)
+                .background(accentColor())
         )
     }
 }
@@ -1031,7 +1014,7 @@ private fun WaveformBars(level: Float) {
                     .width(4.dp)
                     .height(barHeight.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(AccentPink)
+                    .background(accentColor())
             )
         }
     }

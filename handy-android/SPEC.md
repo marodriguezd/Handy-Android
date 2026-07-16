@@ -1,7 +1,67 @@
-# Handy Android - UI Redesign Specification (Sprint 10) — ✅ COMPLETED
+# Handy Android - UI Redesign Specification
 
 **Última actualización:** 2026-07-16
-**Checkpoint:** 🟢 Sprint 15 — Curated Mobile Recommended Subset + Capability Tests
+**Checkpoint:** 🟢 Sprint 16 — Material Design 3 Redesign + Adaptive Navigation + PC-Style IME
+
+---
+
+## Sprint 16 — Material Design 3 Redesign
+
+### 1. Design System
+
+#### Color Palette (aligned with Handy PC)
+The Android theme now uses the same warm dark palette as the desktop app:
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `background` / `surface` | `#2C2B29` | App background, cards |
+| `onBackground` / `onSurface` | `#FDFBFB` | Primary text |
+| `primary` | `#F28CBB` | Accent, active states, recording dot |
+| `primaryContainer` | `#5A3A4B` | Selected/filled containers |
+| `secondary` | `#A48C8F` | Secondary accents |
+| `error` | `#F2B8B5` | Error states |
+| `outline` | `#4A4845` | Dividers, borders |
+
+- Implemented in `Color.kt` as a full MD3 token set (primary/secondary/tertiary/error/outline/inverse/scrim).
+- `Theme.kt` provides `HandyDarkColorScheme` (default) and `HandyLightColorScheme` fallback.
+- Dynamic color is disabled by default to preserve the Handy brand.
+
+#### Typography & Shape
+- `Type.kt` maps the full Material 3 type scale (`displayLarge` → `labelSmall`) using Roboto.
+- `Shape.kt` uses MD3 corner tokens: `extraSmall=4dp`, `small=8dp`, `medium=12dp`, `large=16dp`, `extraLarge=28dp`.
+
+### 2. Adaptive Navigation
+
+The previous bottom-only navigation has been replaced with an adaptive layout:
+
+- **Compact devices (`screenWidthDp < 600`)**: `NavigationBar` at the bottom.
+- **Medium/expanded devices (`screenWidthDp >= 600`)**: `NavigationRail` on the left, matching the PC sidebar aesthetic.
+- A `TopAppBar` is now shown on every top-level destination.
+- `Screen.kt` was removed; the `Screen` enum is now private inside `AppNavigation.kt`.
+
+### 3. Screen Redesign
+
+All major screens were migrated to Material 3 components:
+
+| Screen | Key MD3 changes |
+|--------|-----------------|
+| **Settings** | `ListItem` rows, `ElevatedCard` sections, `Switch`/`DropdownMenu` from M3 |
+| **Model Catalog** | `ElevatedCard` model cards, `SuggestionChip` language tags, `AssistChip` badges |
+| **History** | `ElevatedCard` transcription items, centered empty state |
+| **Onboarding** | `LinearProgressIndicator`, M3 cards, M3 buttons |
+
+### 4. IME Redesign
+
+The IME now resembles the Handy PC floating overlay pill:
+
+- Rounded 28dp pill surface with tonal elevation.
+- Uses Material 3 `IconButton`, `FilledIconButton`, `TextButton`, and `Button` instead of custom clickable `Surface`s.
+- Colors driven by `MaterialTheme.colorScheme` (no hardcoded pinks).
+- Press-scale micro-interactions preserved; ripple handled by M3 components.
+
+---
+
+## Sprint 10 — Original UI Redesign (Baseline) — ✅ COMPLETED
 
 ---
 

@@ -391,17 +391,22 @@ private fun ReadyContent() {
 @Composable
 private fun StepIndicator(currentStep: Int, totalSteps: Int) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         repeat(totalSteps) { index ->
             val isActive = index <= currentStep
+            val isCompleted = index < currentStep
             Box(
                 modifier = Modifier
                     .size(if (isActive) 10.dp else 8.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isActive) MaterialTheme.colorScheme.primary
+                        if (isCompleted) MaterialTheme.colorScheme.primary
+                        else if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                         else MaterialTheme.colorScheme.surfaceVariant
                     ),
             )

@@ -25,10 +25,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -175,25 +178,20 @@ fun ModelCard(
     val isExceeding = compatibility.status == CompatibilityStatus.EXCEEDS ||
         compatibility.status == CompatibilityStatus.IMPOSSIBLE
 
-    Card(
+    ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.elevatedCardColors(
             containerColor = if (model.isActive) {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
                 MaterialTheme.colorScheme.surface
             },
         ),
-        border = BorderStroke(
-            width = if (model.isActive) 2.dp else 1.dp,
-            color = when {
-                model.isActive -> MaterialTheme.colorScheme.primary
-                isExceeding -> MaterialTheme.colorScheme.error.copy(alpha = 0.40f)
-                else -> MaterialTheme.colorScheme.outlineVariant
-            },
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = if (model.isActive) 2.dp else 1.dp,
         ),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -245,18 +243,21 @@ fun ModelCard(
                 val languages = model.language.split(",").map { it.trim() }
                     .filter { it.isNotEmpty() }
                 for (lang in languages) {
-                    androidx.compose.material3.Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = lang,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                        )
-                    }
+                    AssistChip(
+                        onClick = { },
+                        label = {
+                            Text(
+                                text = lang,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
                 }
                 Text(
                     text = "${model.formattedSize()} \u00B7 ${model.quant}",

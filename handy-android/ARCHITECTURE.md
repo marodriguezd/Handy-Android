@@ -7,14 +7,24 @@ Handy Android is an Android port of the Handy desktop app. It is divided into tw
 
 ## User Interface (Jetpack Compose)
 
-### Navigation Hierarchy (Sprint 10)
-- **MainActivity**: The single activity hosting the Compose tree. Uses a `Scaffold` with a `NavigationBar` (Material 3).
-- **Bottom Nav Items (4):**
+### Navigation Hierarchy (Sprint 16)
+- **MainActivity**: The single activity hosting the Compose tree. Uses a `Scaffold` with an `TopAppBar` and adaptive navigation.
+- **Adaptive Navigation:**
+  - **Compact (`screenWidthDp < 600`)**: `NavigationBar` at the bottom.
+  - **Medium/Expanded (`screenWidthDp >= 600`)**: `NavigationRail` on the left, matching the PC sidebar.
+- **Nav Items (4):**
   1. **General** — `TabRow` with "General" and "Avanzado" tabs
   2. **Modelos** — `TabRow` with "Modelos" and "Post Proceso" tabs
   3. **Historial** — Direct, no tabs
   4. **Acerca de** — Direct, no tabs
-- **Onboarding** — Full-screen flow, shown on first launch (no bottom bar)
+- **Onboarding** — Full-screen flow, shown on first launch (no navigation rail/bar)
+
+### Material Design 3 Theme (`ui/theme/`)
+The UI is built on top of Jetpack Compose Material 3 with a custom color scheme aligned to the Handy PC palette:
+- `Color.kt` defines the full MD3 token set (primary, secondary, tertiary, error, outline, inverse, scrim).
+- `Theme.kt` exposes `HandyTheme(darkTheme, dynamicColor)` with a dark-first default and a static light fallback.
+- `Type.kt` provides the complete MD3 type scale using Roboto.
+- `Shape.kt` provides MD3 corner tokens (`extraSmall` through `extraLarge`).
 
 ### Screen Composables
 | Composable | Location | Contents |

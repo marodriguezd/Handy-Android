@@ -102,13 +102,13 @@ The Android port consists of:
 
 ### Kotlin App (`handy-android/app/`)
 - `HandyApplication.kt` — Process-wide singleton for EngineViewModel
-- `MainActivity.kt` — Bottom navigation with 4 tabs (General, Modelos, Historial, Acerca de), shared SettingsViewModel
+- `MainActivity.kt` — Adaptive navigation: `NavigationRail` on tablets/foldables, `NavigationBar` on phones; 4 destinations (General, Modelos, Historial, Acerca de), shared SettingsViewModel
 - `viewmodel/EngineViewModel.kt` — State management for recording/transcription (6 states: IDLE, LOADING, LISTENING, TRANSCRIBING, CONFIRM, ERROR)
 - `viewmodel/ModelsViewModel.kt` — Capability-tier-aware catalog promotion bucket (Sprint 15)
 - `viewmodel/OnboardingViewModel.kt` — Tier-aware download selection chain (Sprint 15)
 - `bridge/EngineBridge.kt` — JNI external fun declarations
 - `bridge/EngineCallback.kt` — Callback interface (Rust → Kotlin)
-- `ime/HandyInputMethodService.kt` — IME keyboard with dictation UI (5 visual states, animated transitions)
+- `ime/HandyInputMethodService.kt` — IME keyboard with PC-style floating pill dictation UI, Material 3 components, animated transitions
 - `injection/` — Strategy pattern for text injection (IME → Shizuku → Clipboard)
 - `service/RecordingService.kt` — Foreground service for persistent recording
 - `capability/` — DeviceTier / CapabilitySnapshot / ModelCapability / CompatibilityResolver (Sprint 14) + MobileRecommendations (Sprint 15)
@@ -117,6 +117,39 @@ The Android port consists of:
 
 
 ## Current State (Checkpoint — July 16, 2026 — Sprint 15 — Curated Mobile Recommended Subset + Capability Tests)
+
+### ✅ Sprint 16 — Material Design 3 Redesign
+
+#### Theme System (`ui/theme/`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **PC-aligned palette** | `Color.kt` redefined with full MD3 token set: `HandyBackground/Surface=#2C2B29`, `HandyPrimary=#F28CBB`, `HandyOnBackground/Surface=#FDFBFB`, plus `PrimaryContainer`, `Secondary`, `Tertiary`, `Error`, `Outline`, `Inverse*` and `Scrim` tokens |
+| 2 | **Dark-first + light fallback** | `Theme.kt` ships `HandyDarkColorScheme` (default) and `HandyLightColorScheme`; dynamic color is disabled by default; respects system dark/light toggle |
+| 3 | **MD3 Typography & Shapes** | `Type.kt` uses Material 3 type scale (`displayLarge` → `labelSmall`) with Roboto; `Shape.kt` uses MD3 corner tokens (`extraSmall` 4dp … `extraLarge` 28dp) |
+
+#### Adaptive Navigation (`navigation/AppNavigation.kt`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **NavigationRail on large screens** | `screenWidthDp >= 600` shows a permanent 80dp `NavigationRail` on the left, matching the PC sidebar |
+| 2 | **BottomNavigation on phones** | Compact devices keep `NavigationBar` at the bottom |
+| 3 | **TopAppBar per screen** | Each destination now has a Material 3 `TopAppBar` with screen title and surface container color |
+| 4 | **Screen enum merged** | Removed `Screen.kt`; `Screen` enum is now private inside `AppNavigation.kt` |
+
+#### Screen MD3 Polish
+| # | Screen | Changes |
+|---|--------|---------|
+| 1 | **Settings** | `SettingsRow` uses Material 3 `ListItem` with headline/supporting/trailing content; section cards use `ElevatedCard` |
+| 2 | **Model Catalog** | Model cards use `ElevatedCard`; language tags use `SuggestionChip`; active model highlighted with primary container |
+| 3 | **History** | Transcription cards use `ElevatedCard`; empty state centered with MD3 typography |
+| 4 | **Onboarding** | Step indicator uses MD3 `LinearProgressIndicator`; content uses MD3 cards and buttons |
+
+#### IME Redesign (`ime/HandyInputMethodService.kt`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **PC overlay pill** | Floating rounded pill (28dp corners) with surface container color and tonal elevation, visually aligned with the desktop overlay |
+| 2 | **MD3 components** | Replaced custom clickable `Surface`s with `IconButton`, `FilledIconButton`, `TextButton`, and `Button` from Material 3 |
+| 3 | **Theme-driven colors** | Hardcoded pinks/creams replaced by `MaterialTheme.colorScheme` tokens (`primary`, `surfaceContainerHigh`, `errorContainer`, etc.) |
+| 4 | **Press feedback** | Kept press-scale animations but components now also show MD3 ripple where appropriate |
 
 ### ✅ Working — Functional State
 - Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
