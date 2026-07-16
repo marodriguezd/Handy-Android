@@ -86,7 +86,7 @@ Second pre-release del fork Handy Android. Cierra la mitad del plan MD3 (Sprints
   - **Error state**: Error message + pink retry button
   - Pop-in animation (460ms cubic-bezier matching PC overlay)
   - Theme-aware colors via `MaterialTheme.colorScheme` (light/dark mode)
-- **Auto-Commit Text**: Transcription auto-inserts into the active text field via `InputConnection.commitText()` — no confirm step needed (like Wispr Flow). The `autoCommitted` guard flag prevents infinite retry loops if injection fails.
+- **Auto-Commit Text**: Transcription auto-inserts into the active text field via `InputConnection.commitText()` — no confirm step needed (HandyPC-style auto-commit). The `autoCommitted` guard flag prevents infinite retry loops if injection fails.
 - **Model Availability Check**: `startRecording()` now checks `nativeIsModelLoaded()` before starting recording. If no model is downloaded, shows error state instead of silently failing.
 - **Injection Failure Feedback**: `confirmInsert()` failure now shows `STATE_ERROR` instead of silently resetting to IDLE — user gets error message + retry option.
 - **Keyboard Switcher**: `showInputMethodPicker()` with try-catch fallback to `ACTION_INPUT_METHOD_SETTINGS` for OEM compatibility.

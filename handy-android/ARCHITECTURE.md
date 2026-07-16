@@ -149,7 +149,7 @@ Prevents OOM fatal crashes and guarantees model integrity across fragmented Andr
 
 ## Text Injection Strategy
 Handy Android supports multiple mechanisms to insert recognized text into third-party apps:
-1. **IME (Input Method Service):** Acts as a custom keyboard (Wispr Flow style). Auto-commits text directly to `InputConnection`.
+1. **IME (Input Method Service):** Acts as a custom keyboard (HandyPC style). Auto-commits text directly to `InputConnection`.
 2. **Shizuku:** Root-like injection using accessibility or input events via Shizuku (requires Shizuku runtime).
 3. **Clipboard:** Fallback method that simply copies text to the Android clipboard.
 

@@ -93,7 +93,7 @@
 - **Estado Recording:** 9 barras de waveform con animación de fase offset + timer MM:SS + botón stop rojo (32dp)
 - **Estado Transcribing:** `CircularProgressIndicator` de Material3 + "Transcribing…" + botón cancel rojo
 - **Estado Error:** Icono ⚠ + mensaje de error rojo + botón retry rosa
-- **Auto-commit:** La transcripción se inserta automáticamente via `InputConnection.commitText()` sin paso de confirmación (como Wispr Flow)
+- **Auto-commit:** La transcripción se inserta automáticamente via `InputConnection.commitText()` sin paso de confirmación (como HandyPC)
 - **Theme-aware:** Colores via `MaterialTheme.colorScheme` (soporte light/dark)
 - **Animaciones:** Pop-in (460ms cubic-bezier), dot pulsante (1.9s), waveform bars con fase offset, timer en tiempo real
 - **Keyboard switcher:** `showInputMethodPicker()` con fallback a `ACTION_INPUT_METHOD_SETTINGS`
