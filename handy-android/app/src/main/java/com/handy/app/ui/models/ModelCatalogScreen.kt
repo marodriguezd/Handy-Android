@@ -256,7 +256,7 @@ fun ModelCard(
                 }
                 Text(
                     text = if (progress >= 0f) {
-                        "Downloading ${(progress * 100).toInt()}%"
+                        stringResource(R.string.download_progress_percent, (progress * 100).toInt())
                     } else {
                         stringResource(R.string.models_downloading)
                     },

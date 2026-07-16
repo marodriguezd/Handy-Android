@@ -8,6 +8,8 @@ use crate::audio::vad::{
     VAD_PREFILL_FRAMES, VAD_STREAMING_HANGOVER_FRAMES, VAD_THRESHOLD,
 };
 
+use crate::transcription::router::StreamRouter;
+
 /// Simple fixed-gain pre-amp to boost quiet microphone signals.
 /// Whisper models work best with audio RMS around 0.1–0.3.
 /// Raw AAudio float32 samples from mobile microphones can be
@@ -29,6 +31,11 @@ struct PipelineInner {
     /// Pre-allocated scratch buffer for applying gain.
     /// Avoids heap allocation on the real-time AAudio callback thread.
     gain_scratch: Vec<f32>,
+    stream_router: Option<Arc<StreamRouter>>,
+    /// Flag indicating whether streaming mode is active.
+    /// When true, audio frames are NOT double-buffered into audio_buffer
+    /// since they are already forwarded to the stream router in real-time.
+    streaming_active: bool,
 }
 
 
@@ -55,12 +62,17 @@ impl PipelineInner {
         }
         let gained = &self.gain_scratch;
 
-        self.resampler.push(gained, &mut |frame| {
-            let frame = frame.to_vec();
-            self.audio_buffer.extend_from_slice(&frame);
+        self.resampler.push(gained, &mut |frame: &[f32]| {
+            // Only buffer audio when streaming is NOT active.
+            // During streaming, frames are forwarded to the stream router
+            // in real-time, so double-buffering would waste ~19MB for
+            // a 60-second recording.
+            if !self.streaming_active {
+                self.audio_buffer.extend_from_slice(frame);
+            }
 
             // VAD still runs for the level meter visualization in the UI.
-            let vad_result = self.smoothed_vad.push_frame(&frame);
+            let vad_result = self.smoothed_vad.push_frame(frame);
             if let Some(ref cb) = self.on_vad_level {
                 let energy = frame.iter().map(|&s| s * s).sum::<f32>() / frame.len() as f32;
                 let level = (energy.sqrt() * 5.0).min(1.0);
@@ -68,6 +80,13 @@ impl PipelineInner {
                     VadFrame::Speech(_) => cb(level),
                     VadFrame::Noise => cb(level * 0.5),
                 }
+            }
+
+            // Feed frame to active stream router (zero-cost when not set)
+            if let Some(ref router) = self.stream_router {
+                // Only one allocation per frame: the mpsc channel takes
+                // ownership of the Vec, so we must clone from &[f32].
+                router.feed(frame.to_vec());
             }
         });
     }
@@ -102,6 +121,8 @@ impl AudioPipeline {
                 capture_sample_rate: 0,
                 total_raw_samples: 0,
                 gain_scratch: Vec::new(),
+                stream_router: None,
+                streaming_active: false,
             })),
             running: Arc::new(AtomicBool::new(false)),
         }
@@ -121,6 +142,28 @@ impl AudioPipeline {
     {
         let mut guard = self.inner.lock().unwrap();
         guard.on_audio_frame = Some(Arc::new(cb));
+    }
+
+    pub fn set_stream_router(&mut self, router: Option<Arc<StreamRouter>>) {
+        let mut guard = self.inner.lock().unwrap();
+        guard.streaming_active = router.is_some();
+        guard.stream_router = router;
+    }
+
+    /// Drain accumulated audio buffer without stopping the pipeline.
+    /// Used to feed pre-recorded audio into a streaming session that
+    /// starts mid-recording (after model loads in parallel).
+    /// NOTE: `streaming_active` is NOT set here — it's set atomically
+    /// in `set_stream_router()` to avoid a race window where frames
+    /// arriving between drain_buffer() and set_stream_router() would
+    /// be dropped (skipped from buffer AND not forwarded to router).
+    pub fn drain_buffer(&self) -> Result<Vec<f32>, String> {
+        if !self.running.load(Ordering::SeqCst) {
+            return Err("Pipeline is not running".to_string());
+        }
+        let mut guard = self.inner.lock().unwrap();
+        let drained = std::mem::take(&mut guard.audio_buffer);
+        Ok(drained)
     }
 
     /// Start capture, query the actual device sample rate, and configure the
@@ -159,8 +202,12 @@ impl AudioPipeline {
             guard.resampler = FrameResampler::new(actual_rate, 16000);
             guard.smoothed_vad.reset();
             guard.audio_buffer.clear();
+            // Pre-allocate buffer for ~16 seconds of audio (262K f32 samples)
+            // to avoid repeated reallocations during recording.
+            guard.audio_buffer.reserve(262144);
             guard.capture_sample_rate = actual_rate;
             guard.total_raw_samples = 0;
+            guard.streaming_active = false;
         }
 
         self.capture = Some(capture);
@@ -198,12 +245,16 @@ impl AudioPipeline {
                 FrameResampler::new(16000, 16000),
             );
             resampler.finish(|frame| {
+                if let Some(ref router) = guard.stream_router {
+                    router.feed(frame.to_vec());
+                }
                 result.extend_from_slice(frame);
             });
             guard.resampler = resampler;
         }
 
         guard.smoothed_vad.reset();
+        guard.streaming_active = false;
 
         let raw_seconds = guard.total_raw_samples as f64 / guard.capture_sample_rate as f64;
         let out_seconds = result.len() as f64 / 16000.0;
@@ -230,6 +281,8 @@ impl AudioPipeline {
 
         let mut guard = self.inner.lock().unwrap();
         guard.audio_buffer.clear();
+        guard.stream_router = None;
+        guard.streaming_active = false;
         guard.smoothed_vad.reset();
 
         Ok(())

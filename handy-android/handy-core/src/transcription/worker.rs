@@ -40,7 +40,6 @@ impl StreamWorker {
         rx: mpsc::Receiver<StreamCmd>,
         mut session: transcribe_cpp::Session,
         on_partial: impl Fn(String) + Send + 'static,
-        on_final: impl Fn(String) + Send + 'static,
     ) -> u64 {
         let worker_id = self.worker_id;
         let returned = self.returned_session.clone();
@@ -81,17 +80,17 @@ impl StreamWorker {
                             }
                         }
                     }
-                    StreamCmd::Finalize => {
+                    StreamCmd::Finalize(reply) => {
                         match stream.finalize() {
                             Ok(_) => {
                                 let final_t0 = Instant::now();
                                 let text = stream.text().display().to_string();
                                 log::debug!("finalize_latency_ms={}", final_t0.elapsed().as_millis());
-                                on_final(text);
+                                let _ = reply.send(Some(text));
                             }
                             Err(e) => {
                                 log::warn!("[handy-core] stream finalize error: {e:?}");
-                                on_final(String::new());
+                                let _ = reply.send(None);
                             }
                         }
                         drop(stream);

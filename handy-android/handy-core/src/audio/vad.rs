@@ -17,7 +17,16 @@ pub struct EnergyVad {
     noise_floor: f32,
     noise_floor_min: f32,
     alpha: f32,
+    /// Frames processed since last reset.
+    /// Used to adapt noise floor quickly during the initial frames.
+    frame_count: u32,
 }
+
+/// Number of initial frames where adaptation runs at 10x speed.
+/// At 30ms/frame, 10 frames = 300ms to quickly adapt to room noise.
+const FAST_ADAPT_FRAMES: u32 = 10;
+/// Alpha multiplier during fast adaptation phase (10x faster).
+const FAST_ADAPT_MULTIPLIER: f32 = 10.0;
 
 impl EnergyVad {
     pub fn new(threshold_factor: f32, frame_samples: usize) -> Self {
@@ -27,6 +36,7 @@ impl EnergyVad {
             noise_floor: 0.01,
             noise_floor_min: 0.001,
             alpha: 0.01,
+            frame_count: 0,
         }
     }
 
@@ -46,12 +56,23 @@ impl VoiceActivityDetector for EnergyVad {
             ));
         }
 
+        self.frame_count += 1;
         let energy = Self::rms(frame);
+
+        // Use a faster adaptation rate for the first N frames after reset.
+        // This lets the VAD quickly tune into the ambient noise level
+        // instead of taking ~3 seconds at the default alpha=0.01.
+        let effective_alpha = if self.frame_count <= FAST_ADAPT_FRAMES {
+            (self.alpha * FAST_ADAPT_MULTIPLIER).min(0.5)
+        } else {
+            self.alpha
+        };
+
         if energy > self.noise_floor * self.threshold_factor {
             Ok(true)
         } else {
             self.noise_floor =
-                self.noise_floor * (1.0 - self.alpha) + energy * self.alpha;
+                self.noise_floor * (1.0 - effective_alpha) + energy * effective_alpha;
             self.noise_floor = self.noise_floor.max(self.noise_floor_min);
             Ok(false)
         }
@@ -59,6 +80,7 @@ impl VoiceActivityDetector for EnergyVad {
 
     fn reset(&mut self) {
         self.noise_floor = 0.01;
+        self.frame_count = 0;
     }
 }
 

@@ -24,7 +24,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hierarchy
+import com.handy.app.R
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -37,12 +39,15 @@ data class BottomNavItem(
     val screen: Screen,
 )
 
-private val bottomNavItems = listOf(
-    BottomNavItem("General", Icons.Default.Settings, Screen.General),
-    BottomNavItem("Modelos", Icons.Default.Build, Screen.Models),
-    BottomNavItem("Historial", Icons.Default.DateRange, Screen.History),
-    BottomNavItem("Acerca de", Icons.Default.Info, Screen.About),
-)
+@Composable
+private fun getBottomNavItems(): List<BottomNavItem> {
+    return listOf(
+        BottomNavItem(stringResource(R.string.settings_title), Icons.Default.Settings, Screen.General),
+        BottomNavItem(stringResource(R.string.tab_models), Icons.Default.Build, Screen.Models),
+        BottomNavItem(stringResource(R.string.history_title), Icons.Default.DateRange, Screen.History),
+        BottomNavItem(stringResource(R.string.settings_about), Icons.Default.Info, Screen.About),
+    )
+}
 
 @Composable
 fun AppNavigation(
@@ -66,7 +71,8 @@ fun AppNavigation(
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
-                    bottomNavItems.forEach { item ->
+                    val navItems = getBottomNavItems()
+                    navItems.forEach { item ->
                         val selected = currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
                         NavigationBarItem(
                             selected = selected,
@@ -95,7 +101,7 @@ fun AppNavigation(
             }
             composable(Screen.General.route) {
                 var selectedTab by remember { mutableIntStateOf(0) }
-                val tabs = listOf("General", "Avanzado")
+                val tabs = listOf(stringResource(R.string.settings_title), stringResource(R.string.settings_advanced))
                 Column(modifier = Modifier.fillMaxSize()) {
                     TabRow(selectedTabIndex = selectedTab) {
                         tabs.forEachIndexed { index, title ->
@@ -114,7 +120,7 @@ fun AppNavigation(
             }
             composable(Screen.Models.route) {
                 var selectedTab by remember { mutableIntStateOf(0) }
-                val tabs = listOf("Modelos", "Post Proceso")
+                val tabs = listOf(stringResource(R.string.tab_models), stringResource(R.string.tab_post_process))
                 Column(modifier = Modifier.fillMaxSize()) {
                     TabRow(selectedTabIndex = selectedTab) {
                         tabs.forEachIndexed { index, title ->

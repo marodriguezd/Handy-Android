@@ -3,7 +3,7 @@ use std::sync::{mpsc, Arc, Mutex};
 
 pub enum StreamCmd {
     Feed(Vec<f32>),
-    Finalize,
+    Finalize(std::sync::mpsc::Sender<Option<String>>),
     Cancel,
 }
 

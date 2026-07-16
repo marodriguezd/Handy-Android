@@ -141,14 +141,14 @@ fun HistoryCard(entry: HistoryEntry, onDelete: () -> Unit, onToggleSaved: () -> 
                 IconButton(onClick = onToggleSaved, modifier = Modifier.size(32.dp)) {
                     Icon(
                         imageVector = if (entry.isSaved) Icons.Default.Star else Icons.Default.StarOutline,
-                        contentDescription = "Save",
+                        contentDescription = stringResource(R.string.content_desc_save),
                         tint = if (entry.isSaved) YellowStar else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = { showDeleteDialog = true }, modifier = Modifier.size(32.dp)) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
+                        contentDescription = stringResource(R.string.content_desc_delete),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

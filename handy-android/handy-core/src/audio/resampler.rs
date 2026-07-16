@@ -141,7 +141,7 @@ impl FrameResampler {
 
         // Diagnostic: log sample accounting
         let expected_output_samples = if self.output_rate > 0 && self.input_rate > 0 {
-            (self.total_input_samples as u64 * self.output_rate as u64) / self.input_rate as u64
+            (self.total_input_samples * self.output_rate as u64) / self.input_rate as u64
         } else {
             0
         };
@@ -162,7 +162,7 @@ impl FrameResampler {
         self.total_input_samples = 0;
         self.total_output_frames = 0;
         if let Some(ref mut resampler) = self.resampler {
-            let _ = resampler.reset();
+            resampler.reset();
         }
     }
 

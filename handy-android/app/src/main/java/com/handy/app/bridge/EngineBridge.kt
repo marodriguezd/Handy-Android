@@ -59,6 +59,14 @@ object EngineBridge {
      */
     external fun nativeStartRecording(sampleRate: Int, channelCount: Int)
 
+    /**
+     * Attempt to start streaming transcription mid-recording.
+     * Call after nativeLoadModel completes while recording is active.
+     * Feeds any accumulated audio from the pipeline buffer into the stream.
+     * @return true if streaming was successfully started
+     */
+    external fun nativeAttemptStreaming(): Boolean
+
     /** Finalize the stream. Triggers onTranscription(finalText, false). */
     external fun nativeFinalizeStream()
 

@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.handy.app.R
 import com.handy.app.bridge.EngineBridge
 import com.handy.app.bridge.EngineCallback
 import com.handy.app.injection.InjectorRouter
@@ -109,7 +110,6 @@ class EngineViewModel(
             Log.w(TAG, "startRecording: already recording, ignoring")
             return
         }
-        // Show loading state immediately to prevent UI flicker
         _state.value = STATE_LOADING
         _finalText.value = null
         _partialText.value = ""
@@ -117,9 +117,13 @@ class EngineViewModel(
         _lastErrorMessage.value = null
         RecordingService.start(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
-            Log.d(TAG, "nativeLoadModel starting...")
+            // Start mic immediately, no model needed
+            Log.d(TAG, "nativeStartRecording starting immediately...")
+            EngineBridge.nativeStartRecording(sampleRate = 16000, channelCount = 1)
+            Log.d(TAG, "Mic started, now loading model in parallel...")
+
+            // Model loads while audio accumulates in pipeline buffer
             EngineBridge.nativeLoadModel()
-            Log.d(TAG, "nativeLoadModel done, checking if model loaded...")
             val loaded = EngineBridge.nativeIsModelLoaded()
             if (!loaded) {
                 Log.w(TAG, "nativeLoadModel reported model NOT loaded")
@@ -128,17 +132,18 @@ class EngineViewModel(
                 val active = parsed.firstOrNull { it.isActive }
                 val downloaded = parsed.firstOrNull { it.isDownloaded }
                 Log.w(TAG, "active=$active downloaded=$downloaded")
-                // No model available — show error to user
                 if (active == null && downloaded == null) {
-                    _lastErrorMessage.value = "No model downloaded. Go to Models to download one."
+                    _lastErrorMessage.value = getApplication<android.app.Application>().getString(R.string.error_no_model_downloaded)
                     _state.value = STATE_ERROR
                     RecordingService.stop(getApplication())
+                    EngineBridge.nativeCancelRecording()
                     return@launch
                 }
             }
-            Log.d(TAG, "nativeStartRecording starting...")
-            EngineBridge.nativeStartRecording(sampleRate = 16000, channelCount = 1)
-            Log.d(TAG, "nativeStartRecording done, isRecording=${EngineBridge.nativeIsRecording()}")
+
+            // Attempt streaming with accumulated audio
+            val streaming = EngineBridge.nativeAttemptStreaming()
+            Log.d(TAG, "nativeAttemptStreaming: streaming=$streaming")
         }
     }
 
@@ -175,7 +180,7 @@ class EngineViewModel(
     }
 
     fun confirmInsert(text: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Main) {
             val result = injectorRouter.inject(text)
             if (result.isSuccess) {
                 _state.value = STATE_IDLE
@@ -184,7 +189,7 @@ class EngineViewModel(
             } else {
                 // Injection failed — show error so user knows and can retry
                 Log.w(TAG, "confirmInsert: injection failed: ${result.exceptionOrNull()}")
-                _lastErrorMessage.value = result.exceptionOrNull()?.message ?: "Insertion failed"
+                _lastErrorMessage.value = result.exceptionOrNull()?.message ?: getApplication<android.app.Application>().getString(R.string.error_insertion_failed)
                 _state.value = STATE_ERROR
             }
         }
@@ -193,7 +198,7 @@ class EngineViewModel(
     fun testInject(text: String) {
         _finalText.value = text
         _state.value = STATE_CONFIRM
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Main) {
             val result = injectorRouter.inject(text)
             if (result.isSuccess) {
                 _state.value = STATE_IDLE
@@ -246,25 +251,11 @@ class EngineViewModel(
         if (isPartial) {
             _partialText.value = text
         } else {
+            // Show final text in ConfirmBar for user to Insert or Discard.
+            // No auto-insert — the ConfirmBar composable handles insertion
+            // via onConfirmInsert/onDiscard callbacks.
             _finalText.value = text
             _state.value = STATE_CONFIRM
-            // Auto-insert when in IME mode (bypasses StateFlow conflation issue where
-            // IDLE overrides CONFIRM before the main-thread collector can process it)
-            if (_imeModeEnabled) {
-                viewModelScope.launch(Dispatchers.IO) {
-                    val result = injectorRouter.inject(text)
-                    if (result.isSuccess) {
-                        Log.d(TAG, "auto-insert succeeded")
-                        _state.value = STATE_IDLE
-                        _finalText.value = null
-                        _partialText.value = ""
-                    } else {
-                        Log.w(TAG, "auto-insert failed: ${result.exceptionOrNull()}")
-                        _lastErrorMessage.value = result.exceptionOrNull()?.message ?: "Insertion failed"
-                        _state.value = STATE_ERROR
-                    }
-                }
-            }
         }
     }
 

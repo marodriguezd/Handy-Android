@@ -264,7 +264,7 @@ fun PostProcessContent(viewModel: SettingsViewModel) {
                             } else {
                                 Icons.Default.Visibility
                             },
-                            contentDescription = "Toggle",
+                            contentDescription = stringResource(R.string.content_desc_toggle),
                         )
                     }
                 },
@@ -315,8 +315,8 @@ fun AboutContent() {
 
     val context = LocalContext.current
     SettingsRow(
-        title = "GitHub",
-        subtitle = "github.com/handy-org/handy",
+        title = stringResource(R.string.settings_github),
+        subtitle = stringResource(R.string.settings_github_url),
         onClick = {
             val intent = android.content.Intent(
                 android.content.Intent.ACTION_VIEW,
@@ -339,11 +339,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
     val uiState by viewModel.uiState.collectAsState()
 
     // ── Section: APLICACIÓN ──
-    SectionHeader("APLICACIÓN")
+    SectionHeader(stringResource(R.string.settings_section_aplicacion))
 
     SettingsRow(
-        title = "Funciones Experimentales",
-        subtitle = "Activa funciones experimentales inestables",
+        title = stringResource(R.string.settings_experimental_features),
+        subtitle = stringResource(R.string.settings_experimental_features_desc),
         trailing = {
             Switch(
                 checked = uiState.experimentalEnabled,
@@ -355,14 +355,18 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
     HorizontalDivider()
 
     // ── Section: SALIDA ──
-    SectionHeader("SALIDA")
+    SectionHeader(stringResource(R.string.settings_section_salida))
 
     SettingsRow(
-        title = "Envío automático",
+        title = stringResource(R.string.settings_auto_send),
         trailing = {
             var expanded by remember { mutableStateOf(false) }
-            val options = listOf("disabled" to "Desactivado", "ime" to "Auto (IME)")
-            val displayText = options.firstOrNull { it.first == uiState.autoSend }?.second ?: "Desactivado"
+            val options = listOf(
+                "disabled" to stringResource(R.string.settings_auto_send_disabled),
+                "ime" to stringResource(R.string.settings_auto_send_ime),
+            )
+            val displayText = options.firstOrNull { it.first == uiState.autoSend }?.second
+                ?: stringResource(R.string.settings_auto_send_disabled)
             ExposedDropdownMenuBox(
                 expanded = expanded,
                 onExpandedChange = { expanded = !expanded },
@@ -394,11 +398,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
     HorizontalDivider()
 
     // ── Section: TRANSCRIPCIÓN ──
-    SectionHeader("TRANSCRIPCIÓN")
+    SectionHeader(stringResource(R.string.settings_section_transcripcion))
 
     SettingsRow(
-        title = "Voice Activity Detection",
-        subtitle = "Detección de actividad de voz",
+        title = stringResource(R.string.settings_vad),
+        subtitle = stringResource(R.string.settings_vad_desc),
         trailing = {
             Switch(
                 checked = uiState.vadEnabled,
@@ -408,8 +412,8 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
     )
 
     SettingsRow(
-        title = "Agregar Espacio Final",
-        subtitle = "Añade un espacio al final de la transcripción",
+        title = stringResource(R.string.settings_add_final_space),
+        subtitle = stringResource(R.string.settings_add_final_space_desc),
         trailing = {
             Switch(
                 checked = uiState.addFinalSpace,
@@ -421,11 +425,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
     HorizontalDivider()
 
     // ── Section: EXPERIMENTAL ──
-    SectionHeader("EXPERIMENTAL")
+    SectionHeader(stringResource(R.string.settings_section_experimental))
 
     SettingsRow(
-        title = "Post Procesamiento",
-        subtitle = "Procesar transcripción con LLM",
+        title = stringResource(R.string.settings_post_processing),
+        subtitle = stringResource(R.string.settings_post_processing_desc),
         trailing = {
             Switch(
                 checked = uiState.postProcessingEnabled,

@@ -312,7 +312,7 @@ private fun ModelDownloadContent(viewModel: OnboardingViewModel) {
                     modifier = Modifier.fillMaxWidth(0.7f),
                 )
                 Spacer(Modifier.height(8.dp))
-                Text("Downloading ${(uiState.downloadProgress * 100).toInt()}%")
+                Text(stringResource(R.string.download_progress_percent, (uiState.downloadProgress * 100).toInt()))
                 Spacer(Modifier.height(16.dp))
                 TextButton(onClick = { viewModel.skipDownload() }) {
                     Text(stringResource(R.string.onboarding_skip))

@@ -1,9 +1,20 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use log::{info, warn};
-use transcribe_cpp::{Backend, Model, ModelOptions, RunOptions, Task};
+use transcribe_cpp::{Backend, Model, ModelOptions, RunOptions, StreamOptions, Task};
+
+use crate::transcription::periodic::PeriodicWorker;
+use crate::transcription::router::{StreamCmd, StreamRouter};
+use crate::transcription::worker::StreamWorker;
+
+/// Union type for either a streaming worker or a periodic batch worker.
+/// Both implement the same channel protocol (Feed/Finalize/Cancel via StreamRouter).
+enum StreamWorkerOrPeriodic {
+    Streaming(StreamWorker),
+    Periodic(PeriodicWorker),
+}
 
 pub struct TranscriptionEngine {
     active_model_path: Option<PathBuf>,
@@ -11,6 +22,10 @@ pub struct TranscriptionEngine {
     is_loaded: AtomicBool,
     post_process_endpoint: Option<String>,
     post_process_api_key: Option<String>,
+    stream_router: Arc<StreamRouter>,
+    stream_worker: Mutex<Option<StreamWorkerOrPeriodic>>,
+    is_streaming: AtomicBool,
+    worker_id_counter: std::sync::atomic::AtomicU64,
 }
 
 impl TranscriptionEngine {
@@ -21,6 +36,10 @@ impl TranscriptionEngine {
             is_loaded: AtomicBool::new(false),
             post_process_endpoint: None,
             post_process_api_key: None,
+            stream_router: Arc::new(StreamRouter::new()),
+            stream_worker: Mutex::new(None),
+            is_streaming: AtomicBool::new(false),
+            worker_id_counter: std::sync::atomic::AtomicU64::new(1),
         }
     }
 
@@ -106,6 +125,166 @@ impl TranscriptionEngine {
 
         info!("[handy-core] transcription complete: {} chars: '{}'", transcript.text.len(), transcript.text);
         Ok(transcript.text)
+    }
+
+    pub fn supports_streaming(&self) -> Result<bool, String> {
+        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
+        let model = model_guard
+            .as_mut()
+            .ok_or_else(|| "No model loaded".to_string())?;
+        let session = model
+            .session()
+            .map_err(|e| format!("Failed to create session: {e}"))?;
+        let caps = session.model().capabilities();
+        Ok(caps.supports_streaming)
+    }
+
+    pub fn start_stream<F>(&self, on_partial: F) -> Result<bool, String>
+    where
+        F: Fn(String) + Send + 'static,
+    {
+        if self.is_streaming_active() {
+            return Err("A stream is already active".to_string());
+        }
+
+        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
+        let model = model_guard
+            .as_mut()
+            .ok_or_else(|| "No model loaded".to_string())?;
+
+        let mut session = model
+            .session()
+            .map_err(|e| format!("Failed to create session: {e}"))?;
+
+        let arch = session.model().arch();
+        let variant = session.model().variant();
+
+        // Try to create a stream to verify support.
+        // If it fails, fall back to batch.
+        // We drop the test stream first, then move the session into the worker
+        // where it creates its own stream internally (Stream borrows Session
+        // with a non-'static lifetime, so they must live in the same thread).
+        let run_options = RunOptions {
+            task: Task::Transcribe,
+            language: None,
+            target_language: None,
+            family: None,
+            ..Default::default()
+        };
+
+        match session.stream(&run_options, &StreamOptions::default()) {
+            Ok(_) => {
+                // Stream dropped immediately, releasing the mutable borrow on session
+                // so it can be moved into the worker thread below.
+                info!(
+                    "[handy-core] model supports streaming: arch='{arch}' variant='{variant}'"
+                );
+            }
+            Err(e) => {
+                info!(
+                    "[handy-core] model does not support streaming (arch='{arch}' variant='{variant}'): {e}; using batch"
+                );
+                return Ok(false);
+            }
+        };
+
+        let rx = self.stream_router.open_channel();
+        let worker_id = self.worker_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut worker = StreamWorker::new(worker_id);
+        // Move the session into the worker — stream was dropped so session is free
+        worker.spawn(rx, session, on_partial);
+
+        *self.stream_worker.lock().unwrap() = Some(StreamWorkerOrPeriodic::Streaming(worker));
+        self.is_streaming.store(true, std::sync::atomic::Ordering::Release);
+        info!("[handy-core] streaming transcription started");
+        Ok(true)
+    }
+
+    pub fn finalize_stream(&self) -> Option<String> {
+        use std::time::Duration;
+        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
+        if self.stream_router.send(StreamCmd::Finalize(reply_tx)).is_err() {
+            warn!("[handy-core] finalize_stream: router send failed");
+            self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
+            *self.stream_worker.lock().unwrap() = None;
+            return None;
+        }
+        match reply_rx.recv_timeout(Duration::from_secs(30)) {
+            Ok(result) => {
+                self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
+                *self.stream_worker.lock().unwrap() = None;
+                self.stream_router.close();
+                result
+            }
+            Err(e) => {
+                warn!("[handy-core] finalize_stream: timeout/error waiting for worker: {e}");
+                self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
+                *self.stream_worker.lock().unwrap() = None;
+                self.stream_router.close();
+                None
+            }
+        }
+    }
+
+    pub fn cancel_stream(&self) {
+        let _ = self.stream_router.send(StreamCmd::Cancel);
+        self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
+        *self.stream_worker.lock().unwrap() = None;
+        self.stream_router.close();
+    }
+
+    // ── Periodic (fallback) Transcription ─────────────────────
+
+    /// Start periodic batch transcription as a fallback when the model
+    /// doesn't support native streaming. Every ~3 seconds, runs
+    /// `session.run()` on the accumulated audio and dispatches the
+    /// result as partial text via `on_partial`.
+    pub fn start_periodic<F>(&self, on_partial: F) -> Result<bool, String>
+    where
+        F: Fn(String) + Send + 'static,
+    {
+        if self.is_streaming_active() {
+            return Err("A stream is already active".to_string());
+        }
+
+        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
+        let model = model_guard
+            .as_mut()
+            .ok_or_else(|| "No model loaded".to_string())?;
+
+        let session = model
+            .session()
+            .map_err(|e| format!("Failed to create session: {e}"))?;
+        drop(model_guard);
+
+        let rx = self.stream_router.open_channel();
+        let worker_id = self.worker_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut worker = PeriodicWorker::new(worker_id);
+        worker.spawn(rx, session, on_partial);
+
+        *self.stream_worker.lock().unwrap() = Some(StreamWorkerOrPeriodic::Periodic(worker));
+        self.is_streaming.store(true, std::sync::atomic::Ordering::Release);
+        info!("[handy-core] periodic batch transcription started");
+        Ok(true)
+    }
+
+    /// Finalize periodic transcription. Sends Finalize command and waits
+    /// for the worker to return the final result.
+    pub fn finalize_periodic(&self) -> Option<String> {
+        self.finalize_stream()  // Same channel protocol — Finalize command works for both
+    }
+
+    /// Cancel periodic transcription.
+    pub fn cancel_periodic(&self) {
+        self.cancel_stream()  // Same channel protocol — Cancel command works for both
+    }
+
+    pub fn is_streaming_active(&self) -> bool {
+        self.is_streaming.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    pub fn stream_router(&self) -> &Arc<StreamRouter> {
+        &self.stream_router
     }
 
     pub fn cancel(&self) {
@@ -228,7 +407,7 @@ pub fn collapse_stutters(text: &str) -> String {
         if count >= 3 {
             result.push(current);
         } else {
-            result.extend(std::iter::repeat(current).take(count));
+            result.extend(std::iter::repeat_n(current, count));
         }
         i += count;
     }

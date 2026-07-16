@@ -7,12 +7,16 @@
     <string name="text_copied_to_clipboard">Text copied to clipboard</string>
     <string name="insert_text">Insert</string>
     <string name="retry">Retry</string>
+    <string name="discard">Discard</string>
     <string name="ime_label">Handy</string>
     <string name="ime_subtype">Handy Dictation</string>
     <string name="ime_settings">Handy Settings</string>
     <string name="ime_enable_title">Enable Handy Keyboard</string>
     <string name="ime_enable_message">To start dictating, enable Handy in your keyboard settings.</string>
     <string name="ime_enable_action">Open Settings</string>
+    <string name="ime_loading_model">Loading model…</string>
+    <string name="ime_transcribing">Transcribing…</string>
+    <string name="ime_tap_insert_to_use">Tap Insert to use</string>
     <string name="recording_channel_name">Recording</string>
     <string name="recording_channel_description">Microphone recording notification</string>
     <string name="recording_notification_title">Dictating…</string>
@@ -47,6 +51,28 @@
     <string name="settings_shizuku_dialog_title">Shizuku Required</string>
     <string name="settings_shizuku_dialog_message">Shizuku injection requires the Shizuku app to be installed and running. Please install Shizuku from the official source, enable it in developer settings, and grant permission.</string>
     <string name="settings_switch_keyboard">Switch Keyboard</string>
+    <string name="settings_section_aplicacion">APLICACIÓN</string>
+    <string name="settings_experimental_features">Funciones Experimentales</string>
+    <string name="settings_experimental_features_desc">Activa funciones experimentales inestables</string>
+    <string name="settings_section_salida">SALIDA</string>
+    <string name="settings_auto_send">Envío automático</string>
+    <string name="settings_auto_send_disabled">Desactivado</string>
+    <string name="settings_auto_send_ime">Auto (IME)</string>
+    <string name="settings_section_transcripcion">TRANSCRIPCIÓN</string>
+    <string name="settings_vad">Voice Activity Detection</string>
+    <string name="settings_vad_desc">Detección de actividad de voz</string>
+    <string name="settings_add_final_space">Agregar Espacio Final</string>
+    <string name="settings_add_final_space_desc">Añade un espacio al final de la transcripción</string>
+    <string name="settings_section_experimental">EXPERIMENTAL</string>
+    <string name="settings_post_processing">Post Procesamiento</string>
+    <string name="settings_post_processing_desc">Procesar transcripción con LLM</string>
+    <string name="settings_github">GitHub</string>
+    <string name="settings_github_url">github.com/handy-org/handy</string>
+
+    <!-- Common Content Descriptions -->
+    <string name="content_desc_toggle">Toggle</string>
+    <string name="content_desc_save">Save</string>
+    <string name="content_desc_delete">Delete</string>
 
     <!-- Quick Dictate Notification -->
     <string name="quick_dictate_channel_name">Quick Dictate</string>
@@ -119,9 +145,19 @@
     <!-- IME Error Mode -->
     <string name="ime_error_generic">An error occurred</string>
     <string name="ime_error_retry_hint">Tap Retry to try again</string>
+    <string name="error_no_model_downloaded">No model downloaded. Go to Models to download one.</string>
+    <string name="error_insertion_failed">Insertion failed</string>
 
     <!-- Battery Optimization -->
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_exemption">Battery Optimization Exemption</string>
     <string name="settings_battery_exemption_description">Prevent Doze from killing the recording service</string>
+
+    <!-- Download Progress (format: %d%%) -->
+    <string name="download_progress_percent">Downloading %1$d%%</string>
+
+    <!-- App Navigation -->
+    <string name="settings_advanced">Avanzado</string>
+    <string name="tab_models">Modelos</string>
+    <string name="tab_post_process">Post Proceso</string>
 </resources>
