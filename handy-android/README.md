@@ -1,36 +1,36 @@
-# Handy para Android
+# Handy for Android
 
-**Reconocimiento de voz offline, en el dispositivo, para Android 8.0+ (API 26).**  
-Sin conexión a internet, sin enviar datos a la nube. Privacidad total.
-
----
-
-## Características
-
-- **IME integrado** — Dictado en cualquier campo de texto activando el teclado Handy, con UI flotante tipo pill
-- **Inserción inteligente** — 3 estrategias en cascada: IME `InputConnection` → Shizuku `KEYCODE_PASTE` → Clipboard
-- **Offline total** — Todo el procesamiento (VAD + transcripción) ocurre en el dispositivo
-- **65+ modelos** — Whisper, Parakeet, Canary, Moonshine, Nemotron, Qwen3-ASR, Cohere, Granite y más
-- **Multi-idioma** — Soporte para 99 idiomas según el modelo
-- **Consciente del dispositivo** — Clasificación automática del hardware (LOW/MID/HIGH/FLAGSHIP/TABLET) con recomendaciones por tier
-- **Material Design 3** — UI adaptativa con NavigationRail en tablets, tema oscuro PC-aligned
-- **Foreground Service** — Grabación fiable con notificación persistente y acciones (Stop, Switch Keyboard)
-- **VAD Energético** — Detección de actividad de voz liviana con adaptación rápida al ruido ambiente
-- **Normalización de audio** — Peak normalization para mejor precisión en la transcripción
+**Offline, on-device speech-to-text for Android 8.0+ (API 26).**  
+No internet connection required, no data sent to the cloud. Total privacy.
 
 ---
 
-## Requisitos
+## Features
+
+- **Integrated IME** — Dictate in any text field using the Handy keyboard with a floating pill UI
+- **Smart insertion** — 3 cascading strategies: IME `InputConnection` → Shizuku `KEYCODE_PASTE` → Clipboard
+- **Fully offline** — All processing (VAD + transcription) happens on-device
+- **65+ models** — Whisper, Parakeet, Canary, Moonshine, Nemotron, Qwen3-ASR, Cohere, Granite, and more
+- **Multi-language** — Up to 99 languages depending on the model
+- **Device-aware** — Automatic hardware classification (LOW/MID/HIGH/FLAGSHIP/TABLET) with tier-based recommendations
+- **Material Design 3** — Adaptive UI with NavigationRail on tablets, PC-aligned dark theme
+- **Foreground Service** — Reliable recording with persistent notification and actions (Stop, Switch Keyboard)
+- **Energy VAD** — Lightweight voice activity detection with fast noise adaptation
+- **Audio normalization** — Peak normalization for better transcription accuracy
+
+---
+
+## Requirements
 
 - Android 8.0+ (API 26)
-- Conexión a internet solo para descargar modelos (luego funciona offline)
-- ~500 MB de almacenamiento libre para modelos ligeros
+- Internet connection only for downloading models (works offline afterwards)
+- ~500 MB free storage for lightweight models
 
 ---
 
 ## Quick Start
 
-### Prerrequisitos
+### Prerequisites
 
 - [Rust](https://rustup.rs/) (latest stable)
 - [Android NDK](https://developer.android.com/ndk/) r26+ (via Android Studio SDK Manager)
@@ -38,9 +38,9 @@ Sin conexión a internet, sin enviar datos a la nube. Privacidad total.
 - Rust Android target: `rustup target add aarch64-linux-android`
 - Java 17+ JDK
 - Android SDK (compileSdk 35)
-- Un dispositivo con depuración USB habilitada
+- A device with USB debugging enabled
 
-### Compilar e instalar
+### Build and install
 
 ```bash
 cd handy-android
@@ -49,7 +49,7 @@ ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/<version> ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-> **Nota:** El APK de debug incluye la librería Rust compilada en modo debug (~131 MB). Para un APK release (~6 MB), véase [Building for Release](#building-for-release).
+> **Note:** The debug APK includes the Rust library compiled in debug mode (~131 MB). For a release APK (~6 MB), see [Building for Release](#building-for-release).
 
 ### Logs
 
@@ -59,21 +59,21 @@ adb logcat | grep -E '(handy-core|HandyApp|EngineVM|HandyRecording|TestCommandRe
 
 ---
 
-## Arquitectura
+## Architecture
 
 ```
 handy-android/
-├── handy-core/                    # Motor Rust (cdylib JNI)
+├── handy-core/                    # Rust engine (cdylib JNI)
 │   ├── src/
-│   │   ├── jni_bridge.rs          # 22 funciones JNI #[no_mangle]
-│   │   ├── audio/                 # Captura AAudio + resampler (rubato) + VAD energético
+│   │   ├── jni_bridge.rs          # 22 JNI #[no_mangle] functions
+│   │   ├── audio/                 # AAudio capture + resampler (rubato) + energy VAD
 │   │   ├── transcription/         # Batch inference via transcribe-cpp (GGML)
-│   │   └── model/                 # Catálogo + descarga de modelos (GGUF)
+│   │   └── model/                 # Model catalog + download (GGUF)
 │   └── Cargo.toml
-├── app/                           # App Android (Kotlin + Jetpack Compose)
+├── app/                           # Android app (Kotlin + Jetpack Compose)
 │   └── src/main/java/com/handy/app/
-│       ├── ime/                   # Input Method Service + UI flotante tipo pill
-│       ├── injection/             # Estrategias de inserción: IME → Shizuku → Clipboard
+│       ├── ime/                   # Input Method Service + floating pill UI
+│       ├── injection/             # Insertion strategies: IME → Shizuku → Clipboard
 │       ├── viewmodel/             # EngineViewModel + SettingsViewModel + ModelsViewModel
 │       ├── bridge/                # JNI bindings + callback interface
 │       ├── capability/            # DeviceTier, CapabilitySnapshot, CompatibilityResolver
@@ -81,33 +81,33 @@ handy-android/
 │       └── ui/                    # Compose screens (Settings, Models, History, Onboarding)
 │           └── theme/             # MD3 Color, Type, Shape tokens
 ├── scripts/
-│   ├── build-rust.sh              # Compilación Rust con soporte --vulkan
-│   └── adb_test_flow.sh           # Flujo ADB automatizado (build → install → download → activate)
+│   ├── build-rust.sh              # Rust compilation with --vulkan support
+│   └── adb_test_flow.sh           # Automated ADB flow (build → install → download → activate)
 ```
 
-Ver [ARCHITECTURE.md](./ARCHITECTURE.md) para la especificación técnica completa.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full technical specification.
 
 ---
 
-## Estrategias de Inserción de Texto
+## Text Insertion Strategies
 
-| Estrategia | Prioridad | Descripción |
+| Strategy | Priority | Description |
 |---|---|---|
-| **IME InputConnection** | 1.ª | Inserción directa vía `commitText()` — la más fiable |
-| **Shizuku** | 2.ª | Inyección vía `KEYCODE_PASTE` con permisos UID 2000 (requiere Shizuku runtime) |
-| **Clipboard** | 3.ª | Copia al portapapeles con label "Handy Dictation" (fallback automático) |
+| **IME InputConnection** | 1st | Direct insertion via `commitText()` — most reliable |
+| **Shizuku** | 2nd | Injection via `KEYCODE_PASTE` with UID 2000 permissions (requires Shizuku runtime) |
+| **Clipboard** | 3rd | Copy to clipboard with "Handy Dictation" label (automatic fallback) |
 
-El `InjectorRouter` selecciona automáticamente la mejor estrategia disponible y cae en cascada si falla.
+The `InjectorRouter` automatically selects the best available strategy and cascades down on failure.
 
 ---
 
-## Modelos Disponibles
+## Available Models
 
-65+ modelos en el catálogo completo. El sistema [Capability-Aware](./ARCHITECTURE.md#capability-aware-model-catalog-sprint-14) clasifica el dispositivo y recomienda modelos según la RAM disponible.
+65+ models in the full catalog. The [Capability-Aware](./ARCHITECTURE.md#capability-aware-model-catalog-sprint-14) system classifies the device and recommends models based on available RAM.
 
-### Recomendaciones por Tier
+### Tier-Based Recommendations
 
-| Tier | Modelo Principal | Alternativas |
+| Tier | Primary Model | Alternatives |
 |---|---|---|
 | **LOW** (≤1.5 GB) | Whisper Base | Whisper Tiny, Moonshine Streaming Tiny, MedASR |
 | **MID** (≤3.5 GB) | Nemotron 3.5 ASR Streaming | Canary 180M Flash, Parakeet TDT 0.6B, Whisper Medium, Whisper Small |
@@ -115,49 +115,49 @@ El `InjectorRouter` selecciona automáticamente la mejor estrategia disponible y
 | **FLAGSHIP** (≤12.5 GB) | Whisper Large V3 | Granite Speech 4.1 2B+, Canary Qwen 2.5B |
 | **TABLET** (>12.5 GB) | Cohere Transcribe | Granite Speech 4.1 2B, Granite 4.0 1B Speech |
 
-### Modelos Ligeros Populares
+### Popular Lightweight Models
 
-| Modelo | Tamaño | Idiomas | Ideal para |
+| Model | Size | Languages | Best for |
 |---|---|---|---|
-| Canary 180M Flash (Q4_K_M) | 139 MB | EN/ES/FR/DE + traducción | MID+ |
-| Parakeet TDT 0.6B V3 (Q4_K_M) | 485 MB | 25 idiomas | HIGH+ |
-| Nemotron 3.5 Streaming (Q4_K_M) | 496 MB | 28 idiomas + auto-detect | HIGH+ |
+| Canary 180M Flash (Q4_K_M) | 139 MB | EN/ES/FR/DE + translation | MID+ |
+| Parakeet TDT 0.6B V3 (Q4_K_M) | 485 MB | 25 languages | HIGH+ |
+| Nemotron 3.5 Streaming (Q4_K_M) | 496 MB | 28 languages + auto-detect | HIGH+ |
 
 ---
 
 ## Feature Flags & Gating
 
-El sistema incluye protecciones contra OOM y malas experiencias:
+The system includes protections against OOM and poor user experience:
 
-| Feature | Descripción |
+| Feature | Description |
 |---|---|
-| **DeviceTier** | Clasificación automática del hardware en 5 bandas según RAM |
-| **HeavyGate** | Modelos XXL (Voxtral 24B/4B/3B) requieren consentimiento explícito con checkbox |
-| **Experimental Gate** | Modelos inestables (Moonshine Base monolingües) ocultos por defecto |
-| **Compatibility Badges** | Chips visuales: HEAVY_GATE, EXCEEDS_RAM, LARGE_HEAP, EXPERIMENTAL |
-| **Mobile Recommendations** | 19 modelos curados organizados por tier con promoción en UI |
+| **DeviceTier** | Automatic hardware classification into 5 bands based on RAM |
+| **HeavyGate** | XXL models (Voxtral 24B/4B/3B) require explicit checkbox consent |
+| **Experimental Gate** | Unstable models (Moonshine Base monolingual) hidden by default |
+| **Compatibility Badges** | Visual chips: HEAVY_GATE, EXCEEDS_RAM, LARGE_HEAP, EXPERIMENTAL |
+| **Mobile Recommendations** | 19 curated models organized by tier with UI promotion |
 
 ---
 
 ## ADB Test Automation
 
-Para pruebas automatizadas vía ADB (debug builds solamente):
+For automated testing via ADB (debug builds only):
 
 ```bash
-# Flujo completo: build → install → grant → launch → download → activate
+# Full flow: build → install → grant → launch → download → activate
 ./scripts/adb_test_flow.sh <device_serial> <model_id>
 
-# Ejemplo:
+# Example:
 ./scripts/adb_test_flow.sh adb-00143154F001971-AbAnvz._adb-tls-connect._tcp canary-180m-flash-Q4_K_M
 ```
 
-### Hooks Disponibles (Debug)
+### Available Hooks (Debug)
 
-| Acción | Comando |
+| Action | Command |
 |---|---|
-| Saltar onboarding | `am start ... --ez skip_onboarding true` |
-| Descargar modelo | `am broadcast -a com.handy.app.action.DOWNLOAD_MODEL --es model_id <id>` |
-| Activar modelo | `am broadcast -a com.handy.app.action.SET_ACTIVE_MODEL --es model_id <id>` |
+| Skip onboarding | `am start ... --ez skip_onboarding true` |
+| Download model | `am broadcast -a com.handy.app.action.DOWNLOAD_MODEL --es model_id <id>` |
+| Activate model | `am broadcast -a com.handy.app.action.SET_ACTIVE_MODEL --es model_id <id>` |
 
 ---
 
@@ -173,25 +173,25 @@ export SENTRY_DSN=<your-sentry-dsn>
 ./gradlew assembleRelease bundleRelease
 ```
 
-El release build compila Rust en modo `--release` (~6 MB `.so`) y habilita el backend Vulkan.  
-Ver [BUILD.md](./BUILD.md) para instrucciones detalladas.
+The release build compiles Rust in `--release` mode (~6 MB `.so`) and enables the Vulkan backend.  
+See [BUILD.md](./BUILD.md) for detailed instructions.
 
 ---
 
-## Limitaciones Conocidas
+## Known Limitations
 
-- Sin transcripción en streaming nativa (solo batch con `session.run()`)
-- Algunos modelos Whisper English-only muestran entradas duplicadas en el catálogo
-- Whisper Tiny tiene baja precisión con frases largas con nombres propios
-- `session.run()` es bloqueante; el `cancel_flag` descarta resultados post-hoc pero no interrumpe C++ mid-inferencia
-- Moonshine Base no verificado en Android aún
-- Voxtral Small 24B (17 GB) está listado pero es impráctico para la mayoría de dispositivos móviles
-- El IME puede causar cambios de layout menores en algunas apps host
+- No native streaming transcription (batch only via `session.run()`)
+- Some Whisper English-only variants show duplicate entries in the catalog
+- Whisper Tiny has low accuracy with long phrases containing proper nouns
+- `session.run()` is blocking; `cancel_flag` discards results post-hoc but cannot interrupt C++ mid-inference
+- Moonshine Base not yet verified on Android
+- Voxtral Small 24B (17 GB) is listed but impractical for most mobile devices
+- The IME may cause minor layout shifts in some host apps
 
 ---
 
-## Licencia
+## License
 
-MIT License — ver [LICENSE](../LICENSE).
+MIT License — see [LICENSE](../LICENSE).
 
-*Handy para Android es un fork de [Handy](https://github.com/cjpais/Handy) de cjpais, adaptado exclusivamente para dispositivos Android. El nombre, logo y marcas no son open-source. Los forks no oficiales deben usar su propia marca.*
+*Handy for Android is a fork of [Handy](https://github.com/cjpais/Handy) by cjpais, adapted exclusively for Android devices. The name, logo, and trademarks are not open-source. Unofficial forks must use their own branding.*

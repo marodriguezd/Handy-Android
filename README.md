@@ -1,41 +1,26 @@
-# Handy para Android
+# Handy for Android
 
-Reconocimiento de voz offline, en el dispositivo, para Android 8.0+ (API 26). Sin conexión a internet, sin enviar datos a la nube.
+Offline, on-device speech-to-text for Android 8.0+ (API 26). No internet connection required, no data sent to the cloud.
 
-## Características
+## Features
 
-- **IME integrado** — Dictado en cualquier campo de texto activando el teclado Handy
-- **Inserción directa** — La transcripción se pega automáticamente vía `InputConnection.commitText()`
-- **Offline total** — Todo el procesamiento ocurre en el dispositivo
-- **65+ modelos** — Whisper, Parakeet, Canary, Moonshine, Qwen3-ASR, y más
-- **Multi-idioma** — Soporte para 99 idiomas (según el modelo)
-- **Foreground Service** — Grabación fiable con notificación persistente
-- **Detección de Voz (VAD)** — Energy-based VAD liviano
-- **Normalización de audio** — Peak normalization para mejor precisión
+- **Integrated IME** — Dictate in any text field by activating the Handy keyboard
+- **Direct insertion** — Transcription is pasted automatically via `InputConnection.commitText()`
+- **Fully offline** — All processing happens on-device
+- **65+ models** — Whisper, Parakeet, Canary, Moonshine, Qwen3-ASR, and more
+- **Multi-language** — Up to 99 languages depending on the model
+- **Foreground Service** — Reliable recording with persistent notification and actions
+- **Voice Activity Detection (VAD)** — Lightweight energy-based VAD
+- **Audio normalization** — Peak normalization for better accuracy
 
-## Capturas
-
-<table>
-  <tr>
-    <td><strong>IME — Estado IDLE</strong></td>
-    <td><strong>IME — Grabando</strong></td>
-    <td><strong>Modelos</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/ime_idle.png" alt="IME Idle" width="200"/></td>
-    <td><img src="docs/screenshots/ime_recording.png" alt="IME Recording" width="200"/></td>
-    <td><img src="docs/screenshots/models.png" alt="Models" width="200"/></td>
-  </tr>
-</table>
-
-## Requisitos
+## Requirements
 
 - Android 8.0+ (API 26)
-- Conexión a internet solo para descargar modelos (luego funciona offline)
+- Internet connection only for downloading models (works offline afterwards)
 
 ## Build & Install
 
-### Prerrequisitos
+### Prerequisites
 
 - [Rust](https://rustup.rs/) (latest stable)
 - [Android NDK](https://developer.android.com/ndk/) r26+ (via Android Studio SDK Manager)
@@ -44,17 +29,17 @@ Reconocimiento de voz offline, en el dispositivo, para Android 8.0+ (API 26). Si
 - Java 17+ JDK
 - Android SDK (compileSdk 35)
 
-### Compilar e instalar
+### Build and install
 
 ```bash
 cd handy-android
 ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/<version> ./gradlew assembleDebug
 
-# Instalar en dispositivo
+# Install on device
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-> **Nota:** El APK de debug incluye la librería Rust compilada en modo debug (~131 MB). Para un APK más pequeño, véanse las instrucciones de release en [handy-android/README.md](handy-android/README.md).
+> **Note:** The debug APK includes the Rust library compiled in debug mode (~131 MB). For a smaller APK, see the release instructions in [handy-android/README.md](handy-android/README.md).
 
 ### Logs
 
@@ -62,59 +47,58 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb logcat | grep -E '(handy-core|HandyApp|EngineVM|HandyRecording)'
 ```
 
-## Arquitectura
+## Architecture
 
 ```
-
 handy-android/
-├── handy-core/          # Motor Rust (cdylib JNI)
+├── handy-core/          # Rust engine (cdylib JNI)
 │   ├── src/
-│   │   ├── jni_bridge.rs    # 21 funciones JNI #[no_mangle]
-│   │   ├── audio/           # Captura AAudio + resampler + VAD
-│   │   ├── transcription/   # batch inference via transcribe-cpp
-│   │   └── model/           # Catálogo + descarga de modelos
+│   │   ├── jni_bridge.rs    # 22 JNI #[no_mangle] functions
+│   │   ├── audio/           # AAudio capture + resampler + VAD
+│   │   ├── transcription/   # Batch inference via transcribe-cpp
+│   │   └── model/           # Model catalog + download
 │   └── Cargo.toml
-└── app/                 # App Android (Kotlin + Jetpack Compose)
+└── app/                 # Android app (Kotlin + Jetpack Compose)
     └── src/main/java/com/handy/app/
-        ├── ime/              # Input Method Service + UI flotante
-        ├── injection/        # Estrategias: IME, Shizuku, Clipboard
+        ├── ime/              # Input Method Service + floating UI
+        ├── injection/        # Strategies: IME, Shizuku, Clipboard
         ├── viewmodel/        # EngineViewModel + SettingsViewModel
         ├── bridge/           # JNI bindings + callback interface
         └── service/          # RecordingService foreground
 ```
 
-Ver [ARCHITECTURE.md](ARCHITECTURE.md) para la especificación técnica completa.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical specification.
 
-## Estrategias de Inserción
+## Insertion Strategies
 
-| Estrategia | Prioridad | Descripción |
+| Strategy | Priority | Description |
 |---|---|---|
-| **IME InputConnection** | 1.ª | Inserción directa via `commitText()` — la más fiable |
-| **Shizuku** | 2.ª | Inyección via `KEYCODE_PASTE` con permisos UID 2000 |
-| **Clipboard** | 3.ª | Copia al portapapeles (fallback) |
+| **IME InputConnection** | 1st | Direct insertion via `commitText()` — most reliable |
+| **Shizuku** | 2nd | Injection via `KEYCODE_PASTE` with UID 2000 permissions |
+| **Clipboard** | 3rd | Copy to clipboard (fallback) |
 
-## Modelos Disponibles
+## Available Models
 
-| Prioridad | Modelo | Tamaño | Idiomas |
+| Priority | Model | Size | Languages |
 |---|---|---|---|
-| 🥇 | **Parakeet TDT 0.6B v3** (Q4_K_M) | 485 MB | 25 idiomas |
-| 🥈 | **Canary 180M Flash** (Q4_K_M) | 139 MB | 4 idiomas + traducción |
-| 🥉 | **Nemotron 3.5 Streaming** (Q4_K_M) | 496 MB | 28 idiomas, auto-detect |
-| | Whisper familia | 46 MB–1.2 GB | 99 idiomas |
-| | Canary 1B/1B Flash/Qwen 2.5B | 139 MB–1.7 GB | 4–25 idiomas |
-| | Moonshine familia | 35–296 MB | Ultra-livianos |
-| | +30 modelos más | Varios | Varios |
+| 🥇 | **Parakeet TDT 0.6B v3** (Q4_K_M) | 485 MB | 25 languages |
+| 🥈 | **Canary 180M Flash** (Q4_K_M) | 139 MB | 4 languages + translation |
+| 🥉 | **Nemotron 3.5 Streaming** (Q4_K_M) | 496 MB | 28 languages, auto-detect |
+| | Whisper family | 46 MB–1.2 GB | 99 languages |
+| | Canary 1B/1B Flash/Qwen 2.5B | 139 MB–1.7 GB | 4–25 languages |
+| | Moonshine family | 35–296 MB | Ultra-lightweight |
+| | +30 more models | Various | Various |
 
-## Limitaciones Conocidas
+## Known Limitations
 
-- Sin transcripción en streaming (solo batch)
-- Sin i18n (strings hardcoded en español/inglés)
-- Whisper Tiny tiene baja precisión con frases largas
-- El IME puede causar cambios de layout inesperados en algunas apps
-- Modelos muy grandes (Voxtral 24B, 17 GB) son imprácticos en móvil
+- No streaming transcription (batch only)
+- No i18n (strings hardcoded in Spanish/English)
+- Whisper Tiny has low accuracy with long phrases
+- The IME may cause unexpected layout shifts in some apps
+- Very large models (Voxtral 24B, 17 GB) are impractical on mobile
 
-## Licencia
+## License
 
-MIT License — ver [LICENSE](LICENSE).
+MIT License — see [LICENSE](LICENSE).
 
-*Handy para Android es un fork de [Handy](https://github.com/cjpais/Handy) de cjpais. El nombre, logo y marcas no son open-source. Los forks no oficiales deben usar su propia marca.*
+*Handy for Android is a fork of [Handy](https://github.com/cjpais/Handy) by cjpais. The name, logo, and trademarks are not open-source. Unofficial forks must use their own branding.*
