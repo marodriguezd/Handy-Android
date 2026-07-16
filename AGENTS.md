@@ -105,7 +105,7 @@ The Android port consists of:
 - `service/RecordingService.kt` — Foreground service for persistent recording
 
 
-## Current State (Checkpoint — July 16, 2026 — Sprint 13 — Persistence + IME + Cancellation)
+## Current State (Checkpoint — July 16, 2026 — Sprint 14 — Capability-Aware Model Catalog + Observability)
 
 ### ✅ Working — Functional State
 - Audio capture via AAudio with `DIRECTION_INPUT=1` (critical bugfix: aaudio-sys v0.1.0 had `DIRECTION_INPUT=0`, same as OUTPUT)
@@ -128,6 +128,46 @@ The Android port consists of:
 - Cancel download now properly notifies UI via complete_cb
 - Skip download (onboarding) now cancels Rust download
 - No OOM limit — user can activate any model size
+
+### ✅ Sprint 14 — New Implementations
+
+#### Capability Core (`capability/`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **`DeviceTier` enum** | LOW / MID / HIGH / FLAGSHIP / TABLET; cada tier declara `maxRecommendedModelCapability` (ULTRA_LIGHT / LIGHT / MEDIUM / HEAVY / EXTREME) |
+| 2 | **`CapabilitySnapshot`** | Data class inmutable con `totalMemBytes`, `availMemBytes`, `maxMemoryProcessBytes`, `isLowRamDevice`, `memoryClassMb`, `largeMemoryClassMb`, `cpuCores`, `sdkInt`. Método `toTier()` resuelve el tier con bandas (≤1.5 LOW, ≤3.5 MID, ≤6.5 HIGH, ≤12.5 FLAGSHIP, >12.5 TABLET) |
+| 3 | **`ModelCapability` enum** | ULTRA_LIGHT (≤100MB) / LIGHT (≤500MB) / MEDIUM (≤1.5GB) / HEAVY (≤3GB) / EXTREME (sin límite). Companion: `fromModel(model)`, `heavyGateIds` (3 Voxtral), `experimentalIds` (7 Moonshine Base monolingües) |
+| 4 | **`DeviceCapabilityDetector`** | Singleton `detect(context)` que lee `ActivityManager.MemoryInfo` + `isLowRamDevice` + `Runtime.maxMemory()` y devuelve `CapabilitySnapshot` |
+| 5 | **`CompatibilityResolver`** | Función pura `computeCompatibility(model, snapshot, showExperimental): ModelCompatibility`. Devuelve `status` (ACTIVE / TIER_RECOMMENDED / TIER_RECOMMENDED_DEEP / FIT / EXCEEDS / IMPOSSIBLE), `badges` (EXPERIMENTAL / HEAVY_GATE / EXCEEDS_RAM / LARGE_HEAP_REQUIRED), `requiresConsent`, `hidden` |
+
+#### UI Capability-Aware (`ui/models/components/`)
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **`DeviceCapabilityHeader`** | Card top del catálogo: muestra `totalMemGB` + tier, ícono Memory, botón Refresh, y un `Switch` para `showExperimentalModels` visible solo en MID+ |
+| 2 | **`CompatibilityBadgeChip`** | Surface chip para 4 badges (EXPERIMENTAL / HEAVY_GATE / EXCEEDS_RAM / LARGE_HEAP_REQUIRED) con color accent + border. También `ActiveBadge` para el modelo activo |
+| 3 | **`HeavyModelWarningDialog`** | `AlertDialog` que muestra `displayName` + `sizeGb` + `totalGb`. Diferencia title/body para HEAVY vs EXTREME. **Checkbox required** para habilitar el botón Confirm |
+
+#### Integración en ViewModels
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **`ModelsViewModel`** | UiState extendido con `snapshot / visibleModels / showExperimental / showLargeModelDialogFor`. Nuevo método `attemptDownload(model)` gatea vía `computeCompatibility` y puede mostrar el dialog; `confirmLargeModelDownload()` ejecuta el download post-ack; `cancelLargeModelDownload()` cierra; `downloadModel(modelId)` non-gating preservado para flows imperativos (onboarding). Sort tier-aware |
+| 2 | **`OnboardingViewModel`** | `cachedSnapshot` (lazy) cachea el snapshot una sola vez. Filtro `fitsAndSafe` excluye heavyGate. Chain de selección: `recommended+fitsAndSafe` → `any+fitsAndSafe` → null-dead-end con `Log.w("OnboardingVM", ...)` + `isDownloadReady=true`. **11 logs de observability** (TAG="OnboardingVM") en transiciones de step, model load, target selection, download events |
+| 3 | **`EngineViewModel`** | `Log.d(TAG, "EngineVM init; capabilityTier=${snapshot.toTier()}; totalMemGB=${snapshot.totalMemGbReport}; showExperimental=${...}")` justo después de `nativeInit(...)` |
+
+#### Settings & i18n
+| # | Feature | Details |
+|---|---------|---------|
+| 1 | **`SettingsStore.showExperimentalModels`** | Nuevo boolean persistido en `show_experimental_models` (default `false`) |
+| 2 | **`strings.xml` +18 keys** | `header_tier_*` (5), `badge_*` (4), `heavy_dialog_*` (5), `capability_*` (2), `show_experimental_models`, `model_unavailable_on_device` |
+
+#### Validación end-to-end (device A059, Android 16, 7.28 GB RAM → FLAGSHIP)
+| # | Verificación | Resultado |
+|---|--------------|-----------|
+| 1 | `EngineVM init` log | `EngineVM init; capabilityTier=FLAGSHIP; totalMemGB=7.28413; showExperimental=false` |
+| 2 | Onboarding wizard via ADB | Step 0→1→2→3→4→complete, todos los `nextStep: N -> N+1` logs emitidos en orden |
+| 3 | Tier-aware target selection | `Selected target: parakeet-tdt-0.6b-v3-Q4_K_M (size=462MB, recommended=true, score=2)` — primer recomendado que fits + safe |
+| 4 | Persistencia de onboarding | SharedPreferences `onboarding_completed=true` post-complete |
+| 5 | Navegación final | Top activity = `MainActivity`, pantalla principal visible (Settings/General tab) con labels "Settings", "Avanzado", "Audio", "Battery", "Modelos" |
 
 ### ✅ Sprint 13 — New Implementations
 

@@ -65,6 +65,36 @@ The IME now properly reports its content area to the Android framework:
 - `TOUCHABLE_INSETS_CONTENT` — touches in the transparent background pass through to the host app
 - Prevents the host app from being pushed up by the full IME window height
 
+## Capability-Aware Model Catalog (Sprint 14)
+Prevents OOM fatal crashes and guarantees model integrity across fragmented Android hardware by evaluating device capabilities before inference/download.
+
+### Detection Layer (`capability/`)
+- **`DeviceCapabilityDetector.detect(context)`** queries `ActivityManager.MemoryInfo` + `isLowRamDevice` + `Runtime.maxMemory()` → returns an immutable `CapabilitySnapshot`
+- **`CapabilitySnapshot.toTier()`** resolves the tier using fixed RAM bands: ≤1.5GB → LOW, ≤3.5GB → MID, ≤6.5GB → HIGH, ≤12.5GB → FLAGSHIP, >12.5GB → TABLET
+- **`DeviceTier.maxRecommendedModelCapability`** maps each tier to the heaviest model class it can safely run: LOW→ULTRA_LIGHT, MID→LIGHT, HIGH→MEDIUM, FLAGSHIP→HEAVY, TABLET→EXTREME
+
+### Resolution Layer
+- **`ModelCapability.fromModel(model)`** classifies a model by `sizeBytes` into ULTRA_LIGHT / LIGHT / MEDIUM / HEAVY / EXTREME
+- **`ModelCapability.heavyGateIds`** = {Voxtral Small 24B, Voxtral Mini 4B Realtime, Voxtral Mini 3B} — always require user consent
+- **`ModelCapability.experimentalIds`** = 7 Moonshine Base monolingual variants — hidden unless `showExperimentalModels=true`
+- **`CompatibilityResolver.computeCompatibility(model, snapshot, showExperimental)`** — pure function returning `ModelCompatibility(tier, status, badges, requiresConsent, hidden)`
+
+### UI Gating
+- **`DeviceCapabilityHeader`** (Card top of catalog) shows total GB, tier, refresh icon, and a conditional Switch for experimental models (visible only at MID+)
+- **`CompatibilityBadgeChip`** visualizes 4 badges (EXPERIMENTAL, HEAVY_GATE, EXCEEDS_RAM, LARGE_HEAP_REQUIRED)
+- **`HeavyModelWarningDialog`** gates HEAVY/EXTREME downloads behind a required Checkbox consent (title/body differentiate HEAVY vs EXTREME)
+
+### ViewModel Integration
+- **`ModelsViewModel.attemptDownload(model)`** routes through `computeCompatibility`; sets `showLargeModelDialogFor` when `requiresConsent=true`. The non-gating `downloadModel(modelId)` is preserved for imperative flows (e.g., onboarding auto-download)
+- **`OnboardingViewModel.fitsAndSafe`** filter excludes heavyGate models. Selection chain: `recommended+safe` → `any+safe` → null-dead-end fallback (logs warning + advances wizard with `isDownloadReady=true`). Snapshot is cached via `by lazy` to avoid re-detection on every state emission
+
+### Persistence
+- **`SettingsStore.showExperimentalModels`** (boolean, default `false`) persisted to `show_experimental_models` SharedPreferences key
+
+### Observability
+- **`EngineVM init` log** emitted after `nativeInit(...)`: `EngineVM init; capabilityTier=${tier}; totalMemGB=${gb}; showExperimental=${flag}`
+- **`OnboardingVM`** emits 11 distinct log lines (TAG="OnboardingVM") covering step transitions, model load, target selection, and download events. Failure logs de-dup via a separate `lastLoggedFailureId` sentinel (avoiding collision with `downloadTargetId`)
+
 ## Text Injection Strategy
 Handy Android supports multiple mechanisms to insert recognized text into third-party apps:
 1. **IME (Input Method Service):** Acts as a custom keyboard (Wispr Flow style). Auto-commits text directly to `InputConnection`.

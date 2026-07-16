@@ -160,4 +160,27 @@
     <string name="settings_advanced">Avanzado</string>
     <string name="tab_models">Modelos</string>
     <string name="tab_post_process">Post Proceso</string>
+
+    <!-- Device Capability UI -->
+    <string name="header_tier_low">LOW (≤ 1.5 GB)</string>
+    <string name="header_tier_mid">MID (≤ 3.5 GB)</string>
+    <string name="header_tier_high">HIGH (≤ 6.5 GB)</string>
+    <string name="header_tier_flagship">FLAGSHIP (≤ 12.5 GB)</string>
+    <string name="header_tier_tablet">TABLET (≥ 12.5 GB)</string>
+    <string name="capability_header_subtitle">Modelos optimizados hasta %1$d MB</string>
+    <string name="capability_refresh">Re-evaluar capacidad del dispositivo</string>
+    <string name="show_experimental_models">Mostrar modelos experimentales (sin verificar)</string>
+
+    <string name="badge_experimental">EXPERIMENTAL</string>
+    <string name="badge_heavy">REQUIERE ATENCIÓN</string>
+    <string name="badge_exceeds_ram">EXCEDE RAM</string>
+    <string name="badge_large_heap">REQUIERE largeHeap</string>
+
+    <string name="heavy_dialog_title">Modelo pesado seleccionado</string>
+    <string name="heavy_dialog_title_extreme">Modelo extremo — verificación obligatoria</string>
+    <string name="heavy_dialog_body">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.\n\nEl modelo funcionará pero tardará más en descargar, podría congelar la app o cerrarla.</string>
+    <string name="heavy_dialog_body_extreme">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.\n\nEste modelo requiere al menos 12 GB de RAM y largeHeap=true en el manifest para ejecutarse de manera estable. En un dispositivo con menos recursos:\n• Descargará %2$s GB extra de storage.\n• Probablemente la app se cerrará durante la carga.\n• El dispositivo puede quedar inutilizable mientras corre.\n\n¿Continuar bajo tu responsabilidad?</string>
+    <string name="heavy_dialog_consent">Entiendo los riesgos y quiero continuar</string>
+
+    <string name="model_unavailable_on_device">Este modelo excede la capacidad de tu dispositivo</string>
 </resources>

@@ -49,4 +49,9 @@ class SettingsStore(context: Context) {
     var autoSend: String
         get() = prefs.getString("auto_send", "disabled") ?: "disabled"
         set(value) = prefs.edit().putString("auto_send", value).apply()
+
+    /** Show experimental (Moonshine Base monolingual) models in the catalog. */
+    var showExperimentalModels: Boolean
+        get() = prefs.getBoolean("show_experimental_models", false)
+        set(value) = prefs.edit().putBoolean("show_experimental_models", value).apply()
 }

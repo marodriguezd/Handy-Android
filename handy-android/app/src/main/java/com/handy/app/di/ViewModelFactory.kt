@@ -15,15 +15,17 @@ object ViewModelFactory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return when {
                     modelClass.isAssignableFrom(ModelsViewModel::class.java) ->
-                        ModelsViewModel(app.engineViewModel) as T
+                        ModelsViewModel(app) as T
                     modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
                         SettingsViewModel(app, app.settingsStore, app.engineViewModel) as T
                     modelClass.isAssignableFrom(HistoryViewModel::class.java) ->
                         HistoryViewModel() as T
                     modelClass.isAssignableFrom(OnboardingViewModel::class.java) ->
-                        OnboardingViewModel(app.settingsStore) {
-                            ModelsViewModel(app.engineViewModel)
-                        } as T
+                        OnboardingViewModel(
+                            settingsStore = app.settingsStore,
+                            modelsViewModelFactory = { ModelsViewModel(app) },
+                            app = app,
+                        ) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
                 }
             }

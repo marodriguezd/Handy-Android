@@ -5,6 +5,30 @@
 
 ---
 
+## Sprint 14 — Nuevas Implementaciones
+
+### ✅ Sistema de Capacidades del Dispositivo (`com.handy.app.capability`)
+- `DeviceTier` + `CapabilitySnapshot`: Clasifica el dispositivo en 5 bandas (LOW ≤1.5GB, MID ≤3.5GB, HIGH ≤6.5GB, FLAGSHIP ≤12.5GB, TABLET >12.5GB) consultando `ActivityManager.MemoryInfo`.
+- `ModelCapability`: Divide los 65 modelos del catálogo en cinco perfiles de consumo (ULTRA_LIGHT / LIGHT / MEDIUM / HEAVY / EXTREME).
+- `CompatibilityResolver`: Función pura que cruza tier del dispositivo vs tier del modelo. Devuelve `CompatibilityStatus` (ACTIVE / TIER_RECOMMENDED / TIER_RECOMMENDED_DEEP / FIT / EXCEEDS / IMPOSSIBLE), `CompatibilityBadge` (EXPERIMENTAL / HEAVY_GATE / EXCEEDS_RAM / LARGE_HEAP_REQUIRED), y flags `requiresConsent` / `hidden`.
+
+### ✅ Componentes UI Conscientes (`ui/models/components/`)
+- `DeviceCapabilityHeader`: Card top del catálogo que muestra `totalMemGB`, tier, botón Refresh, y `Switch` para `showExperimentalModels` (visible solo en MID+).
+- `CompatibilityBadgeChip` + `ActiveBadge`: Chips visuales que notifican al usuario sobre incompatibilidades (EXPERIMENTAL, HEAVY_GATE, EXCEEDS_RAM, LARGE_HEAP_REQUIRED).
+- `HeavyModelWarningDialog`: `AlertDialog` que confronta peso del modelo vs RAM del sistema. **Checkbox required** para habilitar Confirm. Diferencia title/body para HEAVY vs EXTREME.
+
+### ✅ Gating de Descargas
+- `ModelsViewModel.attemptDownload(model)` evalúa `computeCompatibility(...)` antes de invocar la descarga. Si `requiresConsent=true`, dispara `HeavyModelWarningDialog`; el usuario debe aceptar explícitamente.
+- `downloadModel(modelId)` non-gating preservado para flows imperativos (e.g., onboarding auto-download).
+
+### ✅ Onboarding Tier-Aware
+- `OnboardingViewModel.fitsAndSafe` filter: chain de selección `recommended+safe` → `any+safe` → dead-end fallback (`Log.w` + `isDownloadReady=true` para que el usuario pueda avanzar).
+- Garantiza que modelos pesados (Voxtral 24B/4B/3B) NUNCA se descargan silenciosamente durante el wizard — solo via flujo manual con dialog en la pantalla de catálogo.
+
+### ✅ Observabilidad via Logcat
+- `EngineViewModel.init`: `Log.d` tras `nativeInit(...)` con tier + RAM + flag experimental.
+- `OnboardingViewModel`: TAG="OnboardingVM" + 11 logs (nextStep / previousStep / skipToModelDownload / skipDownload / retryDownload / completeOnboarding / initModelDownload / Selected target / All models downloaded / models loaded / Download complete-failed). De-dup vía `lastLoggedFailureId` sentinel separado de `downloadTargetId`.
+
 ## Sprint 13 — Nuevas Implementaciones
 
 ### ✅ Persistencia de modelo activo (`model/manager.rs`)

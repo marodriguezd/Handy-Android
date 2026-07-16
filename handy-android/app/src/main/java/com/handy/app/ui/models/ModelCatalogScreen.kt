@@ -1,6 +1,6 @@
 package com.handy.app.ui.models
 
-import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,7 +36,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -53,7 +53,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.handy.app.R
+import com.handy.app.capability.CompatibilityBadge
+import com.handy.app.capability.CompatibilityStatus
+import com.handy.app.capability.ModelCompatibility
 import com.handy.app.model.ModelInfo
+import com.handy.app.ui.models.components.ActiveBadge
+import com.handy.app.ui.models.components.CompatibilityBadgeChip
+import com.handy.app.ui.models.components.DeviceCapabilityHeader
+import com.handy.app.ui.models.components.HeavyModelWarningDialog
 import com.handy.app.viewmodel.EngineViewModel
 import com.handy.app.viewmodel.ModelsViewModel
 
@@ -72,101 +79,125 @@ fun ModelCatalogScreen(viewModel: ModelsViewModel) {
                 title = { Text(stringResource(R.string.models_title)) },
                 actions = {
                     IconButton(onClick = { viewModel.loadModels() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.models_refresh))
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.models_refresh),
+                        )
                     }
                 },
             )
         },
     ) { paddingValues ->
-        when {
-            uiState.models.isEmpty() && uiState.isLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            when {
+                uiState.models.isEmpty() && uiState.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
-            }
-
-            uiState.models.isEmpty() && !uiState.isLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    EmptyState(
-                        icon = Icons.Default.Info,
-                        message = stringResource(R.string.models_empty),
-                    )
-                }
-            }
-
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(uiState.models, key = { it.id }) { model ->
-                        val downloadState = uiState.downloads[model.id]
-                        val isActiveDownload = uiState.activeDownloadId == model.id
-                        ModelCard(
-                            model = model,
-                            downloadState = downloadState,
-                            isActiveDownload = isActiveDownload,
-                            onDownload = { viewModel.downloadModel(it) },
-                            onCancel = { viewModel.cancelDownload() },
-                            onDelete = { viewModel.deleteModel(it) },
-                            onSetActive = { viewModel.setActiveModel(it) },
+                uiState.models.isEmpty() && !uiState.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        EmptyState(
+                            icon = Icons.Default.Info,
+                            message = stringResource(R.string.models_empty),
                         )
                     }
                 }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        uiState.snapshot?.let { snap ->
+                            item(key = "capability_header") {
+                                DeviceCapabilityHeader(
+                                    snapshot = snap,
+                                    showExperimental = uiState.showExperimental,
+                                    onToggleExperimental = viewModel::setShowExperimental,
+                                    onRefresh = viewModel::refreshCapability,
+                                )
+                            }
+                        }
+
+                        items(uiState.visibleModels, key = { it.first.id }) { (model, compatibility) ->
+                            val downloadState = uiState.downloads[model.id]
+                            val isActiveDownload = uiState.activeDownloadId == model.id
+                            ModelCard(
+                                model = model,
+                                compatibility = compatibility,
+                                downloadState = downloadState,
+                                isActiveDownload = isActiveDownload,
+                                onAttemptDownload = { viewModel.attemptDownload(it) },
+                                onCancel = { viewModel.cancelDownload() },
+                                onDelete = { viewModel.deleteModel(it) },
+                                onSetActive = { viewModel.setActiveModel(it) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Heavy / extreme confirmation dialog (Vortextral 24B, etc.)
+        uiState.showLargeModelDialogFor?.let { model ->
+            uiState.snapshot?.let { snap ->
+                HeavyModelWarningDialog(
+                    model = model,
+                    snapshot = snap,
+                    onConfirm = { viewModel.confirmLargeModelDownload(model) },
+                    onDismiss = { viewModel.cancelLargeModelDownload() },
+                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ModelCard(
     model: ModelInfo,
+    compatibility: ModelCompatibility,
     downloadState: EngineViewModel.DownloadProgressEvent?,
     isActiveDownload: Boolean,
-    onDownload: (String) -> Unit,
+    onAttemptDownload: (ModelInfo) -> Unit,
     onCancel: () -> Unit,
     onDelete: (String) -> Unit,
     onSetActive: (String) -> Unit,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var showSizeWarning by remember { mutableStateOf(false) }
+    val isExceeding = compatibility.status == CompatibilityStatus.EXCEEDS ||
+        compatibility.status == CompatibilityStatus.IMPOSSIBLE
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (model.isActive) {
-                    Modifier.border(
-                        width = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                } else {
-                    Modifier.border(
-                        width = 2.dp,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                },
-            ),
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (model.isActive) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ),
+        border = BorderStroke(
+            width = if (model.isActive) 2.dp else 1.dp,
+            color = when {
+                model.isActive -> MaterialTheme.colorScheme.primary
+                isExceeding -> MaterialTheme.colorScheme.error.copy(alpha = 0.40f)
+                else -> MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-        ) {
-            // ── Row 1: Icon + Title ──
+        Column(modifier = Modifier.padding(12.dp)) {
+            // ── Row 1: Icon + Title + Badges ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -189,38 +220,32 @@ fun ModelCard(
                 Text(
                     text = model.displayName,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (model.isActive) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.small,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.models_active),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (model.isActive) {
+                        ActiveBadge()
+                    }
+                    compatibility.badges.forEach { b ->
+                        CompatibilityBadgeChip(badge = b)
                     }
                 }
             }
 
             Spacer(Modifier.height(6.dp))
 
-            // ── Row 2: Language chips (multi-line FlowRow) + Size info ──
-            @OptIn(ExperimentalLayoutApi::class)
+            // ── Row 2: Language chips + quant/size ──
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // Split languages by comma and show each as a chip
-                val languages = model.language.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val languages = model.language.split(",").map { it.trim() }
+                    .filter { it.isNotEmpty() }
                 for (lang in languages) {
-                    Surface(
+                    androidx.compose.material3.Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant,
                     ) {
@@ -233,7 +258,6 @@ fun ModelCard(
                         )
                     }
                 }
-                // Size + quant info inline after chips
                 Text(
                     text = "${model.formattedSize()} \u00B7 ${model.quant}",
                     style = MaterialTheme.typography.bodySmall,
@@ -274,6 +298,16 @@ fun ModelCard(
                 )
             }
 
+            // ── Reason (when model exceeds device) ──
+            if (isExceeding) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.model_unavailable_on_device),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
 
             // ── Row 3: Action buttons ──
@@ -302,7 +336,7 @@ fun ModelCard(
                         }
                     }
                     downloadState?.error != null -> {
-                        OutlinedButton(onClick = { onDownload(model.id) }) {
+                        OutlinedButton(onClick = { onAttemptDownload(model) }) {
                             Text(stringResource(R.string.models_retry))
                         }
                     }
@@ -312,14 +346,10 @@ fun ModelCard(
                         }
                     }
                     !model.isDownloaded -> {
-                        Button(onClick = {
-                            val maxMem = Runtime.getRuntime().maxMemory()
-                            if (model.sizeBytes > maxMem * 0.5) {
-                                showSizeWarning = true
-                            } else {
-                                onDownload(model.id)
-                            }
-                        }) {
+                        Button(
+                            enabled = !compatibility.hidden,
+                            onClick = { onAttemptDownload(model) },
+                        ) {
                             Text(stringResource(R.string.models_download))
                         }
                     }
@@ -348,27 +378,6 @@ fun ModelCard(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(stringResource(R.string.dialog_cancel))
-                }
-            },
-        )
-    }
-
-    if (showSizeWarning) {
-        AlertDialog(
-            onDismissRequest = { showSizeWarning = false },
-            title = { Text(stringResource(R.string.models_size_warning)) },
-            text = { Text(stringResource(R.string.models_size_warning_message)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSizeWarning = false
-                    onDownload(model.id)
-                }) {
-                    Text(stringResource(R.string.models_download))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSizeWarning = false }) {
                     Text(stringResource(R.string.dialog_cancel))
                 }
             },

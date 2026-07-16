@@ -5,8 +5,10 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.handy.app.R
+import com.handy.app.SettingsStore
 import com.handy.app.bridge.EngineBridge
 import com.handy.app.bridge.EngineCallback
+import com.handy.app.capability.DeviceCapabilityDetector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.model.AppSettings
 import com.handy.app.model.ModelInfo
@@ -83,6 +85,15 @@ class EngineViewModel(
                 modelDir = modelsDir.absolutePath,
                 configDir = configDir.absolutePath,
                 callback = this@EngineViewModel,
+            )
+            // Capability + settings snapshot for logcat observability
+            val snapshot = DeviceCapabilityDetector.detect(getApplication())
+            val settings = SettingsStore(getApplication())
+            Log.d(
+                TAG,
+                "EngineVM init; capabilityTier=${snapshot.toTier()}; " +
+                    "totalMemGB=${snapshot.totalMemGbReport}; " +
+                    "showExperimental=${settings.showExperimentalModels}",
             )
         }
     }
