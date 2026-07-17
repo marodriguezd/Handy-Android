@@ -22,10 +22,16 @@ import org.junit.Test
  *  - parseJson malformed: throws [JSONException] via wrap.
  *  - promotionBucket for all 5 DeviceTier maps primary→0, alternative→1, others→2.
  *
- * Sprint 28d: LOW.primary swap whisper-base-gguf → canary-180m-flash-gguf.
- * Sprint 28d+: MID.primary flip nemotron-3.5-asr-streaming-0.6b-gguf → canary-180m-flash-gguf.
- *             canary removed from MID.alternatives (avoid double-listing in same tier).
- *             LOW.primary remains canary (Sprint 28d). HIGH/FLAGSHIP/TABLET unchanged.
+ * Sprint 28e: LOW.primary AND MID.primary flipped from canary-180m-flash-gguf
+ *             to parakeet-tdt-0.6b-v3-gguf (NVIDIA Parakeet TDT 0.6B v3 —
+ *             English-only, ~600 MB, "el bueno, bonito y barato" per user
+ *             preference; canary "se queda corto" en calidad).
+ *             Canary-180m-flash-gguf kept as alternative in BOTH LOW.alternatives
+ *             AND MID.alternatives for multilingual users (es/de/en/otros).
+ *             Total promoted slots: 19 (5 LOW + 4 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET).
+ * Sprint 28d+ (history, reverted in 28e): MID.primary was canary-180m-flash-gguf.
+ * Sprint 28d  (history, reverted in 28e): LOW.primary was canary-180m-flash-gguf.
+ * HIGH/FLAGSHIP/TABLET unchanged.
  */
 class MobileRecommendationsTest {
 
@@ -34,17 +40,18 @@ class MobileRecommendationsTest {
           "version": 1,
           "tiers": {
             "LOW": {
-              "primary": "handy-computer/canary-180m-flash-gguf",
+              "primary": "handy-computer/parakeet-tdt-0.6b-v3-gguf",
               "alternatives": [
                 "handy-computer/whisper-tiny-gguf",
                 "handy-computer/moonshine-streaming-tiny-gguf",
-                "handy-computer/medasr-gguf"
+                "handy-computer/medasr-gguf",
+                "handy-computer/canary-180m-flash-gguf"
               ]
             },
             "MID": {
-              "primary": "handy-computer/canary-180m-flash-gguf",
+              "primary": "handy-computer/parakeet-tdt-0.6b-v3-gguf",
               "alternatives": [
-                "handy-computer/parakeet-tdt-0.6b-v3-gguf",
+                "handy-computer/canary-180m-flash-gguf",
                 "handy-computer/whisper-medium-gguf",
                 "handy-computer/whisper-small-gguf"
               ]
@@ -80,7 +87,7 @@ class MobileRecommendationsTest {
           "version": 1,
           "tiers": {
             "LOW": {
-              "primary": "handy-computer/canary-180m-flash-gguf",
+              "primary": "handy-computer/parakeet-tdt-0.6b-v3-gguf",
               "alternatives": []
             }
           }
@@ -103,17 +110,28 @@ class MobileRecommendationsTest {
             )
         }
 
-        // Sprint 28d: LOW primary is canary-180m-flash-gguf
+        // Sprint 28e: LOW primary is parakeet-tdt-0.6b-v3-gguf (NVIDIA, English).
         val low = file.forTier(DeviceTier.LOW)!!
-        assertEquals("handy-computer/canary-180m-flash-gguf", low.primary)
-        assertEquals(3, low.alternatives.size)
+        assertEquals("handy-computer/parakeet-tdt-0.6b-v3-gguf", low.primary)
+        assertEquals(4, low.alternatives.size)
         assertTrue(low.alternatives.contains("handy-computer/medasr-gguf"))
+        assertTrue(
+            "canary-180m-flash-gguf must be in LOW.alternatives post-Sprint 28e",
+            low.alternatives.contains("handy-computer/canary-180m-flash-gguf"),
+        )
 
-        // Sprint 28d+: MID primary is also canary-180m-flash-gguf
+        // Sprint 28e: MID primary is also parakeet-tdt-0.6b-v3-gguf.
         val mid = file.forTier(DeviceTier.MID)!!
-        assertEquals("handy-computer/canary-180m-flash-gguf", mid.primary)
+        assertEquals("handy-computer/parakeet-tdt-0.6b-v3-gguf", mid.primary)
         assertEquals(3, mid.alternatives.size)
-        assertTrue(mid.alternatives.contains("handy-computer/parakeet-tdt-0.6b-v3-gguf"))
+        assertTrue(
+            "canary-180m-flash-gguf must be in MID.alternatives post-Sprint 28e",
+            mid.alternatives.contains("handy-computer/canary-180m-flash-gguf"),
+        )
+        assertFalse(
+            "parakeet must NOT appear in MID.alternatives (it's the primary post-Sprint 28e)",
+            mid.alternatives.contains("handy-computer/parakeet-tdt-0.6b-v3-gguf"),
+        )
 
         val flagship = file.forTier(DeviceTier.FLAGSHIP)!!
         assertEquals("handy-computer/whisper-large-v3-gguf", flagship.primary)
@@ -126,10 +144,10 @@ class MobileRecommendationsTest {
     fun `parseJson silently skips tiers missing from the root tiers map`() {
         val file = MobileRecommendations.parseJson(partialFixture)
 
-        // LOW was in the fixture → present (canary-180m-flash-gguf post-Sprint 28d)
-        assertEquals("handy-computer/canary-180m-flash-gguf", file.forTier(DeviceTier.LOW)?.primary)
+        // LOW was in the fixture → present (parakeet-tdt-0.6b-v3-gguf post-Sprint 28e).
+        assertEquals("handy-computer/parakeet-tdt-0.6b-v3-gguf", file.forTier(DeviceTier.LOW)?.primary)
 
-        // MID/HIGH/FLAGSHIP/TABLET were not in the fixture → null
+        // MID/HIGH/FLAGSHIP/TABLET were not in the fixture → null.
         assertNull(file.forTier(DeviceTier.MID))
         assertNull(file.forTier(DeviceTier.HIGH))
         assertNull(file.forTier(DeviceTier.FLAGSHIP))
@@ -145,7 +163,7 @@ class MobileRecommendationsTest {
             {
               "version": 2,
               "tiers": {
-                "MID": { "primary": "handy-computer/canary-180m-flash-gguf" }
+                "MID": { "primary": "handy-computer/parakeet-tdt-0.6b-v3-gguf" }
               }
             }
         """.trimIndent()
@@ -153,7 +171,7 @@ class MobileRecommendationsTest {
 
         assertEquals(2, file.version)
         val mid = file.forTier(DeviceTier.MID)!!
-        assertEquals("handy-computer/canary-180m-flash-gguf", mid.primary)
+        assertEquals("handy-computer/parakeet-tdt-0.6b-v3-gguf", mid.primary)
         assertTrue(mid.alternatives.isEmpty())
     }
 
@@ -163,7 +181,7 @@ class MobileRecommendationsTest {
             {
               "tiers": {
                 "LOW": { "primary": "", "alternatives": ["a"] },
-                "MID": { "primary": "handy-computer/canary-180m-flash-gguf" }
+                "MID": { "primary": "handy-computer/parakeet-tdt-0.6b-v3-gguf" }
               }
             }
         """.trimIndent()
@@ -198,8 +216,8 @@ class MobileRecommendationsTest {
         val file = MobileRecommendations.parseJson(fullFixture)
 
         val expectations = mapOf(
-            DeviceTier.LOW to "handy-computer/canary-180m-flash-gguf", // Sprint 28d
-            DeviceTier.MID to "handy-computer/canary-180m-flash-gguf", // Sprint 28d+
+            DeviceTier.LOW to "handy-computer/parakeet-tdt-0.6b-v3-gguf", // Sprint 28e
+            DeviceTier.MID to "handy-computer/parakeet-tdt-0.6b-v3-gguf", // Sprint 28e
             DeviceTier.HIGH to "handy-computer/whisper-large-v3-turbo-gguf",
             DeviceTier.FLAGSHIP to "handy-computer/whisper-large-v3-gguf",
             DeviceTier.TABLET to "handy-computer/cohere-transcribe-03-2026-gguf",
@@ -227,10 +245,11 @@ class MobileRecommendationsTest {
         val file = MobileRecommendations.parseJson(fullFixture)
 
         // One alternative per tier — covers the bucket=1 path.
-        // Sprint 28d+: MID alternative pivot from canary (now primary) to parakeet-tdt-0.6b-v3.
+        // Sprint 28e: canary-180m-flash-gguf is now BOTH LOW AND MID alternative
+        // (multilingual fallback in both tiers).
         val expectations = mapOf(
-            DeviceTier.LOW to "handy-computer/medasr-gguf",
-            DeviceTier.MID to "handy-computer/parakeet-tdt-0.6b-v3-gguf", // Sprint 28d+
+            DeviceTier.LOW to "handy-computer/canary-180m-flash-gguf", // Sprint 28e
+            DeviceTier.MID to "handy-computer/canary-180m-flash-gguf", // Sprint 28e
             DeviceTier.HIGH to "handy-computer/Qwen3-ASR-1.7B-gguf",
             DeviceTier.FLAGSHIP to "handy-computer/granite-speech-4.1-2b-plus-gguf",
             DeviceTier.TABLET to "handy-computer/granite-speech-4.1-2b-gguf",
@@ -257,10 +276,13 @@ class MobileRecommendationsTest {
     fun `promotionBucket returns 2 (not promoted) for ids absent from the curated list`() {
         val file = MobileRecommendations.parseJson(fullFixture)
 
-        // Sprint 28d+: pivot LOW row from parakeet-tdt-0.6b-v3 (now MID alternative,
-        // bucket=1 in LOW) to canary-1b-v2-gguf (HIGH alternative, NOT in LOW at all → bucket=2).
+        // Sprint 28e: nemotron-3.5-asr-streaming-0.6b-gguf is no longer promoted
+        // in any tier (was MID primary pre-Sprint 28d+, then demoted in 28d+, still
+        // absent in 28e). Likewise whisper-base-gguf (was LOW primary pre-Sprint 28d,
+        // demoted, still absent). canary-180m-flash-gguf is bucket=2 in HIGH because
+        // it's only LOW + MID alt, never HIGH.
         val crossTierMatrix = listOf(
-            TierMatrix(DeviceTier.LOW, "handy-computer/canary-1b-v2-gguf"), // HIGH alternative
+            TierMatrix(DeviceTier.HIGH, "handy-computer/canary-180m-flash-gguf"), // LOW + MID alt, NOT HIGH
             TierMatrix(DeviceTier.MID, "handy-computer/granite-speech-4.1-2b-gguf"), // TABLET alternative
             TierMatrix(DeviceTier.HIGH, "handy-computer/cohere-transcribe-03-2026-gguf"), // TABLET primary
             TierMatrix(DeviceTier.FLAGSHIP, "handy-computer/whisper-base-gguf"), // demoted post-Sprint 28d
@@ -299,87 +321,141 @@ class MobileRecommendationsTest {
             DeviceTier.LOW,
             "handy-computer/whisper-large-v3-gguf", // not LOW-promoted at all
         ))
+
+        // Sprint 28e: parakeet-tdt-0.6b-v3-gguf is the LOW + MID primary.
+        // Under HIGH/FLAGSHIP/TABLET it must score 2 (not promoted there).
+        assertEquals(0, file.promotionBucket(DeviceTier.LOW, "handy-computer/parakeet-tdt-0.6b-v3-gguf"))
+        assertEquals(0, file.promotionBucket(DeviceTier.MID, "handy-computer/parakeet-tdt-0.6b-v3-gguf"))
+        assertEquals(2, file.promotionBucket(DeviceTier.HIGH, "handy-computer/parakeet-tdt-0.6b-v3-gguf"))
+        assertEquals(2, file.promotionBucket(DeviceTier.FLAGSHIP, "handy-computer/parakeet-tdt-0.6b-v3-gguf"))
+        assertEquals(2, file.promotionBucket(DeviceTier.TABLET, "handy-computer/parakeet-tdt-0.6b-v3-gguf"))
     }
 
-    // ── Sprint 28d: regression test for the LOW.primary swap ─────────
+    // ── Sprint 28e regression test: parakeet is the LOW + MID primary ─────────
 
     @Test
-    fun `Sprint 28d canary-180m-flash-gguf is the LOW primary (default out-of-box model)`() {
+    fun `Sprint 28e parakeet-tdt-0-6b-v3-gguf is the LOW + MID primary (the bueno bonito barato default)`() {
         val file = MobileRecommendations.parseJson(fullFixture)
 
-        // The user's intentional default for first-install Android phones
-        // (which typically resolve to DeviceTier.LOW per the
-        // DeviceCapabilityDetector RAM + core-count heuristic).
+        // Sprint 28e: parakeet-tdt-0.6b-v3-gguf is THE recommended default for
+        // both LOW and MID tier devices (per user preference: "el bueno, bonito y
+        // barato" — NVIDIA's best English-only STT at 0.6B scale, supersedes
+        // canary-180m-flash-gguf which "se queda corto" en calidad).
+        assertEquals(
+            "Sprint 28e: LOW.primary must be parakeet-tdt-0.6b-v3-gguf",
+            "handy-computer/parakeet-tdt-0.6b-v3-gguf",
+            file.forTier(DeviceTier.LOW)!!.primary,
+        )
+        assertEquals(
+            "Sprint 28e: MID.primary must be parakeet-tdt-0.6b-v3-gguf",
+            "handy-computer/parakeet-tdt-0.6b-v3-gguf",
+            file.forTier(DeviceTier.MID)!!.primary,
+        )
+
+        // Canary (the previous LOW + MID primary, Sprint 28d/28d+) is moved to
+        // BOTH alts so multilingual users still see it as a tier-alternative.
         val low = file.forTier(DeviceTier.LOW)!!
-        assertEquals(
-            "Sprint 28d: LOW.primary must be canary-180m-flash-gguf",
-            "handy-computer/canary-180m-flash-gguf",
-            low.primary,
+        assertTrue(
+            "canary-180m-flash-gguf must remain in LOW.alternatives (Sprint 28e invariant)",
+            low.alternatives.contains("handy-computer/canary-180m-flash-gguf"),
         )
-        // The previous LOW primary (whisper-base-gguf) is no longer in any
-        // promoted bucket — discoverable only through the full catalog.
-        for (tier in DeviceTier.entries) {
-            val recs = file.forTier(tier)!!
-            assertFalse(
-                "whisper-base-gguf must NOT be ${tier.name}.primary post-Sprint 28d",
-                recs.primary == "handy-computer/whisper-base-gguf",
-            )
-        }
-    }
-
-    // ── Sprint 28d+: regression test for the MID.primary flip ─────────
-
-    @Test
-    fun `Sprint 28d+ canary-180m-flash-gguf is the MID primary (multilingual mid-tier default)`() {
-        val file = MobileRecommendations.parseJson(fullFixture)
-
-        // Sprint 28d+: the user wants canary-180m-flash-gguf as the default
-        // for mid-range Android phones too — not just LOW-tier first-install.
         val mid = file.forTier(DeviceTier.MID)!!
-        assertEquals(
-            "Sprint 28d+: MID.primary must be canary-180m-flash-gguf",
-            "handy-computer/canary-180m-flash-gguf",
-            mid.primary,
-        )
-
-        // Canary must be REMOVED from MID.alternatives to avoid double-listing
-        // in the same tier (it would otherwise appear with two promotion badges:
-        // tier-primary + tier-alternative).
-        assertFalse(
-            "canary-180m-flash-gguf must NOT appear in MID.alternatives (it's the primary)",
+        assertTrue(
+            "canary-180m-flash-gguf must remain in MID.alternatives (Sprint 28e invariant)",
             mid.alternatives.contains("handy-computer/canary-180m-flash-gguf"),
         )
 
-        // nemotron-3.5-asr-streaming-0.6b-gguf is no longer primary in any tier
-        // (it was demoted out of MID.primary post-Sprint 28d+).
-        for (tier in DeviceTier.entries) {
-            val recs = file.forTier(tier)!!
-            assertFalse(
-                "nemotron-3.5-asr-streaming-0.6b-gguf must NOT be ${tier.name}.primary post-Sprint 28d+",
-                recs.primary == "handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf",
-            )
-        }
-
-        // LOW.primary is unchanged (still canary, established in Sprint 28d).
-        assertEquals(
-            "LOW.primary must remain canary-180m-flash-gguf (Sprint 28d invariant)",
-            "handy-computer/canary-180m-flash-gguf",
-            file.forTier(DeviceTier.LOW)!!.primary,
+        // Parakeet must NOT appear in MID.alternatives (it's the MID primary —
+        // symmetric with the Sprint 28d+ invariant that canary was removed from
+        // MID.alts when promoted to MID.primary).
+        assertFalse(
+            "parakeet-tdt-0.6b-v3-gguf must NOT appear in MID.alternatives (it's the primary)",
+            mid.alternatives.contains("handy-computer/parakeet-tdt-0.6b-v3-gguf"),
         )
 
-        // Total promoted slot count across all tiers should be 18 (4+4+4+3+3),
-        // down from 19 pre-Sprint 28d+ because we removed canary from MID.alts.
-        // (Sanity check on the description's count.)
+        // HIGH/FLAGSHIP/TABLET unchanged by Sprint 28e.
+        assertEquals(
+            "HIGH.primary must remain whisper-large-v3-turbo-gguf (unchanged by Sprint 28e)",
+            "handy-computer/whisper-large-v3-turbo-gguf",
+            file.forTier(DeviceTier.HIGH)!!.primary,
+        )
+        assertEquals(
+            "FLAGSHIP.primary must remain whisper-large-v3-gguf (unchanged by Sprint 28e)",
+            "handy-computer/whisper-large-v3-gguf",
+            file.forTier(DeviceTier.FLAGSHIP)!!.primary,
+        )
+        assertEquals(
+            "TABLET.primary must remain cohere-transcribe-03-2026-gguf (unchanged by Sprint 28e)",
+            "handy-computer/cohere-transcribe-03-2026-gguf",
+            file.forTier(DeviceTier.TABLET)!!.primary,
+        )
+
+        // Total promoted slot count: 5 LOW (1 primary + 4 alts) + 4 MID (1 + 3) +
+        // 4 HIGH + 3 FLAGSHIP + 3 TABLET = 19. Up from 18 in Sprint 28d+ because
+        // we added canary back to LOW.alts (and into MID.alts, which was already
+        // missing canary 28d+ even though it was the primary 28d+).
         var totalSlots = 0
         for (tier in DeviceTier.entries) {
             val recs = file.forTier(tier)!!
             totalSlots += 1 + recs.alternatives.size
         }
         assertEquals(
-            "Total promoted slots must be 18 post-Sprint 28d+ (4+4+4+3+3)",
-            18,
+            "Total promoted slots must be 19 post-Sprint 28e (5+4+4+3+3)",
+            19,
             totalSlots,
         )
+    }
+
+    // ── Sprint 28d historical regression: LOW.primary was canary (now reverted) ─────────
+
+    @Test
+    fun `Sprint 28d historical LOW primary canary was reverted by Sprint 28e`() {
+        val file = MobileRecommendations.parseJson(fullFixture)
+
+        // Sprint 28d established canary-180m-flash-gguf as the LOW primary;
+        // Sprint 28e reverted that in favor of parakeet. Canary remains
+        // discoverable as a LOW.alternative (multilingual fallback).
+        assertEquals(
+            "Sprint 28e revert: LOW.primary is no longer canary-180m-flash-gguf",
+            "handy-computer/parakeet-tdt-0.6b-v3-gguf",
+            file.forTier(DeviceTier.LOW)!!.primary,
+        )
+        // The pre-Sprint-28d LOW primary (whisper-base-gguf) is no longer primary
+        // in any tier — discoverable only through the full catalog.
+        for (tier in DeviceTier.entries) {
+            val recs = file.forTier(tier)!!
+            assertFalse(
+                "whisper-base-gguf must NOT be ${tier.name}.primary (demoted since pre-Sprint 28d)",
+                recs.primary == "handy-computer/whisper-base-gguf",
+            )
+        }
+    }
+
+    // ── Sprint 28d+ historical regression: MID.primary was canary (now reverted) ─────────
+
+    @Test
+    fun `Sprint 28d+ historical MID primary canary was reverted by Sprint 28e`() {
+        val file = MobileRecommendations.parseJson(fullFixture)
+
+        // Sprint 28d+ flipped MID.primary to canary-180m-flash-gguf (multilingual);
+        // Sprint 28e reverted that in favor of parakeet-tdt-0.6b-v3-gguf. Canary
+        // remains discoverable as a MID.alternative (multilingual fallback).
+        assertEquals(
+            "Sprint 28e revert: MID.primary is no longer canary-180m-flash-gguf",
+            "handy-computer/parakeet-tdt-0.6b-v3-gguf",
+            file.forTier(DeviceTier.MID)!!.primary,
+        )
+
+        // nemotron-3.5-asr-streaming-0.6b-gguf is no longer primary in any tier
+        // (was the original MID primary, demoted post-Sprint 28d+, still absent
+        // post-Sprint 28e).
+        for (tier in DeviceTier.entries) {
+            val recs = file.forTier(tier)!!
+            assertFalse(
+                "nemotron-3.5-asr-streaming-0.6b-gguf must NOT be ${tier.name}.primary",
+                recs.primary == "handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf",
+            )
+        }
     }
 
     private data class TierMatrix(val tier: DeviceTier, val id: String)
