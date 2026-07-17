@@ -1049,7 +1049,7 @@ Picks up the Sprint 28b MVP (panel gated by Settings.debugMode) + Sprint 28b-v9 
 - AGP 9.x + Kotlin 2.0 migration paired (still on AGP 8.8.2 + Gradle 8.11.1 + Kotlin 1.9.24).
 
 
-## 📌 Session 2026-07-17 (resumed) — Sprint 28b-v12 Compose Layout regression fix (discovered via on-device verify)
+## 📌 Session 2026-07-17 (resumed, PARTIAL — closure pending PRIMARY sizeTransform fix) — Sprint 28b-v12 Compose Layout regression fix (discovered via on-device verify)
 
 The on-device verification of Sprint 28b-v11 dev-UX wiring discovered a real Compose IllegalStateException regression that would have shipped to users if verify had skipped the manual tap step.
 
@@ -1074,7 +1074,7 @@ The on-device verification of Sprint 28b-v11 dev-UX wiring discovered a real Com
 
 **Push status** (superseded by Sprint 28b-v13 + 28b-v14 chain): 0 commits in this turn; working tree had 6 modified + 1 new test (from Sprint 28b-v11) + the 1-line + 12-line KDoc fix in DebugContent.kt (from this Sprint 28b-v12). Per AGENTS.md auth notes, user runs `git add ... && git commit ... && git push origin main` from interactive shell (Plan-D).
 
-**Closure status (final, post-Sprint 28b-v14)**: **🟡 PARTIAL**. The v12 `Modifier.fillMaxSize()` Scaffold fix did NOT resolve the on-device `IllegalStateException`. Sprint 28b-v13 (Box-based) + Sprint 28b-v14 (LazyColumn-based) also PARTIAL — same upstream crashes in `AnimatedContent`'s measure-pass. All three fix attempts are captured in local commit `20001f3` (`feat(sprint28b-v11..v14): DebugModeToggle dev-UX + three on-device layout-fix attempts`). Push pending from user interactive shell. PRIMARY fix (`sizeTransform = { null }` per-destination override in `AppNavigation.kt`) is the carry-over — see Sprint 28b-v14 block below for diagnosis + recovery plan.
+**Closure status (current, post-Sprint 28b-v14)**: **🟡 PARTIAL**. The v12 `Modifier.fillMaxSize()` Scaffold fix did NOT resolve the on-device `IllegalStateException`. Sprint 28b-v13 (Box-based) + Sprint 28b-v14 (LazyColumn-based) also PARTIAL — same upstream crashes in `AnimatedContent`'s measure-pass. All three fix attempts are captured in local commit `20001f3` (`feat(sprint28b-v11..v14): DebugModeToggle dev-UX + three on-device layout-fix attempts`). Push pending from user interactive shell. PRIMARY fix (`sizeTransform = { null }` per-destination override in `AppNavigation.kt`) is the carry-over — see Sprint 28b-v14 block below for diagnosis + recovery plan. This block will be amended once the PRIMARY fix lands.
 
 **Next session**: pick up Sprint 28b-v13 (developer-toggle-outside-DebugScreen path for the "enabled" Snackbar + ON Snackbar UX symmetry) OR pick up Sprint 29 polish per `handy-android/PC_HANDY_REFERENCE.md §11`. *(Both deferred in favor of PRIMARY `sizeTransform = { null }` fix — see Sprint 28b-v14 carry-over.)*
 
