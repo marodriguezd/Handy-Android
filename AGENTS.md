@@ -766,3 +766,54 @@ Plus: settings UI toggle for `debugMode` (with TODO Option B popBackStack harden
 **Push status**: 1 local commit pending (submodule + parent docs paired per Sprint 27a/27b pattern). User runs `git push origin main` from interactive shell per AGENTS.md auth notes (Plan-D of the release-body-update ladder).
 
 **Next session**: Sprint 28b — fill in the 7 MD3 Debug components + reactive `debugMode` toggle + Shizuku probe. Lint trajectory target: 76 → ~73.
+
+## 📌 Session 2026-07-17 (resumed, seventh pass) — Sprint 28b closure
+
+This session continued immediately after Sprint 28 push. Sprint 28b closed three convergent work-streams with on-device ADB verification (the user connected `192.168.1.36:43795` to a Nothing Phone (3a) running Android 16 on Fedora).
+
+**A. Debug panel MD3 real components (main Sprint 28b work)**
+8 new files + 11 modified files. Mirrors Sprint 27a/b post-MVP pattern.
+
+NEW:
+- `app/src/main/java/com/handy/app/util/ReactiveRingBufferLog.kt` (JVM-pure base + StateFlow wrapper subclass)
+- 7 components in `ui/debug/components/` (LogLevelSelector, UpdateChecksToggle, PasteDelaySlider, RecordingBufferSlider, AlwaysOnMicrophoneSwitch, LiveLogViewer, DebugModeToggle).
+- 4 JVM edge tests in `test/util/RingBufferLogTest.kt` (empty buffer, empty string, maxLines=1, init-failure).
+
+MODIFIED:
+- `SettingsStore.kt` (+5 MutableStateFlow fields: logLevel, updateChecksOnLaunch, pasteDelayMs, recordingBufferFrames, alwaysOnMicrophone).
+- `HandyApplication.kt` (+`reactiveRingBuffer` singleton).
+- `util/RingBufferLog.kt` (Sprint 28 v3 reviewer's atomicity concern: per-method @Synchronized -> private lock + `open class` + `open fun` with KDoc subclass contracts).
+- `navigation/AppNavigation.kt` (Sprint 28 MVP TODO breadcrumb resolved: Option A from the comment, always-registered Debug route with `DeveloperToolsDisabled` placeholder body when gate is false).
+- `MainActivity.kt` (reactive `debugEnabled` via `debugModeFlow.collectAsState()`).
+- `ui/debug/DebugContent.kt` (real components replacing Sprint 28 MVP placeholders + DebugModeToggle first row + DeveloperToolsDisabled placeholder).
+- `ui/debug/DebugScreen.kt` (deleted - entry moved into DebugContent.kt).
+- `injection/ShizukuInjector.kt` + `HandyUserService.kt` (`@file:Suppress("PrivateApi","DiscouragedPrivateApi")` + KDoc citing Shizuku UID 2000 framework bypass; Sprint 28b probe to close 3 residual lint warnings without breaking IPC).
+- `TestCommandReceiver.kt` (new `SET_DEBUG_MODE` handler dispatching to SettingsStore.debugMode).
+- `AndroidManifest.xml` (receiver filter closed the pre-Sprint-26 Batch D `SEED_HISTORY` + SET_DEBUG_MODE action declarations gap).
+- `res/values/strings.xml` (+14 Sprint 28b string keys).
+
+**B. RingBufferLog hardening**
+Single-monitor pattern. `RingBufferLog.lock` is now `protected val`. `ReactiveRingBufferLog` no longer declares its own `lock`; its `synchronized(lock) { super.append(line); _snapshotFlow.value = ... }` blocks enter the SAME monitor the base uses for its inner ArrayDeque mutation. Single-acquire path means concurrent `snapshot()`/`tail()` readers always see either pre- or post-mutation state — never torn. Anti-pattern guard KDoc above the subclass prevents future agents from re-introducing a private `Any()` lock that would silently defeat the contract.
+
+**C. On-device ADB verification**
+- A059 Nothing Phone (3a), Android 16, paired at `192.168.1.36:43795`.
+- `:app:assembleDebug` APK green (~46 MB).
+- `adb install -r app-debug.apk` succeeded.
+- `am broadcast SET_DEBUG_MODE` broadcast flips the in-memory StateFlow + persists to SharedPreferences `debug_mode=true`.
+- `am start -n MainActivity --ez skip_onboarding true` launched.
+- Screencap captured (1080×2392 PNG) at `/tmp/handy_shots/sprint28b/01_home.png`.
+
+**D. Build state at closure**
+| Metric | Value |
+|--------|-------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:testDebugUnitTest` | **126 PASS / 0 FAIL** (was 122, +4 Sprint 28b edge tests) |
+| `:app:lintDebug` | 75 warnings (-1 from SuppressLint probe closing DiscouragedPrivateApi) |
+| `:app:assembleDebug` | APK green, installed + verified on A059 Android 16 |
+| Code-reviewer-minimax-m3 | APPROVED in 7 passes (initial -> code-reviewer flagged strings.xml + Elvis + stale-flag + missing `open` stub-class + two-monitor dance + final-KDoc tightenings) |
+| Push status | Pushed to `origin/main` on both repos |
+
+**Carry-over**:
+- `WhatsNewPreview` Modal wiring from Debug panel (currently a placeholder row).
+- `LiveLogViewer` logLevel filter predicate (currently shows all lines regardless of selected level).
+- AGP 9.x + Kotlin 2.0 migration deferred to a future polish sprint (still on AGP 8.8.2 + Gradle 8.11.1 + Kotlin 1.9.24).

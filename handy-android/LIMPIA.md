@@ -10,7 +10,7 @@ Use este documento al arrancar una sesión nueva para continuar exactamente desd
 - **Módulos principales:**
   - `handy-android/handy-core/` — librería Rust con JNI (`libhandy_core.so`).
   - `handy-android/app/` — app Kotlin/Jetpack Compose.
-- **Sprint actual:** Sprint 28 (Debug panel gated MVP - debugMode flag + Screen.Debug route + RingBufferLog) **fully closed**, pendiente el push desde interactive shell per AGENTS.md auth notes. **Sprint 28 MVP 100% complete.** Build green: `:app:compileDebugKotlin` BUILD SUCCESSFUL / 0 warnings, `:app:testDebugUnitTest --rerun-tasks` **122 PASS / 0 FAIL** (117 prior + 5 nuevos RingBufferLog tests), `:app:lintDebug --rerun-tasks` 0 errors / 76 warnings (sin regresión). Próximo sprint (Sprint 28b): implementar los 7 componentes MD3 Debug (LogLevelSelector, UpdateChecksToggle, SoundPicker reuse, PasteDelaySlider, RecordingBufferSlider, AlwaysOnMicrophoneSwitch, LiveLogViewer) + settings UI reactiva para debugMode + Shizuku Android 16 probe para los 3 PrivateApi warnings.
+- **Sprint actual: Sprint 28b (Debug panel real components + RingBufferLog harden + Shizuku PrivateApi probe) fully closed. Próximo: future polish sprint (AGP 9.x + Kotlin 2.0 migration + WhatsNewPreview Modal wiring).
 - **Documentos clave:**
   - `handy-android/PROGRESS.md` — estado actual y pasos pendientes.
   - `handy-android/SPEC.md` — especificación de UI/UX.
