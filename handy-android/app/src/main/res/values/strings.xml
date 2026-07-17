@@ -303,4 +303,8 @@
     <string name="acceleration_cpu">CPU</string>
     <string name="acceleration_vulkan">Vulkan</string>
     <string name="acceleration_nnapi">NNAPI</string>
+
+
+    <!-- Sprint 27a: Onboarding MD3 refinement - StepIndicator label -->
+    <string name="onboarding_step_label_format">Step %1$d of %2$d</string>
 </resources>

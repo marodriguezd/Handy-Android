@@ -1,6 +1,6 @@
 # Handy Android — Progress & Current State
 
-**Last updated:** 2026-07-17 (Sprint 25b **FULL** — Advanced Settings UI refinement + 18 JVM tests on top of the partial Retry JNI + per-frame audio wiring. **106 PASS / 0 FAIL**, 0 compile warnings, 0 lint errors / 86 warnings (+2 vs 84 baseline). Laptop closure complete. Up next: Sprint 26.)
+**Last updated:** 2026-07-17 (Sprint 25b **FULL** — Advanced Settings UI refinement + 18 JVM tests on top of the partial Retry JNI + per-frame audio wiring. **106 PASS / 0 FAIL**, 0 compile warnings, 0 lint errors / 86 warnings (+2 vs 84 baseline). Laptop closure complete. Up next: Sprint 27a closed end-to-end (Julio 17, 2026) — see Sprint 27a section below. Legacy: Sprint 26.)
 **Current checkpoint:** **Sprint 25b FULL** — Sprint 25 closed end-to-end. **106 PASS / 0 FAIL** (88 pre-existing + 18 new). See "Sprint 25b FULL closure" section below for file list, decision log, and on-device verification steps. 0 compile warnings, 0 lint errors, lint trajectory stable at 84. Próximo paso: decidir push desde interactive shell antes de continuar Phase C (Advanced Settings UI refinement) + 17 JVM tests, OR continuar Phase C/D primero y pushear todo junto.
 
 > **🚀 Fresh replan (post-Sprint 24)**: The canonical executable plan for Sprints 25 → 29 (with concrete work items, carry-over resolution, lint trajectory expectations, on-device success criteria, and the "Definition of MD3 Native Complete" checklist) lives at the end of `handy-android/MIGRATION_PLAN_MD3.md` under the section "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)". This `PROGRESS.md` plus `AGENTS.md` reference that block as the source of truth and inline the per-sprint summary.
@@ -843,3 +843,41 @@ Codebase grep `androidx.compose.material3.AlertDialog` over `handy-android/app/s
 - AccelerationBackend → Rust engine wiring (Vulkan + NNAPI) deferred per Sprint 25b closure; lands when Sprint 26b/29 reintroduces a Sprint 26+ backend-wiring sprint.
 - AGP 9.x + Kotlin 2.0 migration would close ~21 lint warnings in block — currently deferred.
 - 1 `UnusedResources` went up (new `postprocess_*` strings not yet referenced in toolbar/help text) — runs `:app:lintDebug focus UnusedResources` to enumerate.
+
+
+### Sprint 27a — Onboarding MD3 refinement (Julio 17, 2026)
+
+**Decision: 27a/27b split per canonical plan's fallback clause.** Sprint 27's original scope was (a) MD3 component refinement + integration AND (b) regeneration of `mipmap-anydpi-v26` adaptive launcher icons. The (b) leg is blocked on design assets (foreground vector + background color/vector) — these require Photoshop / Android Studio Asset Studio output and are deferred to **Sprint 27b** once a designer produces them. (a) shipped in 27a end-to-end with 119 PASS / 0 FAIL.
+
+**What landed (Sprint 27a)**
+
+- 4 new reusable MD3 components in `ui/onboarding/components/`:
+  - `StepIndicator.kt` — `Surface(tonalElevation = 3.dp)` wrapper, 48dp touch targets per dot, `animateColorAsState` + `animateDpAsState` + `animateFloatAsState` driven by `HandySpringTokens.gentle()`. `Step N of M` label below the row using new `R.string.onboarding_step_label_format`.
+  - `OnboardingIconContainer.kt` — 120dp `surfaceContainerHigh` `Box(RoundedCornerShape(28.dp))` with 64dp primary-tinted `Icon` centered. M3 hero-icon spec (88-120dp outer + 48-64dp inner glyph).
+  - `OnboardingButtonRow.kt` — 3-button Row { OutlinedButton(Back, only if currentStep>0) + inner Row { TextButton(Skip, optional) + Button(Primary, primaryLabelRes-driven) } }. `internal fun primaryLabelRes(currentStep, totalSteps): Int` is pure and JVM-testable.
+  - `OnboardingProgressBar.kt` — `LinearProgressIndicator` (clamped) + Spacer + percent label. `internal fun progressFraction(Float): Float` + `internal fun labelPercent(Float): Int` are pure and JVM-testable.
+- 5 new JVM tests in `test/.../OnboardingPresentationLogicTest.kt`: `progressFraction` boundary clamping (3 tests, 7 assertions), `labelPercent` formatting + clamp (1 test, 5 assertions), `primaryLabelRes` step-position → label-resource mapping including `totalSteps=0`/`totalSteps=1`/negative-step edges (1 test, 6 assertions). **All 5 PASS.**
+- `OnboardingScreen.kt` — fully refactored:
+  - **Imports**: dropped 3 dead (`foundation.background`, `shape.CircleShape`, `ui.draw.clip`); added 4 (`IntOffset`, `OnboardingButtonRow`, `OnboardingIconContainer`, `OnboardingProgressBar`) + 1 perf nit (`runtime.remember`).
+  - **5× inline 120dp hero Icon** replaced by `OnboardingIconContainer(icon = ...)` in WelcomeContent / MicPermissionContent / ImeSetupContent / ModelDownloadContent (initial state) / ReadyContent. The 48dp status icons in `isDownloadCanceled` / `isDownloadReady` branches intentionally stay inline because they are status glyphs, not hero icons.
+  - **Inline `LinearProgressIndicator + Spacer + Text(percent)` block** in `ModelDownloadContent`'s download branch replaced by `OnboardingProgressBar(progress = uiState.downloadProgress)`.
+  - **Bottom navigation** — `Column { Row{OutlinedButton(Spacer/Back)+ Button(primary) } + if(skip) TextButton(skip) }` replaced by a single `OnboardingButtonRow(currentStep, totalSteps, onBack=remember{...}, onPrimary=..., onSkip=remember{...})` call. The hardcoded `4 ->` completeOnboarding branch was generalized to `isLastStep = currentStep >= totalSteps - 1` (defensive vs. future step-count changes).
+  - **`AnimatedContent` transitionSpec upgrade** — pre-MD3 default tween replaced by MotionTokens-driven `tween<IntOffset>(500ms, PopEasing)` for slide + `tween<Float>(500ms, PopEasing)` for fade, composed via `+` / `togetherWith` into a `ContentTransform`. Two typed motion specs because `slideInHorizontally.animationSpec: FiniteAnimationSpec<IntOffset>` while `fadeIn.animationSpec: FiniteAnimationSpec<Float>` — forgetting this caused the pre-fix `TweenSpec<Float>` compile error.
+  - **Perf nit** (code-reviewer pass 2): nullable `onBack`/`onSkip` lambdas wrapped in `remember(uiState.currentStep) { ... }` so Compose memoizes lambda identities across recompositions when the active step hasn't changed. Without these, every OnboardingScreen recomposition allocates fresh `(()->Unit)?` lambdas, marking OnboardingButtonRow params as unstable and forcing a recomposition of that subtree. Non-nullable `onPrimary` is left unwrapped because Compose's stability inference treats `() -> Unit` (non-nullable) lambda captures as stable.
+- `res/values/strings.xml` — added 1 key: `onboarding_step_label_format = "Step %1$d of %2$d"`.
+
+**Sprint 27b deferred (designer input required)**
+
+- Regenerate `mipmap-anydpi-v26/ic_launcher.xml` foreground vector + `ic_launcher.xml` background (foreground currently references missing `@mipmap/ic_launcher_foreground`).
+- Address 14 lint warnings: `IconDuplicates`, `IconLauncherShape`, `IconDipSize`, `MonochromeLauncherIcon`, plus the residual `ObsoleteSdkInt` (`mipmap-anydpi-v26` folder — structural, fixed by regenerating the icons).
+- Visual verification: screencap the onboarding flow on A059 across the 5 step transitions.
+
+**Verification**
+
+| Metric | Resultado |
+|--------|-----------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:testDebugUnitTest --rerun-tasks` | **119 PASS / 0 FAIL** = 114 pre + 5 new |
+| `:app:lintDebug` | 0 errors, 86 warnings (matches baseline) |
+| Code-reviewer | APPROVED in 2 passes (refactor completeness + remember perf nit) |
+
