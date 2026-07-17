@@ -14,6 +14,7 @@ import com.handy.app.injection.InjectorRouter
 import com.handy.app.model.AppSettings
 import com.handy.app.model.ModelInfo
 import com.handy.app.service.RecordingService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -153,12 +154,24 @@ class EngineViewModel(
             // wrap in runCatching is defensive — `evictByRetention`
             // already swallows per-file delete failures, but a top-
             // level try guards against the helper itself throwing.
-            runCatching {
+            // Sprint 24 rule — structured-concurrency cancellation must
+            // propagate to the parent launcher; never swallow. The
+            // kotlin stdlib's `runCatching` catches Throwable and would
+            // convert a CancellationException at the suspension point
+            // inside `evictByRetention` into a Result.failure that never
+            // re-throws, silently breaking the surrounding coroutine
+            // contract. Explicit try/catch with the re-throw above any
+            // logging is the canonical defense-in-depth pattern.
+            try {
                 recordingRepository.evictByRetention(
                     nowMillis = System.currentTimeMillis(),
                     period = SettingsStore(getApplication()).retentionPeriod,
                 )
-            }.onFailure { Log.w(TAG, "evictByRetention: sweep failed", it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Log.w(TAG, "evictByRetention: sweep failed", e)
+            }
 
             // Sprint 25a factory binding: prime the WAV file in lockstep
             // with AAudio capture start. The repository creates the
