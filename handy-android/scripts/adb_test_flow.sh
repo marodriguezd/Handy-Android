@@ -22,6 +22,9 @@ PACKAGE="com.handy.app.debug"
 ACTIVITY="${PACKAGE}/com.handy.app.MainActivity"
 APK="app/build/outputs/apk/debug/app-debug.apk"
 
+# Path resolution for sibling scripts (check_device.sh lives next door).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Colors for terminal output.
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -127,6 +130,19 @@ poll_for_active_model() {
 main() {
     log_info "Device: $DEVICE"
     log_info "Model:  $MODEL_ID"
+
+    # Bail out gracefully when no ADB device is connected. We do NOT want
+    # to spend 60s on `clean assembleDebug` if there is nothing to install
+    # on. check_device.sh prints an actionable diagnostic and exits 0.
+    if ! "${SCRIPT_DIR}/check_device.sh" >/dev/null 2>&1; then
+        "${SCRIPT_DIR}/check_device.sh"
+        exit 0
+    fi
+    if ! adb devices | grep -q "^${DEVICE}[[:space:]]\+device"; then
+        "${SCRIPT_DIR}/check_device.sh"
+        log_warn "Device $DEVICE not connected. Reconnect Wireless debugging (${SCRIPT_DIR}/RECONNECT_DEVICE.md) and re-run."
+        exit 0
+    fi
 
     wait_for_device
     build_apk
