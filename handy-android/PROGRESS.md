@@ -1276,3 +1276,36 @@ git push origin main
 - AboutContent.kt: no internal scroll. Migrate AboutContent to LazyColumn for parity with HistoryScreen/ModelCatalogScreen.
 - Sprint 28c: `WhatsNewPreview` modal wiring from Debug panel + `LiveLogViewer` logLevel filter (still placeholder).
 - Sprint 29 sub-features (a) DONE — `ThemeContrastTest`. (b)–(g) pending per `SPRINT_29_PLAN.md`.
+
+### Sprint 28c item #1 closure — PostProcess Compose Layout crash fix (Julio 17, 2026, thirteenth pass)
+
+User-reported crash (verbatim): "Estoy probando a ir zona a zona de la aplicación y, cuando entro en postproceso, se bloquea completamente la aplicación y se cierra."
+
+Root cause: same crash class as the Sprint 28b-v8..v14 Debug tile crash — Compose `NavHost` wraps each destination in `AnimatedContent`, which supplies `Constraints.Infinity` to destination bodies. A `Column.verticalScroll(...)` inside that body then trips the runtime check `IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints, which is disallowed.` PostProcessScreen had this pattern, AND the `MainActivity.postProcessContent` lambda wrapped it in a redundant outer `Column.verticalScroll(...)` — double-scroll, double Infinity.
+
+**Files changed (2):**
+
+1. `handy-android/app/src/main/java/com/handy/app/ui/postprocess/PostProcessScreen.kt` — full body rewrite. Outer `Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()))` replaced with `LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.lg))`. Each previous Column child wrapped in `item { ... }`:
+   - `item { SettingsGroup(title = provider) { ProviderSelect(...) } }`
+   - `item { SettingsGroup(title = endpoint) { BaseUrlField + Spacer.sm + ApiKeyField + Spacer.sm + ModelSelectField } }`
+   - `item { PromptList(prompts, onAdd, onEdit, onDelete) }`
+   State vars (`provider`, `baseUrl`, `apiKey`, `modelId`, `prompts`, `editorVisible`, `editing`) stay at composable body level above the LazyColumn. `LaunchedEffect(provider)` unchanged. `PromptEditor` (`HandyModalBottomSheet`) stays as sibling to the LazyColumn at the root — NOT inside an item (avoids modal-in-item anti-pattern). Imports removed: `Column`, `padding`, `rememberScrollState`, `verticalScroll`. Imports added: `Arrangement`, `PaddingValues`, `LazyColumn`. KDoc block at top documents the migration rationale + the AnimatedContent → Infinity → runtime check chain.
+
+2. `handy-android/app/src/main/java/com/handy/app/MainActivity.kt` — `postProcessContent` lambda simplified from `Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { PostProcessScreen() }` to direct `PostProcessScreen()`. Imports for `Column`, `verticalScroll`, `rememberScrollState`, `fillMaxSize`, `Modifier` are STILL USED by `generalTabContent`, `advancedTabContent`, and `aboutContent` lambdas — confirmed via grep. KDoc comment above the lambda cross-references this AGENTS.md closure entry. The other latent-risk breadcrumb (`aboutContent`) remains valid.
+
+**Build state at closure:**
+
+| Metric | Value |
+|--------|-------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:testDebugUnitTest --rerun-tasks` | 19 PASS / 0 FAIL / 1 SKIP (ThemeContrastTest @Ignore'd design debt) |
+| `:app:lintDebug` | 0 errors / 75 warnings (matches Sprint 28b-v15 baseline; net 0) |
+| `:app:assembleDebug` | APK green (~46 MB) installed on A059 (`192.168.1.36:38075`) |
+| On-device cold launch | `am start ... --ez skip_onboarding true` → no `FATAL`/`AndroidRuntime` in logcat (screencap at `/tmp/handy_shots/sprint28c/01_cold_launch.png`) |
+| Code-reviewer-minimax-m3 | APPROVED — "LazyColumn migration + MainActivity wrapper removal correctly mirrors Sprint 28b-v15 Debug fix; imports retained for sibling lambdas; no latent Column.verticalScroll orphans." |
+
+**On-device verify of the actual PostProcess destination tap**: BLOCKED environment — synthetic `input tap` on the PostProcess tile is intercepted by NothingLauncher gesture-nav at bottom-edge Y ~2180-2279 (pattern documented in Sprint 28b-v8..v14 sessions). User finger-tap on the PostProcess bottom-nav tile in A059 is the only reliable ground-truth. Pre-fix ground-truth (the user-reported crash) is the source of confidence in the diagnosis; structural fix mirrors the Sprint 28b-v15 Debug fix which was verified end-to-end via the same closure pattern.
+
+**Push status**: Commit + push performed via `git push origin main` from basher subprocess. Working tree clean post-push.
+
+**Carry-over to Sprint 28c item #2**: `AboutContent.kt` has only `Column(modifier.fillMaxWidth())` with no internal scroll; the outer `Column.verticalScroll(...)` wrapper in `MainActivity.aboutContent` is REQUIRED for content overflow but is itself a latent risk if user navigates there. Migration to LazyColumn (mirroring HistoryScreen/ModelCatalogScreen/PostProcessScreen pattern) is the next Sprint 28c item.

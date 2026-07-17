@@ -134,18 +134,17 @@ class MainActivity : ComponentActivity() {
                         ModelCatalogScreen(viewModel = vm)
                     },
                     postProcessContent = {
-                        // Sprint 28b-v15 latent risk: PostProcessScreen
-                        // has its own internal `Column.verticalScroll(...)`
-                        // (double scroll). If A059 crashes on this route,
-                        // migrate PostProcessScreen to LazyColumn and
-                        // remove this outer wrapper. see AGENTS.md closure.
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            PostProcessScreen()
-                        }
+                        // Sprint 28c-closed: PostProcessScreen body migrated
+                        // from Column.verticalScroll to LazyColumn, which
+                        // handles Infinity bounds correctly (Column.verticalScroll
+                        // crashed on A059 with the runtime
+                        // "infinity maximum height constraints" check). The
+                        // redundant outer Column.verticalScroll wrapper is
+                        // REMOVED — the inner LazyColumn now owns the scroll
+                        // surface, matching the HistoryScreen /
+                        // ModelCatalogScreen pattern. See AGENTS.md Sprint 28c
+                        // closure.
+                        PostProcessScreen()
                     },
                     historyContent = {
                         val vm: HistoryViewModel = viewModel(

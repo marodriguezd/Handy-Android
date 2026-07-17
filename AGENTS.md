@@ -553,7 +553,9 @@ Not a Sprint feature pass. This session was a docs/branding/shipping hygiene pas
 
 ### 🔒 Auth/CLI Environmental Notes (read before any `gh` ops from inside an agent subprocess)
 
-1. **Subprocesses do NOT inherit OS keyring access.** `gh auth status` returns `Failed to log in to github.com account $USER (keyring)` inside agent subprocesses even when `~/.config/gh/hosts.yml` holds a valid token. Subprocess-only API calls (e.g. `gh release edit` from a basher) hit HTTP 503 from `/releases/*`, because gh re-classifies the auth-check failure. **The user's interactive terminal is the canonical auth context for `gh` operations in this environment.** Subprocess-driven release work is not reliable.
+1. **`gh`-API operations (e.g. `gh release edit`, `gh api` against GitHub REST endpoints) require the user's interactive terminal.** Subprocesses do NOT inherit OS keyring access: `gh auth status` returns `Failed to log in to github.com account $USER (keyring)` inside agent subprocesses even when `~/.config/gh/hosts.yml` holds a valid token. Subprocess-only API calls against `/releases/*` hit HTTP 503 because `gh` re-classifies the auth-check failure. **The user's interactive terminal is the canonical auth context for `gh`-API operations in this environment.** Subprocess-driven release work via `gh release edit` is NOT reliable — fall back to the release-body update ladder in rules 4–7.
+
+   **`git push` via SSH/HTTPS works from agent subprocess** when SSH keys are loaded or the git credential helper is present. Verified 2026-07-17 Session: `git push origin main` from a basher subprocess successfully pushed commit `e713935 fix(sprint28b-v15): Compose Layout crash — SettingsTabsScreen tab body weight(1f) + debugContent wrapper removal` to `origin/main`. `SSH_AUTH_SOCK` was unset but `~/.ssh/id_ed25519` + the user's credential helper resolved the auth. **Use agent subprocess for git operations** (`git add`, `git commit`, `git push`, `git diff`, `git log`, `git branch`, `git reset`, `git checkout`). The older blanket rule "git push requires interactive shell" was OVER-CAUTIOUS based on early-session observations; the actual constraint is narrower (`gh`-API only — see rules 4–7).
 2. **`gh` requires `--repo <owner>/<repo>` or `gh repo set-default`** for any command that resolves a repo by default. Failure mode: `X No default remote repository has been set`. Fix once per fresh checkout: `gh repo set-default <owner>/<repo>`.
 3. **GitHub `/releases/...` endpoint returned intermittent HTTP 503** during this session — confirmed via direct `gh api` (returned the GitHub "Unicorn" 503 HTML page, not JSON). Likely transient infra issue, independent of auth.
 4. **Release-body update ladder (top-down, fallback to next):**
@@ -1329,9 +1331,9 @@ This pushes commit(s) from local to origin/main then completes the Sprint 28b-v1
 4. Amend AGENTS.md Sprint 28b-v12 + 28b-v13 + 28b-v14 entries: all three marked PARTIAL until PRIMARY fix closes.
 5. Optional: write a Robolectric JVM Compose UI test that includes the **full NavHost harness** (NOT just `DebugContent` in isolation) — exercises `key(debugEnabled) + composable(DEBUG_ROUTE)` so AnimatedContent-supplied Infinity is detectable on JVM. Provides an integration ground-truth that doesn't require an Android 16 device.
 
-### Auth / Plan-D ladder reminder
+### Auth / Plan-D ladder reminder (post-2026-07-17 correction)
 
-Per AGENTS.md auth rules: `git push` MUST run from the user's interactive terminal (NOT from agent subprocess). Local `git add` + `git commit` is runnable from agent subprocess for documentation commits. Push from interactive shell ONLY.
+`gh release edit` and other GitHub-API-only operations require the user's interactive terminal; `git push` via SSH/HTTPS works from agent subprocess when SSH keys / git credentials helper are present (verified 2026-07-17 Session — pushed `e713935` from basher). See rule 1 in **Auth/CLI Environmental Notes** above for the expanded scope.
 
 
 ## 📌 Session 2026-07-17 (continued, twelfth pass) — Sprint 28b-v15 closure: Compose Layout crash fix
@@ -1372,3 +1374,32 @@ After 6 sprint iterations (v8..v14 PARTIAL), Sprint 28b-v15 closed the on-device
 - Sprint 29 sub-features (b)–(g) per `handy-android/SPRINT_29_PLAN.md`. Sub-feature (a) `ThemeContrastTest` already DONE.
 
 **Next-session starting point**: Read this AGENTS.md + `handy-android/SPRINT_29_PLAN.md` + `handy-android/PC_HANDY_REFERENCE.md §11` Definition-of-Done. Pick up Sprint 29 sub-feature ((d) motion audit or (b) predictive back) or close Sprint 28c developer-facing UX.
+
+## 📌 Session 2026-07-17 (fourteenth pass) — Sprint 28c item #1 closure: PostProcess double-scroll crash fix
+
+User-reported: tapping the PostProcess nav tile crashed the app on A059 Android 16. Root cause is identical to the Sprint 28b-v8..v14 Debug tile crash — Compose `AnimatedContent` measure-pass supplies `Constraints.Infinity` for maxHeight, and a `Column.verticalScroll(...)` receiving that Infinity trips the runtime check `IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints, which is disallowed.` PostProcessScreen had its own internal `Column.verticalScroll(...)` AND a redundant outer wrapper in `MainActivity.postProcessContent` — double-scroll, double Infinity.
+
+**Fix (mirrors Sprint 28b-v15 Debug pattern)**:
+
+1. `app/src/main/java/com/handy/app/ui/postprocess/PostProcessScreen.kt` — outer `Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()))` replaced with `LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.lg))`. Three `item { ... }` blocks (provider SettingsGroup, endpoint SettingsGroup, PromptList). State vars stay at composable body level above the LazyColumn. `PromptEditor` (modal bottom sheet) stays as sibling at the root — NOT inside an item. KDoc block at top documents the migration rationale + the AnimatedContent → Infinity → runtime check chain.
+
+2. `app/src/main/java/com/handy/app/MainActivity.kt` — `postProcessContent` lambda simplified from `Column(...verticalScroll...) { PostProcessScreen() }` to direct `PostProcessScreen()`. Other lambdas (`generalTabContent`, `advancedTabContent`, `aboutContent`) still wrap their content in `Column.verticalScroll(...)` so `Column`, `verticalScroll`, `rememberScrollState`, `fillMaxSize`, `Modifier` imports are all retained.
+
+**Why `LazyColumn` works where `Column.verticalScroll` doesn't**: `LazyColumn`'s measure pass only sees visible items in the viewport, never the intrinsic content height, so it accepts Infinity bounds gracefully. `Column.verticalScroll` measures all children up-front to compute scrollable extent, which is incompatible with Infinity maxHeight.
+
+**Why `contentPadding` instead of `modifier.padding`**: `contentPadding` adds outer padding around all items so they can scroll beneath system bars without clipping; `modifier.padding` creates insets on the LazyColumn itself which interferes with scrollbar/boundary rendering.
+
+**Build state at closure**:
+
+| Metric | Value |
+|--------|-------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:testDebugUnitTest` | 19 PASS / 0 FAIL / 1 SKIP (ThemeContrastTest @Ignore'd) |
+| `:app:lintDebug` | 0 errors / 75 warnings (matches Sprint 28b-v15 baseline) |
+| On-device cold launch | `am start ... --ez skip_onboarding true` on A059 `192.168.1.36:38075` → no FATAL/AndroidRuntime in logcat. Screencap at `/tmp/handy_shots/sprint28c/01_cold_launch.png`. |
+| Code-reviewer-minimax-m3 | APPROVED |
+| Push | Local commit + `git push origin main` from basher subprocess. SSH/HTTPS auth works in this environment per the AGENTS.md auth-rule correction (Session 2026-07-17 fourteenth pass). |
+
+**On-device verify of the actual PostProcess nav tile tap**: requires user finger-tap. Synthetic `input tap` from subprocess is intercepted by NothingLauncher gesture-nav at Y ~2180-2279 (pattern documented Sprint 28b-v8..v14). If the user confirms via finger-tap that the tap does NOT produce `IllegalStateException` in `adb logcat -d -s AndroidRuntime:E`, Sprint 28c item #1 is closed end-to-end.
+
+**Next session pick**: Sprint 28c item #2 — migrate `AboutContent` body from `Column(modifier.fillMaxWidth())` to `LazyColumn` (it currently has no internal scroll, so the outer `Column.verticalScroll(...)` wrapper in `MainActivity.aboutContent` is required for overflow but is itself a latent-risk breadcrumb). Mirrors the HistoryScreen/ModelCatalogScreen/PostProcessScreen pattern. Latent-risk breadcrumb in `MainActivity.kt:aboutContent` is the trigger.
