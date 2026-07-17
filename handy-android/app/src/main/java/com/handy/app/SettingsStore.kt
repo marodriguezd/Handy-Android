@@ -303,4 +303,30 @@ class SettingsStore(context: Context) {
             _accelerationBackendFlow.value = value
             prefs.edit().putString("acceleration_backend", value.name).apply()
         }
+
+    // ── Sprint 28 — Debug panel gating ────────────────────────────
+    //
+    // Defaults to `false` so the Debug destination is hidden from
+    // the regular Settings tree (and absent from the nav rail/bar)
+    // until a developer explicitly flips the flag. AppNavigation.kt
+    // reads this StateFlow and conditionally adds `Screen.Debug` to
+    // the nav list. The flag is wired to the future `Settings` screen
+    // toggle in Sprint 28b; for Sprint 28 MVP the value is settable
+    // via direct write through `app.settingsStore.debugMode = true`.
+    //
+    // The `debug_mode` SharedPreferences key is the canonical storage;
+    // the in-memory backing MutableStateFlow mirrors it so Compose
+    // observers re-compose reactively (the same pattern as
+    // `recordingDualWriteMode` from Sprint 25b).
+    private val _debugModeFlow: MutableStateFlow<Boolean> = MutableStateFlow(
+        prefs.getBoolean("debug_mode", false),
+    )
+    val debugModeFlow: StateFlow<Boolean> = _debugModeFlow.asStateFlow()
+
+    var debugMode: Boolean
+        get() = _debugModeFlow.value
+        set(value) {
+            _debugModeFlow.value = value
+            prefs.edit().putBoolean("debug_mode", value).apply()
+        }
 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
@@ -49,21 +50,31 @@ import com.handy.app.R
 
 private const val ONBOARDING_ROUTE = "onboarding"
 
-private val NavScreens = listOf(
-    Screen.General,
-    Screen.Models,
-    Screen.History,
-    Screen.PostProcess,
-    Screen.About,
-)
-
+/**
+ * Sprint 28 — NavScreens is no longer a top-level immutable list. Instead,
+ * [AppNavigation] computes a local `navScreens` list driven by `debugEnabled`,
+ * so the `Screen.Debug` entry is conditionally present when
+ * `Settings.debugMode == true`. The list is `remember`-ed against
+ * `debugEnabled` so toggling the settings flag (in a followup Sprint 28b)
+ * re-emits without rebuilding the whole scaffold tree.
+ */
 private enum class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
     General("general", R.string.settings_title, Icons.Default.Settings),
     Models("models", R.string.tab_models, Icons.Default.Build),
     History("history", R.string.history_title, Icons.Default.History),
     PostProcess("post_process", R.string.tab_post_process, Icons.Default.AutoAwesome),
     About("about", R.string.settings_about, Icons.Default.Info),
+    Debug("debug", R.string.debug_screen_title, Icons.Default.Code),
 }
+
+/** Default screens visible when `debugEnabled == false`. */
+private val DefaultScreens: List<Screen> = listOf(
+    Screen.General,
+    Screen.Models,
+    Screen.History,
+    Screen.PostProcess,
+    Screen.About,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,13 +87,22 @@ fun AppNavigation(
     postProcessContent: @Composable () -> Unit,
     historyContent: @Composable () -> Unit,
     aboutContent: @Composable () -> Unit,
+    debugContent: @Composable () -> Unit = {},
+    debugEnabled: Boolean = false,
 ) {
     val navController = rememberNavController()
     val startDestination = if (onboardingCompleted) Screen.General.route else ONBOARDING_ROUTE
 
+    // Sprint 28 — when debugEnabled is true, Screen.Debug is appended after
+    // the About entry. remember(debugEnabled) keys the cache so the list is
+    // rebuilt only on a flag flip, not on every recomposition.
+    val navScreens = remember(debugEnabled) {
+        if (debugEnabled) DefaultScreens + Screen.Debug else DefaultScreens
+    }
+
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
-    val currentScreen = NavScreens.find { it.route == currentDestination?.route }
+    val currentScreen = navScreens.find { it.route == currentDestination?.route }
 
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
@@ -102,7 +122,10 @@ fun AppNavigation(
         },
         bottomBar = {
             if (isCompact && currentDestination?.route != ONBOARDING_ROUTE) {
-                HandyBottomNavigation(navController = navController)
+                HandyBottomNavigation(
+                    navController = navController,
+                    screens = navScreens,
+                )
             }
         },
     ) { innerPadding ->
@@ -110,6 +133,7 @@ fun AppNavigation(
             if (!isCompact && currentDestination?.route != ONBOARDING_ROUTE) {
                 HandyNavigationRail(
                     navController = navController,
+                    screens = navScreens,
                     modifier = Modifier.fillMaxHeight(),
                 )
             }
@@ -139,6 +163,11 @@ fun AppNavigation(
                     composable(Screen.PostProcess.route) { postProcessContent() }
                     composable(Screen.History.route) { historyContent() }
                     composable(Screen.About.route) { aboutContent() }
+                    // Sprint 28 — Debug destination visible only when the gate
+                    // is open. AppNavigation.variants setting controls reachability.
+                    if (debugEnabled) {
+                        composable(Screen.Debug.route) { debugContent() }
+                    }
                 }
             }
         }
@@ -146,7 +175,10 @@ fun AppNavigation(
 }
 
 @Composable
-private fun HandyBottomNavigation(navController: NavHostController) {
+private fun HandyBottomNavigation(
+    navController: NavHostController,
+    screens: List<Screen>,
+) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
@@ -154,7 +186,7 @@ private fun HandyBottomNavigation(navController: NavHostController) {
         containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        NavScreens.forEach { screen ->
+        screens.forEach { screen ->
             val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
             NavigationBarItem(
                 selected = selected,
@@ -171,6 +203,7 @@ private fun HandyBottomNavigation(navController: NavHostController) {
 private fun HandyNavigationRail(
     navController: NavHostController,
     modifier: Modifier = Modifier,
+    screens: List<Screen>,
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -183,7 +216,7 @@ private fun HandyNavigationRail(
             Spacer(Modifier.height(16.dp))
         },
     ) {
-        NavScreens.forEach { screen ->
+        screens.forEach { screen ->
             val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
             NavigationRailItem(
                 selected = selected,

@@ -19,6 +19,7 @@ import com.handy.app.ui.history.HistoryScreen
 import com.handy.app.ui.models.ModelCatalogScreen
 import com.handy.app.ui.onboarding.OnboardingScreen
 import com.handy.app.ui.about.AboutContent
+import com.handy.app.ui.debug.DebugScreen
 import com.handy.app.ui.settings.AdvancedSettingsContent
 import com.handy.app.ui.settings.GeneralSettingsContent
 import com.handy.app.ui.postprocess.PostProcessScreen
@@ -134,6 +135,22 @@ class MainActivity : ComponentActivity() {
                                 .verticalScroll(rememberScrollState())
                         ) {
                             AboutContent()
+                        }
+                    },
+                    // Sprint 28 — Debug destination is reachable only when
+                    // Settings.debugMode == true, sourced from
+                    // SettingsStore.debugMode (MutableStateFlow).
+                    // MVP scope: read the value at composition time. A
+                    // reactive collectAsState wiring lands in Sprint 28b
+                    // with the toggle UI in Settings → Experimental.
+                    debugEnabled = app.settingsStore.debugMode,
+                    debugContent = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            DebugScreen()
                         }
                     },
                 )

@@ -307,4 +307,21 @@
 
     <!-- Sprint 27a: Onboarding MD3 refinement - StepIndicator label -->
     <string name="onboarding_step_label_format">Step %1$d of %2$d</string>
+
+    <!-- Sprint 28 - Debug panel -->
+    <string name="debug_screen_title">Debug</string>
+    <string name="debug_section_logging">Logging</string>
+    <string name="debug_section_updates">Updates &amp; Info</string>
+    <string name="debug_section_audio">Audio</string>
+    <string name="debug_log_loglevel_label">Log level</string>
+    <string name="debug_log_liveviewer_label">Live log viewer</string>
+    <string name="debug_updates_check_label">Check for updates on launch</string>
+    <string name="debug_whatsnew_label">Preview What\'s New modal</string>
+    <string name="debug_audio_soundpicker_label">Audio feedback sound</string>
+    <string name="debug_audio_pastedelay_label">Paste delay</string>
+    <string name="debug_audio_recordingbuffer_label">Recording buffer size</string>
+    <string name="debug_audio_alwaysonmicrophone_label">Always-on microphone</string>
+    <string name="debug_panel_gated_hint">Developer tools. Hidden by default in release builds.</string>
+    <!-- Sprint 28 - Placeholder row suffix (used by DebugContent.PlaceholderText) -->
+    <string name="debug_placeholder_suffix">— coming soon (Sprint 28b)</string>
 </resources>
