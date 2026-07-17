@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +29,7 @@ import com.handy.app.HandyApplication
 import com.handy.app.R
 import com.handy.app.ui.about.components.LocaleSelector
 import com.handy.app.ui.about.components.ThemeSelector
+import com.handy.app.ui.components.HandyInfoDialog
 import com.handy.app.ui.components.SettingsGroup
 import com.handy.app.ui.components.SettingsRow
 import com.handy.app.ui.components.SettingsRowDivider
@@ -198,15 +197,11 @@ fun AboutContent(
     }
 
     if (showLicenseDialog) {
-        AlertDialog(
-            onDismissRequest = { showLicenseDialog = false },
-            title = { Text(stringResource(R.string.settings_licenses)) },
-            text = { Text(stringResource(R.string.about_acknowledgments_text)) },
-            confirmButton = {
-                TextButton(onClick = { showLicenseDialog = false }) {
-                    Text(stringResource(R.string.dialog_ok))
-                }
-            },
+        HandyInfoDialog(
+            title = stringResource(R.string.settings_licenses),
+            message = stringResource(R.string.about_acknowledgments_text),
+            onDismiss = { showLicenseDialog = false },
+            okLabel = stringResource(R.string.dialog_ok),
         )
     }
 }

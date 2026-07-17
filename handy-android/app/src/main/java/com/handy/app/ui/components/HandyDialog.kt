@@ -80,3 +80,45 @@ fun HandyBasicDialog(
         }
     }
 }
+
+/**
+ * MD3-native [AlertDialog] wrapper for informational dialogs (single
+ * OK / acknowledge button). Used by the About "Licenses" disclosure
+ * and the General settings Shizuku permission error flow.
+ *
+ * Distinct from [HandyConfirmDialog] which is for confirm/dismiss flows
+ * with a destructive action; this primitive is for "show this message
+ * and acknowledge" — no destructive choice.
+ *
+ *  - Title = `onSurface`
+ *  - Body = `onSurfaceVariant`
+ *  - Container = `surfaceContainerHigh` (matches the rest of M3 dialogs)
+ *  - OK button label defaults to `R.string.dialog_ok` resolved via
+ *    `stringResource`. Callers may override with a custom label.
+ */
+@Composable
+fun HandyInfoDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    okLabel: String = "OK",
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = title) },
+        text = { Text(text = message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = okLabel,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        },
+        modifier = modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}

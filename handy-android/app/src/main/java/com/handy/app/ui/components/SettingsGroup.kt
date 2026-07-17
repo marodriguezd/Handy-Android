@@ -1,66 +1,12 @@
 package com.handy.app.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-
-/**
- * MD3-native grouped setting.  Wraps an MD3 [ListItem] with sane defaults
- * so every settings row uses the same typography, surface tint and the
- * 48 dp touch target the Material 3 spec requires.
- *
- * @param title row title (bodyLarge).
- * @param subtitle supporting text.  Renders in `bodyMedium` +
- *   `onSurfaceVariant`.
- * @param leading optional leading icon or widget.
- * @param trailing optional trailing widget (Switch, Slider, etc.).
- * @param onClick when non-null the row becomes clickable (48 dp ripple).
- */
-@Composable
-@Suppress("ModifierParameter")
-fun SettingsRow(
-    title: String,
-    subtitle: String? = null,
-    leading: @Composable (() -> Unit)? = null,
-    trailing: @Composable (() -> Unit)? = null,
-    onClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
-) {
-    ListItem(
-        headlineContent = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        },
-        supportingContent = subtitle?.let {
-            @Composable {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        leadingContent = leading,
-        trailingContent = trailing,
-        modifier = modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        colors = ListItemDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-    )
-}
 
 /**
  * SettingsGroup — a titled tonal card that stacks MD3 setting rows.
@@ -106,14 +52,34 @@ fun SettingsGroup(
 }
 
 /**
- * Convenience divider placed between [SettingsRow] items within a
- * [SettingsGroup]. Uses MD3 [HorizontalDivider] tinted to
- * `outlineVariant` so it follows dark/light automatically.
+ * Backwards-compat delegation to [HandyListItem]. The implementation
+ * moved to `HandyListItem.kt` in Sprint 25; existing callers in
+ * `AboutContent.kt` + `SettingsScreen.kt` keep the `SettingsRow` name
+ * unchanged. New code should prefer `HandyListItem` directly.
  */
 @Composable
-fun SettingsRowDivider(modifier: Modifier = Modifier) {
-    HorizontalDivider(
-        modifier = modifier.padding(start = Spacing.lg),
-        color = MaterialTheme.colorScheme.outlineVariant,
-    )
-}
+@Suppress("ModifierParameter")
+fun SettingsRow(
+    title: String,
+    subtitle: String? = null,
+    leading: @Composable (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) = HandyListItem(
+    title = title,
+    subtitle = subtitle,
+    leading = leading,
+    trailing = trailing,
+    onClick = onClick,
+    modifier = modifier,
+)
+
+/**
+ * Backwards-compat delegation to [HandyListItemDivider]. See
+ * [SettingsRow] for the migration story.
+ */
+@Composable
+fun SettingsRowDivider(modifier: Modifier = Modifier) =
+    HandyListItemDivider(modifier = modifier)
+

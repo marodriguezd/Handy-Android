@@ -14,7 +14,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import rikka.shizuku.Shizuku
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,7 +26,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,6 +40,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import com.handy.app.BuildConfig
 import com.handy.app.HandyApplication
 import com.handy.app.R
+import com.handy.app.ui.components.HandyInfoDialog
 import com.handy.app.ui.components.SettingsGroup
 import com.handy.app.ui.components.SettingsRow
 import com.handy.app.ui.components.SettingsRowDivider
@@ -78,15 +77,11 @@ fun GeneralSettingsContent(
     var showShizukuDialog by remember { mutableStateOf(false) }
 
     if (showShizukuDialog) {
-        AlertDialog(
-            onDismissRequest = { showShizukuDialog = false },
-            title = { Text(stringResource(R.string.settings_shizuku_dialog_title)) },
-            text = { Text(stringResource(R.string.settings_shizuku_dialog_message)) },
-            confirmButton = {
-                TextButton(onClick = { showShizukuDialog = false }) {
-                    Text(stringResource(R.string.dialog_ok))
-                }
-            },
+        HandyInfoDialog(
+            title = stringResource(R.string.settings_shizuku_dialog_title),
+            message = stringResource(R.string.settings_shizuku_dialog_message),
+            onDismiss = { showShizukuDialog = false },
+            okLabel = stringResource(R.string.dialog_ok),
         )
     }
 
