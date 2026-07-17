@@ -1663,3 +1663,32 @@ Closed via 2 commits — separate code from docs:
 **Architectural note**: `WindowInfoTracker` lives in MainActivity.kt (Activity-scope per AndroidX); `FoldingFeatureInfo` is a parallel data class so AppNavigation.kt does NOT depend on `androidx.window` on its classpath. Pure-helper + JVM tests cover the boundary logic without Robolectric mocking.
 
 **Push status**: deferred to user interactive shell per AGENTS.md Plan-D.
+
+## Sprint 30 — Kotlin 2.0.21 + M3 1.4+ + kotlin-compose plugin (AGP 9.x deferred, env-blocked)
+
+**Outcome**: Partial fulfillment of "AGP 9.x + Kotlin 2.0+ paired migration" brief. Kotlin 2.0 axis green. AGP+Gradle 9.x env-blocked to Sprint 30b.
+
+### 3 rounds of gradle-wrapper URL pinning before HYBRID landing
+- Round 1: `gradle-8.15-bin.zip` → 404 (Gradle skipped 8.15 minor).
+- Round 2: `gradle-9.0-bin.zip` → AGP 9.0 published `Minimum supported Gradle version is 9.1.0` (9.0 DID download, AGP rejected).
+- Round 3: `gradle-9.1-bin.zip` → FileNotFoundException from both `downloads.gradle.org` AND `services.gradle.org` (Gradle 9.1+ NOT yet published as binary distribution).
+
+### HYBRID landing (commit `abbabb6`)
+- ✓ Kotlin 1.9.24 → 2.0.21 (K2)
+- ✓ compose-bom 2025.01.00 → 2025.06.00 (M3 1.4+ + Compose 1.7.x, requires K2)
+- ✓ Robolectric 4.14.1 → 4.15.1 (K2 byte-code compat)
+- ✓ compose-compiler version REMOVED → `kotlin-compose` plugin (id `org.jetbrains.kotlin.plugin.compose`, version.ref `kotlin`)
+- ✓ `app/build.gradle.kts`: `alias(libs.plugins.kotlin.compose)` added; `composeOptions { }` block deleted
+- ✗ AGP 8.8.2 → 9.0.0 DEFERRED
+- ✗ Gradle 8.11.1 → 9.x DEFERRED
+
+### Build state (round 4 verify)
+- `:app:compileDebugKotlin` BUILD SUCCESSFUL (1 K2 deprecation warning — HandyApplication.kt:204, non-blocking)
+- `:app:testDebugUnitTest` BUILD SUCCESSFUL
+- `:app:lintDebug` BUILD SUCCESSFUL
+- Code-reviewer-minimax-m3 APPROVED round 4 with 3 forward-looking risks noted
+
+### Carry-over to Sprint 30b
+1. Re-attempt AGP 9.x when Gradle 9.1+ publishes.
+2. Tidy HandyApplication.kt:204 K2 deprecation warning.
+3. Migrate `kotlinOptions { jvmTarget = "17" }` → `kotlin { jvmToolchain(17) }` (AGP soft hint).

@@ -1979,3 +1979,37 @@ Using `produceState` with an explicit `State<T>` LHS type annotation requires `=
 ### Carry-over (out of Sprint 29c scope)
 
 - **HandyNavigationRail fold-aware horizontal padding** — on tablet form factor (`screenWidthDp >= 600`), AppNavigation.kt uses `HandyNavigationRail` instead of `HandyBottomNavigation`. Vertical hinges (Surface Duo book mode, Galaxy Z Fold portrait) would split the screen left/right with the rail on one side. `FoldPresentation.computeHingePaddingPx` short-circuits to `(0, 0)` for `!isHorizontal`, so the rail gets no fold-aware padding. To extend: change return type to `data class HingePadding(start, top, end, bottom)` + apply `start/end` padding to the rail's modifier slot. Re-test the 9 existing tests + add vertical-case assertions. Deferred until user needs tablet-foldable parity.
+
+## 📌 Session 2026-07-17 (resumed, seventeenth pass) — Sprint 30 partial (HYBRID) landing closed
+
+**Sprint 30 outcome**: PARTIAL fulfillment of the user's "AGP 9.x + Kotlin 2.0+ paired migration" brief. Kotlin 2.0+ axis fully delivered; AGP + Gradle 9.x deferred to Sprint 30b.
+
+### 3 rounds of gradle-wrapper URL pinning (the AGP 9.x env-block evidence):
+- **Round 1**: `gradle-8.15-bin.zip` → 404 (Gradle skipped 8.15 minor).
+- **Round 2**: `gradle-9.0-bin.zip` → AGP 9.0.0 published `Minimum supported Gradle version is 9.1.0` via version-check plugin. Gradle 9.0 DID download successfully — only AGP rejected the version.
+- **Round 3**: `gradle-9.1-bin.zip` → `FileNotFoundException` from BOTH `downloads.gradle.org` AND `services.gradle.org`. Gradle 9.1+ binary distribution is NOT yet published in this environment, so AGP 9.0's published minimum cannot be satisfied empirically.
+
+### HYBRID landing (commit `abbabb6`, 3 files, +45/-12)
+- ✓ `kotlin = "2.0.21"` (K2 compiler)
+- ✓ `compose-bom = "2025.06.00"` (Material3 1.4+ + Compose 1.7.x, requires K2)
+- ✓ `robolectric = "4.15.1"` (AGP 8.x + K2 byte-code compat)
+- ✓ `compose-compiler` version entry REMOVED → `kotlin-compose` plugin added (`id = "org.jetbrains.kotlin.plugin.compose"`, `version.ref = "kotlin"`)
+- ✓ `app/build.gradle.kts`: `alias(libs.plugins.kotlin.compose)` ADDED to `plugins { }` block; `composeOptions { }` block DELETED (no longer needed under K2)
+- ✗ AGP 8.8.2 → 9.0.0 DEFERRED to Sprint 30b
+- ✗ Gradle 8.11.1 → 9.x DEFERRED to Sprint 30b
+
+### Build state at Sprint 30 closure (round 4 verify)
+- `:app:compileDebugKotlin` — **BUILD SUCCESSFUL** (1 K2 deprecation warning at `HandyApplication.kt:204:18` — overrides a deprecated member without `@Deprecated` annotation; non-blocking — carry forward to Sprint 30b for @Suppress tidy-up).
+- `:app:testDebugUnitTest` — **BUILD SUCCESSFUL**, full suite green.
+- `:app:lintDebug` — **BUILD SUCCESSFUL**, lint trajectory stable.
+
+### Code-reviewer history (4 progressive passes)
+- Round 1: APPROVED + flagged empty `composeOptions { }` block as dead code + Gradle 9-vs-AGP 9 brief deviation.
+- Round 2: forced grader rejection (AGP min Gradle 9.1.0).
+- Round 3: forced 404 (gradle 9.1.0 not published).
+- Round 4 (HYBRID): APPROVED + flagged partial-fulfillment brief + 3 forward-looking risks (M3 1.4 `contentWindowInsets` stricter default, `kotlinOptions { jvmTarget = "17" }` deprecation hint, new `primaryFixed*`/`secondaryFixed*`/`tertiaryFixed*` auto-derived tokens).
+
+### Carry-over to Sprint 30b (env-conditional)
+1. **Re-attempt AGP 9.x + Gradle 9.1+** once Gradle 9.1+ binary publishes at services.gradle.org (calld's later-quarter roll-out).
+2. **Tidy** the `HandyApplication.kt:204` K2 deprecation warning with `@Suppress("DEPRECATION")` per-method or `@Deprecated` annotation alignment.
+3. **Migrate** `kotlinOptions { jvmTarget = "17" }` → `kotlin { jvmToolchain(17) }` block (AGP 8.8.x soft hint; cosmetic).
