@@ -671,3 +671,23 @@ Modified (8):
 **Push status**: 0 pushes in this turn (one local commit). User runs `git push origin main` from interactive shell per AGENTS.md keyring/SSH intermittent note.
 
 **Next session**: Sperint 27 — Onboarding MD3 refinement + 14 launcher/icon warnings cleanup + adaptive icon ship. Or Sprint 28 if design assets aren't ready.
+
+
+## 📌 Session 2026-07-17 (resumed) — Sprint 27a closure
+
+Sprint 27a implemented end-to-end. **27a scope only — adaptive icons deferred to 27b (designer-blocked).**
+
+**Files shipped (5 new + 2 modified):**
+- `ui/onboarding/components/StepIndicator.kt` — Surface(tonalElevation=3dp), 48dp touch targets per dot, gentle-spring color/size/scale animations, `Step N of M` label.
+- `ui/onboarding/components/OnboardingIconContainer.kt` — 120dp surfaceContainerHigh RoundedCornerShape(28dp) + 64dp primary-tinted Icon.
+- `ui/onboarding/components/OnboardingButtonRow.kt` — OutlinedButton(Back) + inner Row{TextButton(Skip optional) + Button(Primary)}.
+- `ui/onboarding/components/OnboardingProgressBar.kt` — LinearProgressIndicator (clamped) + percent label.
+- `test/.../OnboardingPresentationLogicTest.kt` — 5 JVM tests for `progressFraction`, `labelPercent`, `primaryLabelRes` (with edges).
+- `ui/onboarding/OnboardingScreen.kt` — fully refactored: 3 dead imports dropped, 4 component integrations (5× 120dp hero Icons → OnboardingIconContainer, button-row → OnboardingButtonRow + remember-wrap perf nit, LinearProgressIndicator block → OnboardingProgressBar). AnimatedContent transitionSpec upgraded to `tween(500ms, MotionTokens.PopEasing)`.
+- `res/values/strings.xml` — `onboarding_step_label_format`.
+
+**Carry-over to Sprint 27b:** adaptive `mipmap-anydpi-v26` icon regen blocked on design assets (foreground vector + background color). After designer ships, will close 14 lint warnings (`IconDuplicates`, `IconLauncherShape`, `IconDipSize`, `MonochromeLauncherIcon`, residual `ObsoleteSdkInt`).
+
+**Carry-over to Sprint 28:** Debug panel gated by `Settings.debugMode == true` (LogLevelSelector, WhatsNewPreview, UpdateChecksToggle, PasteDelay slider, AlwaysOnMicrophone switch, LiveLogViewer ring buffer of `Log.X` calls); Shizuku Android 16 reflection probe for `PrivateApi` (3 lint warnings).
+
+**Build state: 119 PASS / 0 FAIL, 0 compile warnings, 0 lint errors, 86 lint warnings (matches baseline).** Code-reviewer APPROVED in 2 passes. Commit pending user-push approval per AGENTS.md auth note.
