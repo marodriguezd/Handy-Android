@@ -1649,3 +1649,17 @@ Closed via 2 commits — separated code from docs:
 **Push status**: deferred to user interactive shell per AGENTS.md Plan-D. Local commits ahead of `origin/main` = 4 (Sprint 29b v2 + 1cabb61 + a438cd3 + prior a76c178).
 
 **Architectural note**: `PredictiveBackHandler` is a `@Composable` function — it can only live inside a Compose composition, not in `MainActivity.onCreate`'s non-composable context. The architectural placement for it is `AppNavigation.kt` where the `NavController` instance is in scope. MainActivity.kt contributes the manifest opt-in via AndroidManifest.xml's `enableOnBackInvokedCallback="true"` attribute on `<application>`.
+
+### Sprint 29c — foldable hinge avoidance WindowInfoTracker ✅
+
+Closed via 2 commits — separate code from docs:
+
+**Commit 1 (code, this entry)** — 5 files: libs.versions.toml dep, build.gradle.kts implementation, MainActivity.kt produceState observation, AppNavigation.kt foldInfo parameter + padding application, new FoldPresentation.kt pure helper, new FoldPresentationLogicTest.kt (9 tests).
+
+**Commit 2 (docs, this entry)** — AGENTS.md + PROGRESS.md closure entries documenting the design rationale + the non-obvious `by` vs `=` gotcha + the carry-over for tablet foldables.
+
+**Build state at closure**: `:app:compileDebugKotlin` BUILD SUCCESSFUL; `:app:testDebugUnitTest` 9 new PASS + full sweep no regression; `:app:lintDebug` 0 errors lint stable.
+
+**Architectural note**: `WindowInfoTracker` lives in MainActivity.kt (Activity-scope per AndroidX); `FoldingFeatureInfo` is a parallel data class so AppNavigation.kt does NOT depend on `androidx.window` on its classpath. Pure-helper + JVM tests cover the boundary logic without Robolectric mocking.
+
+**Push status**: deferred to user interactive shell per AGENTS.md Plan-D.

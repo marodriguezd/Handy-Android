@@ -1942,3 +1942,40 @@ Coverage:
 - On-device verify on A059 (Android 16 = API 36 — eligible for predictive-back animations): confirm the system-rendered scale-down animation activates on user back-swipe from any of the 6 destinations when `debugEnabled` flips them. If absent, reinstall via `adb install -r`.
 - AGP 9.x + Kotlin 2.0 paired migration is independent of this Sprint.
 - Sprint 29c foldable hinge avoidance via WindowInfoTracker is the next deferred sub-feature.
+
+## Sprint 29c foldable hinge avoidance (Android 12+ foldables) (Julio 17, 2026)
+
+Picks up Sprint 29 sub-feature (c) per `handy-android/PC_HANDY_REFERENCE.md §11 Definition of Done`. WindowInfoTracker integration in MainActivity.kt + foldable-aware padding applied to TopAppBar + BottomBar (NavigationBar).
+
+### What landed
+
+| File | Role |
+|---|---|
+| `gradle/libs.versions.toml` | `androidx-window = "1.3.0"` + library entry |
+| `app/build.gradle.kts` | `implementation(libs.androidx.window)` |
+| `MainActivity.kt` | `produceState<FoldingFeatureInfo?>` block observing WindowInfoTracker.windowLayoutInfo(activity); passes foldInfo to AppNavigation |
+| `AppNavigation.kt` | `foldInfo: FoldingFeatureInfo? = null` parameter + foldPad computation + applied as Modifier.padding(top/bottom) to TopAppBar + HandyBottomNavigation (modifier propagation through to NavigationBar) |
+| `FoldPresentation.kt` (NEW) | `data class FoldingFeatureInfo` + pure `object FoldPresentation { @JvmStatic fun computeHingePaddingPx(feature, screenHeightPx): Pair<Int, Int> }` |
+| `FoldPresentationLogicTest.kt` (NEW) | 9 JUnit4 tests covering null, FLAT-continuous, vertical, upper-half horizontal, lower-half horizontal, midline-straddle, Surface Duo-style continuous, and 2 defensive edges |
+
+### Build state at closure
+
+| Metric | Value |
+|---|---|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL in 34s |
+| `:app:testDebugUnitTest` (full sweep) | BUILD SUCCESSFUL (no regression; 148+ PASS) |
+| `:app:lintDebug` | 0 errors, lint trajectory stable |
+
+### Architectural pattern (matches Sprint 29b v2)
+
+- **MainActivity** owns the platform integration (`WindowInfoTracker` is Activity-scoped). The activity lifecycle tears down the producer coroutine cleanly via `produceState`'s `key1 = this@MainActivity` and auto-cancel on composition leave.
+- **AppNavigation** receives the already-mapped `FoldingFeatureInfo` data class (no `androidx.window` on its classpath surface).
+- **Pure helper** (`FoldPresentation.kt`) keeps the boundary logic JVM-testable; Robolectric not required.
+
+### NON-OBVIOUS gotcha captured for future agents
+
+Using `produceState` with an explicit `State<T>` LHS type annotation requires `=`, NOT `by`. The `by` keyword strips the `State<T>` wrapper via `getValue` extension, which conflicts with the explicit `State<T>` type annotation. Symptom: `e: ... Property delegate must have a 'getValue(Nothing?, KProperty<*>)' method`. Fix: `val x: State<T> = produceState<T>(...)`. 1-character change.
+
+### Carry-over (out of Sprint 29c scope)
+
+- **HandyNavigationRail fold-aware horizontal padding** — on tablet form factor (`screenWidthDp >= 600`), AppNavigation.kt uses `HandyNavigationRail` instead of `HandyBottomNavigation`. Vertical hinges (Surface Duo book mode, Galaxy Z Fold portrait) would split the screen left/right with the rail on one side. `FoldPresentation.computeHingePaddingPx` short-circuits to `(0, 0)` for `!isHorizontal`, so the rail gets no fold-aware padding. To extend: change return type to `data class HingePadding(start, top, end, bottom)` + apply `start/end` padding to the rail's modifier slot. Re-test the 9 existing tests + add vertical-case assertions. Deferred until user needs tablet-foldable parity.
