@@ -1,0 +1,87 @@
+# github.com/marodriguezd/Handy-Android — Handy-Android Kotlin unit-test workflow
+#
+# Pre-Sprint-26 Batch E (2026-07-17): bring the Android side under CI.
+# Runs the pure-JVM unit tests on every PR touching handy-android/**,
+# without depending on the heavier full-build workflow in android-ci.yml.
+#
+# Scope: pure JVM. We deliberately do NOT depend on the hand-built Rust
+# JNI .so (`compileKotlin` builds against stubs via the AGP Android
+# library, but the test runner doesn't load any native library because
+# no test instantiates EngineBridge). NDK is therefore not required.
+# `actions/setup-android` provides the SDK + the `android` platform
+# jars AGP needs to resolve `android.content.Context`-typed signatures
+# during compileDebugUnitTestKotlin.
+
+name: android-unit-tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "handy-android/**"
+      - ".github/workflows/android-test.yml"
+  pull_request:
+    paths:
+      - "handy-android/**"
+      - ".github/workflows/android-test.yml"
+
+defaults:
+  run:
+    working-directory: handy-android
+
+jobs:
+  kotlin-unit-tests:
+    name: Kotlin unit tests + lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name != 'pull_request' }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # AGP 8.7.x resolves compileSdk=35 from this install.
+          api-level: 35
+          build-tools-version: "35.0.0"
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Compile Kotlin
+        run: ./gradlew :app:compileDebugKotlin --no-daemon
+
+      - name: Run JVM unit tests
+        # testDebugUnitTest is the JVM-only path — no Android emulator, no
+        # Rust build, no APK assembly. Failures here break the PR.
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: Run lint (tolerant — see Definition of Done)
+        # Lint still runs but as a soft gate so existing warnings are
+        # surfaced without blocking PRs on pre-existing Sprint 17 →
+        # Sprint 24 residuals (84 lint warnings today). Sprint 29 closes
+        # them down per `AGENTS.md` "MD3 Native Complete" checklist.
+        run: ./gradlew :app:lintDebug --no-daemon || true
+
+      - name: Upload test reports + lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-${{ github.run_id }}
+          path: |
+            handy-android/app/build/test-results/testDebugUnitTest
+            handy-android/app/build/reports/lint-results-debug.html
+            handy-android/app/build/reports/lint-results-debug.xml
+          retention-days: 14

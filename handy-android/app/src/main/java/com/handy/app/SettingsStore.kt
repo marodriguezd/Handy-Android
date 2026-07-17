@@ -201,4 +201,23 @@ class SettingsStore(context: Context) {
             _imePlacementFlow.value = value
             prefs.edit().putString("ime_placement", value).apply()
         }
+
+    // ── Pre-Sprint-26 Batch C: recording repository migration flag ─────
+    // Production binds the Kotlin-side [com.handy.app.audio.RecordingRepository]
+    // to this flag via a thin factory in `HandyApplication` so the
+    // repository itself stays JVM-testable without a Context. Sprint 25
+    // is expected to surface a compose-side toggle wired through
+    // [recordingDualWriteFlow].
+
+    private val _recordingDualWriteFlow: MutableStateFlow<Boolean> = MutableStateFlow(
+        prefs.getBoolean("recording_dual_write", true),
+    )
+    val recordingDualWriteFlow: StateFlow<Boolean> = _recordingDualWriteFlow.asStateFlow()
+
+    var recordingDualWriteMode: Boolean
+        get() = _recordingDualWriteFlow.value
+        set(value) {
+            _recordingDualWriteFlow.value = value
+            prefs.edit().putBoolean("recording_dual_write", value).apply()
+        }
 }

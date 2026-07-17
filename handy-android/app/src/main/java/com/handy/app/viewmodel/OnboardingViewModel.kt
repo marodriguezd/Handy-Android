@@ -25,6 +25,66 @@ class OnboardingViewModel(
 
     companion object {
         private const val TAG = "OnboardingVM"
+
+        /**
+         * Returns a short tag describing why `target` was picked, for
+         * observability only. Tier-promotion beats global desktop
+         * recommendations which beat the last-resort fallback. Pure
+         * function — no side effects.
+         *
+         * Tests: `OnboardingPromotionLabelTest` (4 promotion outcomes + 2
+         * null-tierRecs matrix cells = 6 tests).
+         */
+        internal fun computePromotionLabel(
+            target: ModelInfo,
+            tierRecs: com.handy.app.capability.TierRecommendations?,
+        ): String = when {
+            target.id == tierRecs?.primary -> "tier-primary"
+            tierRecs?.alternatives?.contains(target.id) == true -> "tier-alternative"
+            target.recommended -> "global-recommended"
+            else -> "fallback"
+        }
+
+        /**
+         * Tier-aware model picker used by onboarding. Resolution order
+         * (highest -> lowest, first hit wins):
+         *
+         *   1. mobile_recommended.primary for this device tier
+         *   2. mobile_recommended.alternatives[*] for this device tier
+         *   3. catalog-flag it.recommended (global desktop recommendation)
+         *   4. any not-downloaded model that fits and is safe
+         *
+         * The `fitsAndSafe` guard rejects heavy-gate (Voxtral*) and any
+         * model that exceeds device RAM at the EXCEEDS-status level, so
+         * tier promotion cannot accidentally expose unsafe downloads.
+         *
+         * Pure function — callers pre-resolve `tierRecs` via
+         * `mobileRecs.forTier(tier)` and supply the `fitsAndSafe`
+         * predicate separately, so neither DeviceCapabilityDetector nor
+         * SettingsStore leak into the JVM-testable surface.
+         *
+         * Tests: `OnboardingTargetPickerTest` (priority chain + edges).
+         */
+        internal fun pickTargetModel(
+            models: List<ModelInfo>,
+            tierRecs: com.handy.app.capability.TierRecommendations?,
+            fitsAndSafe: (ModelInfo) -> Boolean,
+        ): ModelInfo? {
+            fun pickById(id: String?): ModelInfo? =
+                id?.let { wanted ->
+                    models.firstOrNull { it.id == wanted && !it.isDownloaded && fitsAndSafe(it) }
+                }
+            val primary = pickById(tierRecs?.primary)
+            val alternative = if (primary != null) {
+                null
+            } else {
+                tierRecs?.alternatives?.firstNotNullOfOrNull { pickById(it) }
+            }
+            return primary
+                ?: alternative
+                ?: models.firstOrNull { it.recommended && !it.isDownloaded && fitsAndSafe(it) }
+                ?: models.firstOrNull { !it.isDownloaded && fitsAndSafe(it) }
+        }
     }
 
     data class UiState(
@@ -51,21 +111,6 @@ class OnboardingViewModel(
 
     /** De-dup sentinel for failure logs (separate from downloadTargetId to avoid collision). */
     private var lastLoggedFailureId: String? = null
-
-    /**
-     * Returns a short tag describing why [target] was picked, for observability
-     * only. Tier-promotion beats global desktop recommendations which beat the
-     * last-resort fallback. Pure function — no side effects.
-     */
-    private fun computePromotionLabel(
-        target: ModelInfo,
-        tierRecs: com.handy.app.capability.TierRecommendations?,
-    ): String = when {
-        target.id == tierRecs?.primary -> "tier-primary"
-        tierRecs?.alternatives?.contains(target.id) == true -> "tier-alternative"
-        target.recommended -> "global-recommended"
-        else -> "fallback"
-    }
 
     /** Cached once at construction to avoid re-detecting device RAM on every state emission. */
     private val cachedSnapshot: com.handy.app.capability.CapabilitySnapshot? by lazy {
@@ -231,20 +276,7 @@ class OnboardingViewModel(
                         val tier = snapshot?.toTier()
                         val mobileRecs = app?.let { MobileRecommendations.load(it) }
                         val tierRecs = if (mobileRecs != null && tier != null) mobileRecs.forTier(tier) else null
-                        fun pickById(id: String?): ModelInfo? =
-                            id?.let { wanted ->
-                                models.firstOrNull { it.id == wanted && !it.isDownloaded && fitsAndSafe(it) }
-                            }
-                        val primary = pickById(tierRecs?.primary)
-                        val alternative = if (primary != null) {
-                            null
-                        } else {
-                            tierRecs?.alternatives?.firstNotNullOfOrNull { pickById(it) }
-                        }
-                        val target = primary
-                            ?: alternative
-                            ?: models.firstOrNull { it.recommended && !it.isDownloaded && fitsAndSafe(it) }
-                            ?: models.firstOrNull { !it.isDownloaded && fitsAndSafe(it) }
+                        val target = pickTargetModel(models, tierRecs, fitsAndSafe)
                         val existing = target?.let { modelState.downloads[it.id] }
                         // Start download if: no prior entry exists, OR the prior entry completed (success or failure)
                         if (target != null && (existing == null || existing.isComplete)) {

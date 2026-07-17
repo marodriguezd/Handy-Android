@@ -125,4 +125,20 @@ object EngineBridge {
 
     /** Toggle saved/favorite status on a history entry. */
     external fun nativeToggleHistorySaved(entryId: Long)
+
+    /**
+     * Re-transcribe a recorded history entry from its persisted audio
+     * file (if any). The Kotlin side writes the WAV to disk via
+     * [com.handy.app.audio.RecordingRepository]; the Rust side reads
+     * it and updates the entry's text in place.
+     *
+     * @param entryId  History id whose audioPath EngineBridge looks up.
+     * @return `true` on success, `false` when the Rust side does not
+     *         yet support the call (typical on an older
+     *         `libhandy_core.so`). When `false`, the Kotlin caller
+     *         ([com.handy.app.viewmodel.HistoryViewModel]) falls back
+     *         to a simulated-delay stub so the spinner does not hang
+     *         indefinitely.
+     */
+    external fun nativeRetryHistoryEntry(entryId: Long): Boolean
 }

@@ -74,6 +74,18 @@ android {
     lint {
         disable += "ObsoleteSdkInt"
     }
+
+    // Pre-Sprint-26 Batch C: RecordingRepository's hot path and the
+    // HistoryViewModel retry-fallback path log via android.util.Log on
+    // rare failure. JVM unit tests run without Robolectric, so
+    // stubbed Log methods would throw `Method ... not mocked.` by
+    // default. `isReturnDefaultValues = true` makes the stubbed
+    // methods return platform defaults (0 / null / false) instead —
+    // the standard Android Kotlin pattern for pure-JVM test source-
+    // sets. Production builds are unaffected.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 val buildRust by tasks.registering(Exec::class) {

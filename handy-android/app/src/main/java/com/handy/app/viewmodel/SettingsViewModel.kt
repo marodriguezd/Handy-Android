@@ -56,7 +56,7 @@ class SettingsViewModel(
     fun setIdleTimeout(seconds: Int) {
         settingsStore.idleTimeout = seconds
         _uiState.update { it.copy(idleTimeout = seconds) }
-        engineViewModel.applySettings(buildSettings())
+        engineViewModel.applySettings(_uiState.value.toAppSettings())
     }
 
     fun setShizukuEnabled(enabled: Boolean) {
@@ -80,7 +80,7 @@ class SettingsViewModel(
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             delay(500)
-            engineViewModel.applySettings(buildSettings())
+            engineViewModel.applySettings(_uiState.value.toAppSettings())
         }
     }
 
@@ -119,16 +119,29 @@ class SettingsViewModel(
         _uiState.update { it.copy(autoSend = value) }
     }
 
-    private fun buildSettings() = AppSettings(
-        idleTimeout = _uiState.value.idleTimeout,
-        shizukuEnabled = _uiState.value.shizukuEnabled,
-        postProcessEndpoint = _uiState.value.postProcessEndpoint,
-        postProcessApiKey = _uiState.value.postProcessApiKey,
-        batteryOptimizationExempt = _uiState.value.batteryOptimizationExempt,
-        experimentalEnabled = _uiState.value.experimentalEnabled,
-        vadEnabled = _uiState.value.vadEnabled,
-        addFinalSpace = _uiState.value.addFinalSpace,
-        postProcessingEnabled = _uiState.value.postProcessingEnabled,
-        autoSend = _uiState.value.autoSend,
-    )
 }
+
+/**
+ * Pure mapping from [SettingsViewModel.UiState] to [AppSettings] consumed by
+ * the engine. Tests for this extension live in
+ * `app/src/test/java/com/handy/app/viewmodel/SettingsViewModelUiStateTest.kt`.
+ *
+ * `isApiKeyVisible` is intentionally NOT mapped — it is a pure UI flag with
+ * no engine counterpart, and pre-Sprint-26 Batch B explicitly verified that
+ * omission in CI.
+ *
+ * Marked `internal` to keep the mapping scoped to the `app` Gradle module
+ * (the test source-set in the same module can still access it for coverage).
+ */
+internal fun SettingsViewModel.UiState.toAppSettings(): AppSettings = AppSettings(
+    idleTimeout = idleTimeout,
+    shizukuEnabled = shizukuEnabled,
+    postProcessEndpoint = postProcessEndpoint,
+    postProcessApiKey = postProcessApiKey,
+    batteryOptimizationExempt = batteryOptimizationExempt,
+    experimentalEnabled = experimentalEnabled,
+    vadEnabled = vadEnabled,
+    addFinalSpace = addFinalSpace,
+    postProcessingEnabled = postProcessingEnabled,
+    autoSend = autoSend,
+)

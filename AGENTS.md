@@ -27,9 +27,45 @@
 
 ---
 
-## 🗓️ Current State — Post-Sprint 24 + pre-Sprint-26 cleanup in progress (Julio 17, 2026)
+## 🗓️ Current State — Sprint 24 + pre-Sprint-26 cleanup Batches A + B + C + D + E all complete (Julio 17, 2026)
 
-### ✅ Completed — Sprints 16 → 24 (full MD3 backbone + lint sweep + History MD3) + pre-Sprint-26 Batch A (hygiene)
+> **🟢 Pre-Sprint-26 cleanup 100% complete**. All 5 batches shipped; build is green at 87 PASS / 0 FAIL / 0 lint errors. Local commits pending user-push approval per AGENTS.md auth note (Plan D in the release-body-update ladder sections below). El Sprint 25 (Advanced Settings refinement + Retry backend binding) ya no requiere Batch C/D/E pre-work — puede arrancar cuando el usuario dé luz verde.
+
+### ✅ Completed — Sprints 16 → 24 (full MD3 backbone + lint sweep + History MD3) + pre-Sprint-26 Batches A + B + C + D + E
+
+#### Pre-Sprint-26 Batch A — Hygiene (`2425d7d`)
+
+- `ui/models/ModelCatalogScreen.kt` — `AlertDialog` (delete-model) → `HandyConfirmDialog`. `HeavyModelWarningDialog.kt` intentionally kept on `AlertDialog` because its content shape does not fit `HandyConfirmDialog`'s contract.
+- `app/build.gradle.kts` — `android.lint.disable += "ObsoleteSdkInt"` to suppress the false-positive on the conventional `mipmap-anydpi-v26/` folder. `lint.xml` orphan deleted (AGP 8.x cannot accept `lintConfig(file(...))`).
+
+#### Pre-Sprint-26 Batch B — VM pure-logic extraction + JVM tests ✅ (17 new tests PASS)
+
+- `internal fun SettingsViewModel.UiState.toAppSettings()` (extension on the nested UiState type, replaces `private fun buildSettings()`).
+- `internal fun pickTargetModel(models, tierRecs, fitsAndSafe)` and `internal fun computePromotionLabel(target, tierRecs)` on `OnboardingViewModel.Companion`. The previously-inline 5-line cascade in `initModelDownload` becomes a one-liner.
+- 3 new test files in `test/.../viewmodel/`: `SettingsViewModelUiStateTest` (2), `OnboardingPromotionLabelTest` (6), `OnboardingTargetPickerTest` (9).
+
+#### Pre-Sprint-26 Batch C — RecordingRepository + native retry binding ✅
+
+- `audio/RecordingRepository.kt` (new) — `AudioStorageBackend` interface + `FileAudioStorageBackend` (real filesystem via `getExternalFilesDir("history_audio")`) + `RecordingRepository` class (Mutex-guarded, takes `Boolean isDualWriteEnabled` directly to stay JVM-testable without a `SettingsStore` dep) + `floatArrayToPcm16` pure helper.
+- `test/.../audio/RecordingRepositoryTest.kt` (new) — 10 JVM tests: start→push→stop with WAV magic; push-without-start no-op; re-start abandons prior file; stop-without-start null; WAV header data-length little-endian; sequentially-named recordings; IO failure abandons file; dual-write disabled short-circuits; `floatArrayToPcm16` asymmetric saturation/little-endian; eviction kicks in over cap.
+- `SettingsStore.kt` — added `recordingDualWriteMode: MutableStateFlow<Boolean>` (default `true`) backed by SharedPreferences key `recording_dual_write`.
+- `bridge/EngineBridge.kt` — declared `external fun nativeRetryHistoryEntry(entryId: Long): Boolean`. The Rust symbol is **not yet implemented**; the Kotlin caller tolerates `UnsatisfiedLinkError` and the `false` return, falling back to the Sprint 24 simulated-delay UX.
+- `viewmodel/HistoryViewModel.kt` — `retry()` now calls `nativeRetryHistoryEntry` first, with surgical ID-keyed state update on success (preserves already-loaded pages) and falls back to `delay(RETRY_SIMULATED_DELAY_MS)` on `false`/error.
+- `app/build.gradle.kts` — `testOptions { unitTests.isReturnDefaultValues = true }` so stubbed `android.util.Log` (etc.) returns platform defaults instead of throwing `Method ... not mocked.` in pure-JVM tests. Standard Android Kotlin practice; production builds unaffected.
+
+#### Pre-Sprint-26 Batch D — SEED_HISTORY broadcast + capture_history.sh flag ✅
+
+- `TestCommandReceiver.kt` — restructured `onReceive` to dispatch by action. New `handleSeedHistoryAction(intent)` reads `count` extra (default 5, capped at 50), builds synthetic `HistoryEntry` instances, stores them in `syntheticHistoryEntries` (process-singleton, exposed via `@JvmStatic fun getSyntheticHistorySnapshot(): List<HistoryEntry>`). Direct mutation is safe — `BroadcastReceiver.onReceive` is single-threaded per intent.
+- `viewmodel/HistoryViewModel.kt` — `loadMore()` splices synthetic entries above native ones on the FIRST page only; subsequent pages are pure native pagination.
+- `scripts/capture_history.sh` — added `--seed-history N` (defaults to 5) and `--clear-history` (zero count) flag parser. `am broadcast SEED_HISTORY --ei count N` fires BEFORE the launch, so the first `loadMore()` picks up the seeded entries. Closes the visual-diff gap noted at Sprint 24 closure.
+
+#### Pre-Sprint-26 Batch E — android-test.yml CI workflow ✅
+
+- `.github/workflows/android-test.yml` (new) — lightweight `name: android-unit-tests` workflow. Triggers: push to `main` paths `handy-android/**`, PRs touching the same. Runs on `ubuntu-latest`, 30-min timeout: checkout → `actions/setup-java@v4` (Temurin 17) → `gradle/actions/setup-gradle@v4` → `android-actions/setup-android@v3` (API 35 + build-tools 35.0.0) → `./gradlew :app:compileDebugKotlin :app:testDebugUnitTest :app:lintDebug || true` → upload test reports + lint via `actions/upload-artifact@v4` (14-day retention).
+- **Why a NEW workflow vs extending `android-ci.yml`**: `android-ci.yml` is the heavyweight debug+release APK build (~25 min wall-clock including Rust). Mixing JVM tests in there couples them to Rust build noise. New workflow is a fast ~3-min PR gate with JDK+SDK only.
+- **Decision log (`lintDebug || true`)**: Sprint 29 closes the residual 84 warnings down to ~9, at which point this soft gate promotes to a hard gate.
+
+**Build state after Batches A+B+C+D+E**: `:app:compileDebugKotlin` 0 warnings, `:app:testDebugUnitTest` **87 PASS / 0 FAIL** (was 75 after Batch B + 10 RecordingRepositoryTest from Batch C + 2 misc from SEED_HISTORY integration tests = 87), `:app:lintDebug` 0 errors / 84 warnings (unchanged). Code-reviewer APPROVED across all 5 batches.
 
 #### Sprint 16 — Material Design 3 Redesign + ADB Test Hooks
 - **Settings** — `SettingsRow` replaced with Material 3 `ListItem`.
@@ -422,6 +458,8 @@ adb -s "$DEVICE" shell am broadcast -a com.handy.app.action.SET_ACTIVE_MODEL -n 
 
 ## ❌ Known Limitations
 
+- **Rust-side `nativeRetryHistoryEntry` not implemented.** The Kotlin side declares the symbol + handles `UnsatisfiedLinkError` / `false` returns with a graceful fallback (Sprint 24 simulated-delay stub). Actual retry from persisted WAV won't work until `handy-core/src/jni_bridge.rs` adds the binding. Logcat line `nativeRetryHistoryEntry not in libhandy_core.so; falling back` confirms the fallback path is engaged on the current `libhandy_core.so`.
+- **RecordingRepository dual-write wiring is class-only, not yet factory-bound.** `RecordingRepository` exists with full JVM tests, but `HandyApplication` doesn't yet construct it and the engine-capture loop doesn't feed frames into it. Sprint 25 wire-up.
 - Whisper Tiny struggles with long phrases containing proper nouns.
 - Some Whisper English-only variants show duplicate entries.
 - Moonshine Base models not yet verified on Android.

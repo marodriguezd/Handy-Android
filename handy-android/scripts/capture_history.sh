@@ -14,6 +14,10 @@
 #   DEVICE_ID    sole connected device (errors when more than one is
 #                attached unless \$1 is given explicitly)
 #   OUTPUT_DIR   /tmp/handy_shots/history
+#   --seed-history : broadcast SEED_HISTORY before MainActivity launches
+#                    so the MD3 HistoryScreen renders seeded entries.
+#                    Pre-Sprint-26 Batch D wires this; cleared via
+#                    `--seed-history 0` (or `--clear-history`).
 #
 # Note: we deliberately do NOT use 'set -e' here — we want explicit exits
 # at the documented decision points rather than silent failures.
@@ -21,6 +25,21 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Pre-Sprint-26 Batch D: parse the --seed-history flag from the tail of
+# the argv so DEVICE_ID and OUTPUT_DIR positional arguments still win.
+# Recognized forms:
+#   --seed-history            -> defaults to 5 entries
+#   --seed-history=N          -> N entries (N coerced 0..50 server-side)
+#   --clear-history           -> 0 entries (clears any prior seed)
+SEED_HISTORY_COUNT=0
+for arg in "${@:3}"; do
+    case "$arg" in
+        --seed-history)        SEED_HISTORY_COUNT=5 ;;
+        --seed-history=*)      SEED_HISTORY_COUNT="${arg#--seed-history=}" ;;
+        --clear-history)       SEED_HISTORY_COUNT=0 ;;
+    esac
+done
 
 DEVICE_ID="${1:-}"
 OUTPUT_DIR="${2:-/tmp/handy_shots/history}"
@@ -58,6 +77,19 @@ log_info "Output: $OUTPUT_DIR"
 # Permissions + launch (skip_onboarding shortcuts to the catalog screen).
 adb -s "$DEVICE_ID" shell pm grant "$PACKAGE" android.permission.RECORD_AUDIO 2>/dev/null || true
 adb -s "$DEVICE_ID" logcat -c
+
+# Pre-Sprint-26 Batch D: optionally seed the synthetic history BEFORE
+# launching MainActivity, so HistoryViewModel.loadMore() picks up the
+# injected entries on its first pass. The flag --seed-history without
+# a value means "default 5 entries".
+if (( SEED_HISTORY_COUNT > 0 )); then
+    adb -s "$DEVICE_ID" shell am broadcast \
+        -a com.handy.app.action.SEED_HISTORY \
+        -n "${PACKAGE}/com.handy.app.TestCommandReceiver" \
+        --ei count "$SEED_HISTORY_COUNT" >/dev/null 2>&1 || true
+    log_ok "SEED_HISTORY broadcast sent (count=$SEED_HISTORY_COUNT)."
+fi
+
 adb -s "$DEVICE_ID" shell am start -n "$ACTIVITY" --ez skip_onboarding true >/dev/null
 log_ok "MainActivity launched."
 

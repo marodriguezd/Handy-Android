@@ -60,12 +60,23 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
             val json = EngineBridge.nativeGetHistory(state.entries.size, PAGE_SIZE)
-            val newEntries = HistoryEntry.fromJsonArray(json)
+            // Pre-Sprint-26 Batch D: TestCommandReceiver.SEED_HISTORY
+            // injects synthetic entries via a process-static list. We
+            // splice them in here on the FIRST page only so the visual
+            // diff of MD3 HistoryScreen can render cards without a real
+            // recording. Subsequent pages are pure native pagination.
+            val synthetic = com.handy.app.TestCommandReceiver.getSyntheticHistorySnapshot()
+            val nativeEntries = HistoryEntry.fromJsonArray(json)
+            val newEntries = if (synthetic.isNotEmpty() && state.entries.isEmpty()) {
+                synthetic + nativeEntries
+            } else {
+                nativeEntries
+            }
             _uiState.update {
                 it.copy(
                     entries = it.entries + newEntries,
                     isLoading = false,
-                    hasMore = newEntries.size == PAGE_SIZE,
+                    hasMore = nativeEntries.size == PAGE_SIZE,
                 )
             }
         }
@@ -96,29 +107,62 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Re-transcribe a recorded history entry from its backing audio file.
      *
-     * **Today's implementation is a stub** that mirrors the contract the
-     * future Rust call ([EngineBridge.nativeRetryHistoryEntry], once it
-     * lands in handy-core) will satisfy. We:
-     *   1. Flip [UiState.retryingId] so the History card renders an inline
+     * Flow ([ui.retryingId] is set true on entry, always cleared on exit
+     * via the `finally` block, even on cancellation):
+     *   1. Set [UiState.retryingId] so the History card renders an inline
      *      spinner on the Retry button.
-     *   2. Log the request + the audioPath we'll hand to the engine (so
-     *      end-to-end observability via `adb logcat -d | grep HistoryVM`
-     *      survives without a JNI call yet).
-     *   3. Simulate the work with a 2-second delay.
-     *   4. Clear [UiState.retryingId] and log completion.
-     *
-     * When the future JNI call lands, only the body of the launch{}
-     * changes — the state-flag contract stays.
+     *   2. Try [EngineBridge.nativeRetryHistoryEntry] (declared in handy-core).
+     *      - On `true`: pick up the freshly-retried text by reloading
+     *        the first page. Native side updates in place.
+     *      - On `false`: Rust side doesn't yet support the call. Fall back
+     *        to the simulated-delay stub so the spinner still ends (no
+     *        indefinite hang) until Sprint 25+ lands the binding.
+     *      - On `UnsatisfiedLinkError`: same fallback path. The symbol
+     *        being absent is structurally equivalent to `false` and we
+     *        treat both as "Rust not ready".
+     *   3. Clear [UiState.retryingId] in `finally`. `CancellationException`
+     *      is always re-thrown to keep structured-concurrency intact.
      */
     fun retry(entry: HistoryEntry) {
         _uiState.update { it.copy(retryingId = entry.id) }
         Log.d(TAG, "Retry requested for id=${entry.id}, audioPath=${entry.audioPath}")
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                delay(RETRY_SIMULATED_DELAY_MS)
-                // Future: replace delay() with EngineBridge.nativeRetryHistoryEntry(entry.id)
-                // plus a reload of the entry's text via EngineBridge.nativeGetHistory(...).
-                Log.d(TAG, "Retry completed (stub) for id=${entry.id}")
+                val nativeResult = try {
+                    EngineBridge.nativeRetryHistoryEntry(entry.id)
+                } catch (e: UnsatisfiedLinkError) {
+                    // Rust side doesn't yet implement the binding. Mirror
+                    // `false` so the UX doesn't hang; the user still sees
+                    // the spinner end after RETRY_SIMULATED_DELAY_MS.
+                    Log.w(TAG, "nativeRetryHistoryEntry not in libhandy_core.so; falling back", e)
+                    false
+                }
+                if (nativeResult) {
+                    Log.d(TAG, "Retry completed via Rust for id=${entry.id}; merging refreshed entry")
+                    val json = EngineBridge.nativeGetHistory(0, PAGE_SIZE)
+                    val refreshed = HistoryEntry.fromJsonArray(json)
+                    _uiState.update { state ->
+                        state.copy(entries = state.entries.map { existing ->
+                            // Surgical update: replace the matching entry's
+                            // text/postProcessedText inline so other
+                            // already-loaded pages remain in place.
+                            val match = refreshed.firstOrNull { it.id == existing.id }
+                            if (match != null) {
+                                existing.copy(
+                                    text = match.text,
+                                    postProcessedText = match.postProcessedText,
+                                )
+                            } else {
+                                existing
+                            }
+                        })
+                    }
+                } else {
+                    // Fall back to the Sprint 24 simulated delay so the
+                    // spinner lands predictably while Rust catches up.
+                    delay(RETRY_SIMULATED_DELAY_MS)
+                    Log.d(TAG, "Retry completed (fallback delay) for id=${entry.id}")
+                }
             } catch (t: Throwable) {
                 // Preserve structured-concurrency cancellation. If the
                 // VM gets cleared mid-retry, the catch below would
@@ -128,10 +172,6 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 // keeps the structured-concurrency contract intact and
                 // lets viewModelScope.cancel() propagate normally.
                 if (t is CancellationException) throw t
-                // Surface the failure to logcat so e2e tests can detect it,
-                // and let `finally` clear the spinner regardless. The user
-                // gets a recovered Retry button; the failure reason lands
-                // in logcat for follow-up triage.
                 Log.e(TAG, "Retry failed for id=${entry.id}", t)
             } finally {
                 _uiState.update { it.copy(retryingId = null) }
