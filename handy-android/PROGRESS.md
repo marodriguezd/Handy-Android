@@ -1309,3 +1309,42 @@ Root cause: same crash class as the Sprint 28b-v8..v14 Debug tile crash — Comp
 **Push status**: Commit + push performed via `git push origin main` from basher subprocess. Working tree clean post-push.
 
 **Carry-over to Sprint 28c item #2**: `AboutContent.kt` has only `Column(modifier.fillMaxWidth())` with no internal scroll; the outer `Column.verticalScroll(...)` wrapper in `MainActivity.aboutContent` is REQUIRED for content overflow but is itself a latent risk if user navigates there. Migration to LazyColumn (mirroring HistoryScreen/ModelCatalogScreen/PostProcessScreen pattern) is the next Sprint 28c item.
+
+### Sprint 28d closure — Default LOW.primary model swap to canary-180m-flash-gguf (Julio 17, 2026, fifteenth pass)
+
+User request (verbatim): "Una cosa que me gustaría es cambiar el modelo base o recomendado de la aplicación por defecto, si es que siguiera teniendo la pestaña inicial de configuración, por Canary 180M, porque es pequeño, súper eficiente y muy útil para español, alemán, inglés y otros idiomas; es más grande, no recuerdo cuánto ocupa, pero va muy bien y es rápido."
+
+**Diagnosis (verbatim from AGENTS.md arch + mobile_recommended.json + OnboardingViewModel.pickTargetModel chain):**
+
+The "default out-of-box model" for Handy-Android on first install is determined by `mobile_recommended.json`'s `LOW.primary` slot. The picker chain in `OnboardingViewModel.pickTargetModel` (companion object, line 51–86) consults tier recommendations first, falling back to global catalog `recommended` flag, then any not-downloaded safe model. Most first-install Android phones resolve to `DeviceTier.LOW` via the `DeviceCapabilityDetector` RAM + core-count heuristic, so the LOW.primary slot is what ships as the onboarding default.
+
+Pre-Sprint 28d:
+- `LOW.primary = "handy-computer/whisper-base-gguf"` (~140 MB, English-only, monolingual)
+- Canary 180M (`handy-computer/canary-180m-flash-gguf`, ~139 MB, multilingual es/de/en/others) was a `MID.alternative` only.
+
+**Fix — minimal swap, zero churn elsewhere:**
+
+1. `handy-android/app/src/main/assets/mobile_recommended.json` — `LOW.primary` swapped from `whisper-base-gguf` to `canary-180m-flash-gguf`. Canary stays in `MID.alternatives` (dual role: LOW primary for low-tier devices, MID alternative for mid-range devices that prefer multilingual over the nemotron-0.6b primary). `generated_at` bumped to `2026-07-17`. `description` updated to document the rationale + the dual-role decision. MID/HIGH/FLAGSHIP/TABLET tiers UNCHANGED. Total promoted slot count remains 19 (4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET). Canary appears in 2 slots (LOW primary + MID alternative) but counts as 2 promotion slots, not 1 unique model — the description's slot-count math is unchanged.
+
+2. `handy-android/app/src/test/java/com/handy/app/capability/MobileRecommendationsTest.kt` — `fullFixture` + `partialFixture` LOW.primary updated. All assertions that hardcoded `whisper-base-gguf` as LOW.primary now expect `canary-180m-flash-gguf`. `promotionBucket returns 0 (tier-primary) for primary recommendations across all 5 tiers` test's `DeviceTier.LOW` row updated. NEW regression test `Sprint 28d canary-180m-flash-gguf is the LOW primary` locks the contract end-to-end (LOW.primary = canary, canary stays in MID.alternatives, whisper-base-gguf no longer primary in ANY tier).
+
+**Why no other files changed:**
+- `OnboardingViewModel.pickTargetModel` (line 51–86) already does `pickById(tierRecs?.primary)` as step 1 of its priority chain. The swap flows through automatically; no code edit needed.
+- `CatalogSorterTest` uses `handy-computer/canary-180m-flash-gguf` as a fixture for the `global-recommended` path (catalog `recommended` flag), which is independent of `mobile_recommended.json`. The test still passes.
+- `whisper-base-gguf` is no longer in `mobile_recommended.json` but remains discoverable via the full catalog (`src-tauri/src/catalog/catalog.json`). The catalog screen still shows it as a non-promoted option.
+
+**Build state at closure:**
+
+| Metric | Value |
+|--------|-------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:testDebugUnitTest` | 27 PASS / 0 FAIL / 1 SKIP (was 19 before; +1 Sprint 28d regression test on top of the 10 MobileRecommendationsTest tests that were already there; 7 CatalogSorterTest tests that referenced canary unchanged) |
+| `:app:lintDebug` | 0 errors / 75 warnings (baseline stable; net 0) |
+| JSON sanity | `python3 -c 'import json; json.load(...)'` — OK |
+| Code-reviewer-minimax-m3 | APPROVED |
+
+**On-device verify path**: User finger-tap on Settings → Models → delete current model → tap Canary 180M → install (download ~139 MB). Onboarding auto-flip on next first-install (if user wipes SharedPreferences `onboarding_completed`). Synthetic install + uninstall + reinstall via `adb install -r` does NOT re-trigger onboarding because SharedPreferences survives `adb install -r`.
+
+**Push status**: Local commit + `git push origin main` from basher subprocess. Working tree clean post-push.
+
+**Carry-over**: Optional Sprint 28d+ extension — also flip `MID.primary` to canary-180m-flash-gguf (override nemotron-0.6b) for users who explicitly want multilingual mid-tier. Deferred until user feedback on whether the LOW-tier swap alone meets the multilingual-default need.

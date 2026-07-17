@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generated_at": "2026-07-16",
-  "description": "Subset móvil definitivo de modelos STT recomendados organizados por DeviceTier. Un primary por tier + alternativas (1-4) como backups o casos especiales. Total modelos promovidos: 19 (4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET). Co-localizado con el catálogo para reflejar la propensión móvil: la lista NO incluye los heavyGateIds (Voxtral*) ni los experimentalIds (Moonshine Base monolingües).",
+  "generated_at": "2026-07-17",
+  "description": "Subset móvil definitivo de modelos STT recomendados organizados por DeviceTier. Un primary por tier + alternativas (1-4) como backups o casos especiales. Sprint 28d: LOW.primary canary-180m-flash-gguf (multilingual es/de/en/otros, 139 MB, rápido) sustituye a whisper-base-gguf (inglés-only, 140 MB) como modelo por defecto para dispositivos Android de primer install. Canary permanece también en MID.alternatives para dispositivos mid-range que prefieran multilingüe sobre el nemotron-0.6b primario. Total modelos promovidos: 19 (4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET). Co-localizado con el catálogo para reflejar la propensión móvil: la lista NO incluye los heavyGateIds (Voxtral*) ni los experimentalIds (Moonshine Base monolingües).",
   "tiers": {
     "LOW": {
-      "primary": "handy-computer/whisper-base-gguf",
+      "primary": "handy-computer/canary-180m-flash-gguf",
       "alternatives": [
         "handy-computer/whisper-tiny-gguf",
         "handy-computer/moonshine-streaming-tiny-gguf",

@@ -21,6 +21,9 @@ import org.junit.Test
  *  - parseJson partial: tiers missing from root are silently skipped.
  *  - parseJson malformed: throws [JSONException] via wrap.
  *  - promotionBucket for all 5 DeviceTier maps primary→0, alternative→1, others→2.
+ *
+ * Sprint 28d: LOW.primary swap whisper-base-gguf → canary-180m-flash-gguf
+ * (see fixtures + LOW expectations updated accordingly).
  */
 class MobileRecommendationsTest {
 
@@ -29,7 +32,7 @@ class MobileRecommendationsTest {
           "version": 1,
           "tiers": {
             "LOW": {
-              "primary": "handy-computer/whisper-base-gguf",
+              "primary": "handy-computer/canary-180m-flash-gguf",
               "alternatives": [
                 "handy-computer/whisper-tiny-gguf",
                 "handy-computer/moonshine-streaming-tiny-gguf",
@@ -76,14 +79,14 @@ class MobileRecommendationsTest {
           "version": 1,
           "tiers": {
             "LOW": {
-              "primary": "handy-computer/whisper-base-gguf",
+              "primary": "handy-computer/canary-180m-flash-gguf",
               "alternatives": []
             }
           }
         }
     """.trimIndent()
 
-    // ── parseJson happy path ─────────────────────────────────────────--------------------------------------------------------------------------------──
+    // ── parseJson happy path ─────────────────────────────────────────
 
     @Test
     fun `parseJson successfully loads all 5 tiers and alternatives from valid JSON`() {
@@ -99,10 +102,10 @@ class MobileRecommendationsTest {
             )
         }
 
-        // Spot-check the exact values, especially the LOW primary which has
-        // 3 alternatives.
+        // Sprint 28d: LOW primary is now canary-180m-flash-gguf
+        // (multilingual default out-of-box).
         val low = file.forTier(DeviceTier.LOW)!!
-        assertEquals("handy-computer/whisper-base-gguf", low.primary)
+        assertEquals("handy-computer/canary-180m-flash-gguf", low.primary)
         assertEquals(3, low.alternatives.size)
         assertTrue(low.alternatives.contains("handy-computer/medasr-gguf"))
 
@@ -117,8 +120,8 @@ class MobileRecommendationsTest {
     fun `parseJson silently skips tiers missing from the root tiers map`() {
         val file = MobileRecommendations.parseJson(partialFixture)
 
-        // LOW was in the fixture → present
-        assertEquals("handy-computer/whisper-base-gguf", file.forTier(DeviceTier.LOW)?.primary)
+        // LOW was in the fixture → present (canary-180m-flash-gguf post-Sprint 28d swap)
+        assertEquals("handy-computer/canary-180m-flash-gguf", file.forTier(DeviceTier.LOW)?.primary)
 
         // MID/HIGH/FLAGSHIP/TABLET were not in the fixture → null
         assertNull(file.forTier(DeviceTier.MID))
@@ -182,14 +185,14 @@ class MobileRecommendationsTest {
         }
     }
 
-    // ── promotionBucket × 5 tiers × 3 buckets ─────────────────── --------------------------------------------------------------------------------───────
+    // ── promotionBucket × 5 tiers × 3 buckets ─────────────────────────
 
     @Test
     fun `promotionBucket returns 0 (tier-primary) for primary recommendations across all 5 tiers`() {
         val file = MobileRecommendations.parseJson(fullFixture)
 
         val expectations = mapOf(
-            DeviceTier.LOW to "handy-computer/whisper-base-gguf",
+            DeviceTier.LOW to "handy-computer/canary-180m-flash-gguf", // Sprint 28d swap
             DeviceTier.MID to "handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf",
             DeviceTier.HIGH to "handy-computer/whisper-large-v3-turbo-gguf",
             DeviceTier.FLAGSHIP to "handy-computer/whisper-large-v3-gguf",
@@ -220,7 +223,7 @@ class MobileRecommendationsTest {
         // One alternative per tier — covers the bucket=1 path.
         val expectations = mapOf(
             DeviceTier.LOW to "handy-computer/medasr-gguf",
-            DeviceTier.MID to "handy-computer/canary-180m-flash-gguf",
+            DeviceTier.MID to "handy-computer/canary-180m-flash-gguf", // dual role: also LOW primary
             DeviceTier.HIGH to "handy-computer/Qwen3-ASR-1.7B-gguf",
             DeviceTier.FLAGSHIP to "handy-computer/granite-speech-4.1-2b-plus-gguf",
             DeviceTier.TABLET to "handy-computer/granite-speech-4.1-2b-gguf",
@@ -248,11 +251,14 @@ class MobileRecommendationsTest {
         val file = MobileRecommendations.parseJson(fullFixture)
 
         // For each tier, an id that lives in a different tier must score 2.
+        // Sprint 28d: whisper-base-gguf is no longer in any tier → scores 2
+        // for every tier; using FLAGSHIP row here to assert the cross-tier
+        // matrix still works after the swap.
         val crossTierMatrix = listOf(
             TierMatrix(DeviceTier.LOW, "handy-computer/parakeet-tdt-0.6b-v3-gguf"), // MID primary
             TierMatrix(DeviceTier.MID, "handy-computer/granite-speech-4.1-2b-gguf"), // TABLET alternative
             TierMatrix(DeviceTier.HIGH, "handy-computer/cohere-transcribe-03-2026-gguf"), // TABLET primary
-            TierMatrix(DeviceTier.FLAGSHIP, "handy-computer/whisper-base-gguf"), // LOW primary
+            TierMatrix(DeviceTier.FLAGSHIP, "handy-computer/whisper-base-gguf"), // demoted post-Sprint 28d
             TierMatrix(DeviceTier.TABLET, "handy-computer/whisper-large-v3-gguf"), // FLAGSHIP primary
         )
 
@@ -288,6 +294,39 @@ class MobileRecommendationsTest {
             DeviceTier.LOW,
             "handy-computer/whisper-large-v3-gguf", // not LOW-promoted at all
         ))
+    }
+
+    // ── Sprint 28d: regression test for the LOW.primary swap ─────────
+
+    @Test
+    fun `Sprint 28d canary-180m-flash-gguf is the LOW primary (default out-of-box model)`() {
+        val file = MobileRecommendations.parseJson(fullFixture)
+
+        // The user's intentional default for first-install Android phones
+        // (which typically resolve to DeviceTier.LOW per the
+        // DeviceCapabilityDetector RAM + core-count heuristic).
+        val low = file.forTier(DeviceTier.LOW)!!
+        assertEquals(
+            "Sprint 28d: LOW.primary must be canary-180m-flash-gguf",
+            "handy-computer/canary-180m-flash-gguf",
+            low.primary,
+        )
+        // Canary stays as a MID alternative for mid-range devices that
+        // prefer multilingüe over the nemotron-0.6b primary.
+        val mid = file.forTier(DeviceTier.MID)!!
+        assertTrue(
+            "canary-180m-flash-gguf must remain a MID alternative",
+            mid.alternatives.contains("handy-computer/canary-180m-flash-gguf"),
+        )
+        // The previous LOW primary (whisper-base-gguf) is no longer in any
+        // promoted bucket — discoverable only through the full catalog.
+        for (tier in DeviceTier.entries) {
+            val recs = file.forTier(tier)!!
+            assertFalse(
+                "whisper-base-gguf must NOT be ${tier.name}.primary post-Sprint 28d",
+                recs.primary == "handy-computer/whisper-base-gguf",
+            )
+        }
     }
 
     private data class TierMatrix(val tier: DeviceTier, val id: String)
