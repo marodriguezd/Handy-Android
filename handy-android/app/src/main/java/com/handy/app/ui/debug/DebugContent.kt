@@ -1,17 +1,17 @@
 package com.handy.app.ui.debug
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -32,28 +32,55 @@ import com.handy.app.ui.settings.components.SoundPicker
 import kotlinx.coroutines.launch
 
 /**
- * Sprint 28b — Debug panel MD3 composition root (full implementation).
+ * Sprint 28b-v14 — Debug panel MD3 composition root (full implementation).
  *
- * Sprint 28 MVP shipped placeholder rows so reviewers could see the
- * group/row grid; this is the real component graph:
+ * # History (regression arc)
+ * - Sprint 28 MVP shipped placeholder rows so the group/row grid was visible.
+ * - Sprint 28b replaced them with real components (LogLevelSelector,
+ *   LiveLogViewer, UpdateChecksToggle, SoundPicker, PasteDelaySlider,
+ *   RecordingBufferSlider, AlwaysOnMicrophoneSwitch).
+ * - Sprint 28b-v11 wired `DebugModeToggle.onFlip` → in-screen Snackbar
+ *   feedback via `HandySnackbarHost`.
+ * - Sprint 28b-v12 attempted `Scaffold(modifier = Modifier.fillMaxSize(),
+ *   snackbarHost = …)`. On-device repro on Android 16 (A059) proved this
+ *   fix insufficient — Compose Material3 Scaffold internally uses
+ *   `SubcomposeLayout`, which drops `Constraints.Infinity` into the content
+ *   slot during the parent's enter-transition measure phase.
+ * - Sprint 28b-v13 replaced Scaffold with `Box(Modifier.fillMaxSize())`.
+ *   On-device repro STILL failed — Compose Navigation's NavHost wraps each
+ *   destination in `AnimatedContent`, whose measurement phase provides
+ *   `Constraints.Infinity` for maxHeight regardless of the host's
+ *   `Modifier.fillMaxSize()`. The inner
+ *   `Column(fillMaxSize).verticalScroll(...)` still received infinity and
+ *   tripped Compose's runtime check:
+ *   "Vertically scrollable component was measured with an infinity maximum
+ *   height constraints, which is disallowed."
+ * - **Sprint 28b-v14 (this file)** replaces the scrollable Column with
+ *   `LazyColumn`. LazyColumn's measure policy is fundamentally different —
+ *   it measures only items currently in the viewport, not the full
+ *   intrinsic content height — so it does NOT require bounded maxHeight.
+ *   AnimatedContent's Infinity propagation no longer crashes Compose.
  *
- *   - DebugModeToggle (first row — lets a developer turn off the
- *     gate without leaving the screen).
- *   - Logging: LogLevelSelector + LiveLogViewer.
- *   - Updates & Info: UpdateChecksToggle + a "Preview What's New"
- *     placeholder row (the modal exists in `whats-new/`; Sprint 28b
- *     scopes to the wiring so the surface stays).
- *   - Audio: SoundPicker, PasteDelaySlider, RecordingBufferSlider,
+ * # Surface
+ * The screen still renders the full Debug component graph:
+ *   - DebugModeToggle first row (developer-facing gate flipping).
+ *   - Logging group: LogLevelSelector + LiveLogViewer.
+ *   - Updates & Info group: UpdateChecksToggle + a "Preview What's New"
+ *     placeholder row (`ui.whats-new/` exists but not yet wired to a
+ *     SettingsStore flag).
+ *   - Audio group: SoundPicker reuse (single-source-of-truth with the
+ *     General Settings surface), PasteDelaySlider, RecordingBufferSlider,
  *     AlwaysOnMicrophoneSwitch.
  *
- * The SoundPicker row is `ui.settings.components.SoundPicker` (the
- * same primitive used in General Settings) — single source of truth
- * so changing the sound list re-emits in both screens.
- *
+ * # Wiring contract
  * Gated by `Settings.debugMode == true` via `AppNavigation.debugEnabled`
- * (reactive via `debugModeFlow.collectAsState()` in MainActivity,
- * Option A: the Debug route is always registered, the placeholder
- * body renders when the gate is false).
+ * (set reactively in `MainActivity` via `debugModeFlow.collectAsState()`,
+ * Option A: the Debug route is always registered; the
+ * `DeveloperToolsDisabled()` placeholder body renders when the gate is
+ * false so the NavHost graph never tears).
+ *
+ * @see DebugLayoutRegressionTest for the JVM Compose UI test pinning the
+ *   LazyColumn contract against future regressions.
  */
 @Composable
 fun DebugScreen() {
@@ -65,23 +92,15 @@ fun DebugScreen() {
     // host state across recompositions.
     val snackbar = remember { HandySnackbarHostState() }
 
-    // Sprint 28b-v11 — explicitly constrain the root Scaffold with
-    // fillMaxSize(). When this screen is composed inside the
-    // AnimatedContent-driven NavHost body, the wrapper can otherwise
-    // pass infinity maxHeight to the content slot, and our inner
-    // Column(modifier.fillMaxSize().verticalScroll(...)) then trips
-    // Compose's "vertically scrollable component measured with
-    // infinity maximum height constraints" runtime check. Forcing
-    // fillMaxSize() here converts the incoming maxHeight into a
-    // bounded constraint that verticalScroll can accept.
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        snackbarHost = { HandySnackbarHost(state = snackbar) },
-    ) { innerPadding ->
+    Box(modifier = Modifier.fillMaxSize()) {
         DebugContent(
             app = app,
             snackbar = snackbar,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier,
+        )
+        HandySnackbarHost(
+            state = snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
 }
@@ -93,76 +112,86 @@ internal fun DebugContent(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    // Sprint 28b-v11 — pre-resolve BOTH feedback messages at composition
-    // time. `stringResource(...)` is @Composable and CANNOT be called from
-    // inside `scope.launch { ... }` (a non-@Composable coroutine block).
-    // Capturing both Strings here means the onFlip lambda is plain
-    // Function0 — we just pick the right one off `newValue` at click time.
-    // The pure `getSnackbarMessageForFlip(Int)` helper stays in
-    // DebugPresentation.kt because the JVM tests pin the mapping at the
-    // resource-ID level (more stable than resolving localized strings).
     val enabledMessage = stringResource(R.string.debug_toggle_enabled_feedback)
     val disabledMessage = stringResource(R.string.debug_toggle_disabled_feedback)
-    Column(
+
+    // Sprint 28b-v14 — LazyColumn replaces Column.verticalScroll.
+    // LazyColumn's measure policy measures only visible items in the
+    // viewport, so an Infinity maxHeight from the parent is acceptable.
+    // Each SettingsGroup + leading Text + trailing hint text is its own
+    // LazyListScope item so individual visual units retain their natural
+    // spacing (Arrangement.spacedBy(16.dp)).
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.debug_screen_title),
-            style = MaterialTheme.typography.headlineSmall,
-        )
-
-        // Sprint 28b-v11 — onFlip callback fires after the toggle writes
-        // to settingsStore.debugMode. The parent observes via this callback
-        // (not via collectAsState) to avoid a sentinel-first-composition
-        // false positive in LaunchedEffect. The callback picks the pre-resolved
-        // String locally; the resource-ID mapping stays JVM-testable via
-        // `getSnackbarMessageForFlip(newValue)` in DebugPresentation.kt.
-        DebugModeToggle(
-            app = app,
-            onFlip = { newValue ->
-                scope.launch {
-                    snackbar.showMessage(if (newValue) enabledMessage else disabledMessage)
-                }
-            },
-        )
-
-        SettingsGroup(title = stringResource(R.string.debug_section_logging)) {
-            LogLevelSelector(app = app)
-            LiveLogViewer(app = app)
-        }
-
-        SettingsGroup(title = stringResource(R.string.debug_section_updates)) {
-            UpdateChecksToggle(app = app)
-            // WhatsNewPreview is intentionally deferred; the modal
-            // exists at `ui/whats-new/` but no SettingsStore flag
-            // drives it from the Debug panel yet. Sprint 28b keeps the
-            // row visible so the surface doesn't move on Sprint 28c.
+        item {
             Text(
-                text = "${stringResource(R.string.debug_whatsnew_label)} (Sprint 28c)",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(vertical = 4.dp),
+                text = stringResource(R.string.debug_screen_title),
+                style = MaterialTheme.typography.headlineSmall,
             )
         }
 
-        SettingsGroup(title = stringResource(R.string.debug_section_audio)) {
-            SoundPicker(
-                selected = app.settingsStore.soundTheme,
-                onSelect = { app.settingsStore.soundTheme = it },
-                enabled = app.settingsStore.audioFeedbackEnabled,
+        item {
+            // Sprint 28b-v11 — onFlip callback fires after the toggle writes
+            // to settingsStore.debugMode. The parent observes via this callback
+            // (not via collectAsState) to avoid a sentinel-first-composition
+            // false positive in LaunchedEffect. The callback picks the pre-resolved
+            // String locally; the resource-ID mapping stays JVM-testable via
+            // `getSnackbarMessageForFlip(newValue)` in DebugPresentation.kt.
+            DebugModeToggle(
+                app = app,
+                onFlip = { newValue ->
+                    scope.launch {
+                        snackbar.showMessage(if (newValue) enabledMessage else disabledMessage)
+                    }
+                },
             )
-            PasteDelaySlider(app = app)
-            RecordingBufferSlider(app = app)
-            AlwaysOnMicrophoneSwitch(app = app)
         }
 
-        Text(
-            text = stringResource(R.string.debug_panel_gated_hint),
-            style = MaterialTheme.typography.bodySmall,
-        )
+        item {
+            SettingsGroup(title = stringResource(R.string.debug_section_logging)) {
+                LogLevelSelector(app = app)
+                LiveLogViewer(app = app)
+            }
+        }
+
+        item {
+            SettingsGroup(title = stringResource(R.string.debug_section_updates)) {
+                UpdateChecksToggle(app = app)
+                // WhatsNewPreview is intentionally deferred; the modal
+                // exists at `ui.whats-new/` but no SettingsStore flag
+                // drives it from the Debug panel yet. Sprint 28b keeps the
+                // row visible so the surface doesn't move on Sprint 28c.
+                Text(
+                    text = "${stringResource(R.string.debug_whatsnew_label)} (Sprint 28c)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            }
+        }
+
+        item {
+            SettingsGroup(title = stringResource(R.string.debug_section_audio)) {
+                SoundPicker(
+                    selected = app.settingsStore.soundTheme,
+                    onSelect = { app.settingsStore.soundTheme = it },
+                    enabled = app.settingsStore.audioFeedbackEnabled,
+                )
+                PasteDelaySlider(app = app)
+                RecordingBufferSlider(app = app)
+                AlwaysOnMicrophoneSwitch(app = app)
+            }
+        }
+
+        item {
+            Text(
+                text = stringResource(R.string.debug_panel_gated_hint),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 
@@ -171,22 +200,36 @@ internal fun DebugContent(
  * registers the Debug route but the gate is currently OFF (Option A
  * for the Sprint 28b reactive-flag-flip hardening — see the comment
  * block above [com.handy.app.navigation.AppNavigation.AppNavigation]).
+ *
+ * The placeholder body remains `Box(fillMaxSize) + Column(…)` shape
+ * (Sprint 28b-v13) — short, intrinsics-only content that does not trip
+ * the AnimatedContent measure-pass issue because the inner Column has no
+ * verticalsScroll modifier.
  */
 @Composable
 fun DeveloperToolsDisabled() {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = stringResource(R.string.debug_screen_title),
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        Text(
-            text = stringResource(R.string.debug_screen_disabled_body),
-            style = MaterialTheme.typography.bodyLarge,
-        )
+        // Inner Column's fillMaxSize preserves the original shape
+        // (Sprint 28b-v12): the column grows to fill the Box so any
+        // future row added to this placeholder bottoms up predictably
+        // rather than collapsing. Visual is identical with two Text
+        // children but the modifier is shape-stable.
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.debug_screen_title),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = stringResource(R.string.debug_screen_disabled_body),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
     }
 }

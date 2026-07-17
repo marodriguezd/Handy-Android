@@ -85,6 +85,7 @@ android {
     // sets. Production builds are unaffected.
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -180,4 +181,18 @@ dependencies {
     // Unit tests (pure JVM, no Robolectric)
     testImplementation(libs.junit)
     testImplementation(libs.json.test)
+
+    // Sprint 28b-v13 — Compose UI test infra for DebugLayoutRegressionTest.
+    // `createComposeRule()` requires `ui-test-junit4` + a hosting
+    // ComponentActivity injected by `ui-test-manifest` at debug variant
+    // time. Robolectric 4.14.1 supports API 35 + JDK 17 + AGP 8.8.2 cleanly.
+    // androidx-test-ext-junit (= `@RunWith(AndroidJUnit4::class)`) and
+    // androidx-test-core (`ApplicationProvider` etc.) are the paired
+    // surfaces. Production builds are unaffected — all five entries live
+    // in test-only / debug-only configurations.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
