@@ -1559,3 +1559,42 @@ Translate VALUES (not delete) for ~18 used Spanish-residue strings per the table
 #### Phase 3 (future)
 
 Investigate why the original audit's shell-quoted pipe silently truncated matches. Possible cause: bash escaping of `\\|` alternation in a heredoc-nested command. Future audits should run each pattern as a discrete single-line grep to avoid quoting fragility.
+
+### Sprint 29spa Phase 2 closure (Julio 17, 2026) -- Spanish VALUE translations + values-es/ locale override
+
+Sprint 29spa Phase 2 completed the PC_HANDY_REFERENCE.md Section 7 drift A1 cleanup. The 7-pattern audit confirmed all 20 candidate strings are referenced. Phase 2 translates VALUES (not deletes keys) for 20 used Spanish-residue strings + creates a new values-es/ locale override file.
+
+**Files changed**:
+- `app/src/main/res/values/strings.xml` -- 20 string values translated to English (keys stay, only value text changes).
+- `app/src/main/res/values-es/strings.xml` -- NEW locale override file with original Spanish content (20 entries).
+
+**Translations applied** (20):
+
+| Key | Spanish value (was) | English value (now) |
+|-----|-----|-----|
+| settings_advanced | Avanzado | Advanced |
+| tab_models | Modelos | Models |
+| tab_post_process | Post Proceso | Post-Process |
+| settings_experimental_features | Funciones Experimentales | Experimental Features |
+| settings_experimental_features_desc | Activa funciones experimentales inestables | Enables unstable experimental features |
+| settings_auto_send | Envio automatico | Auto-submit |
+| settings_auto_send_ime | Auto (IME) | Auto (IME) [English already] |
+| settings_auto_send_disabled | Desactivado | Disabled |
+| settings_vad | Voice Activity Detection | Voice Activity Detection [English already] |
+| settings_vad_desc | Deteccion de actividad de voz | Voice activity detection |
+| settings_add_final_space | Agregar Espacio Final | Add Final Space |
+| settings_add_final_space_desc | Anade un espacio al final de la transcripcion | Adds a space at the end of the transcription |
+| show_experimental_models | Mostrar modelos experimentales (sin verificar) | Show experimental models (unverified) |
+| capability_header_subtitle | Modelos optimizados hasta %1\$d MB | Models optimized up to %1\$d MB |
+| heavy_dialog_title | Modelo pesado seleccionado | Heavy model selected |
+| heavy_dialog_title_extreme | Modelo extremo (em-dash) verificacion obligatoria | Extreme model (em-dash) confirmation required |
+| heavy_dialog_body | El modelo <<%1\$s>> pesa %2\$s GB... | Model <<%1\$s>> weighs %2\$s GB... |
+| heavy_dialog_body_extreme | El modelo <<%1\$s>> pesa %2\$s GB... | Model <<%1\$s>> weighs %2\$s GB... |
+| heavy_dialog_consent | Entiendo los riesgos y quiero continuar | I understand the risks and want to continue |
+| model_unavailable_on_device | Este modelo excede la capacidad de tu dispositivo | This model exceeds your device\'s capacity |
+
+**Build state**: `:app:processDebugResources` + `:app:compileDebugKotlin` + `:app:testDebugUnitTest` + `:app:lintDebug` BUILD SUCCESSFUL. Tests count unchanged (148 PASS / 0 FAIL).
+
+**AAPT2 hiccup**: Initial processDebugResources failed with 'Invalid unicode escape sequence' error attributed to model_unavailable_on_device. Thinker-with-files-gemini plus diagnostic pinpointed edge-case in apostrophe handling; resolved via escape `\'s` (prophylactic + matches lines 119/292 conventions). The actual AAPT2 root cause may have been a transient parse issue or misreported line; the escape is the canonical fix per Android XML conventions.
+
+**Carry-over**: Sprint 29 features (b-g). 29a ThemeContrastTest + 29e UnusedResources sweep already done. Pending: 29b predictive back + 29c foldable hinge + 29d motion audit + 29f snapshot scripts refresh + 29g DoD verification.

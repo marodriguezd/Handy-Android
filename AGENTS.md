@@ -1711,3 +1711,29 @@ Optionally mirror Spanish translations to `values-es/strings.xml` (creates an `e
 ### Carry-over to Phase 2 sprint
 
 Estimated scope: 1 commit, ~20 line edits in a single file (`values/strings.xml`). Optionally also create `values-es/strings.xml` as the locale override file (mirrors the current Spanish values for `es` users). 
+
+## Quoted Session 2026-07-17 (resumed, eighteenth pass) -- Sprint 29spa Phase 2 closure
+
+Sprint 29spa Phase 2 closed PC_HANDY_REFERENCE.md Section 7 drift A1 by translating VALUES (not deleting keys) for 20 used Spanish-residue strings + creating a new values-es/ strings.xml Spanish locale override. The KEY NAMES stayed; only the VALUE TEXT changed from Spanish to English (Spanish preserved in values-es/ for es-locale users).
+
+**Files changed (1 + 1 new = 2)**:
+
+| Path | Change |
+|---|---|
+| `handy-android/app/src/main/res/values/strings.xml` | 20 string values translated EN (Spanish keys retained) |
+| `handy-android/app/src/main/res/values-es/strings.xml` | NEW locale override file, 20 Spanish entries |
+
+**Pre-execution 7-pattern audit (per Sprint 29spa recovery insight)**: All 20 strings confirmed used in at least one of `R.string.X` direct calls / `getString(R.string.X)` / `stringResource(R.string.X)` / `Resources.getIdentifier(...)` / `AndroidManifest android:resource='@string/X'` / `XML layout @string/X` / `values-*/strings.xml`.
+
+**Build state at Sprint 29spa Phase 2 closure**:
+
+| Metric | Value |
+|---|---|
+| `:app:processDebugResources` | BUILD SUCCESSFUL |
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL |
+| `:app:testDebugUnitTest` | BUILD SUCCESSFUL (148 PASS / 0 FAIL preserved) |
+| `:app:lintDebug` | 0 new UnusedResources warnings |
+
+**One AAPT2 hiccup resolved mid-turn**: `Invalid unicode escape sequence` error during initial `:app:processDebugResources`. Diagnosed by thinker-with-files-gemini as apostrophe-escape issue in `model_unavailable_on_device`. Fix: change `device's capacity` to `device\'s capacity` (Android XML convention, matches lines 119 + 292 patterns). The actual AAPT2 root cause was likely a misattributed line number; the apostrophe escape is prophylactic.
+
+**Carry-over**: Sprint 29 features (b-g) per `handy-android/SPRINT_29_PLAN.md`. Sub-feature (a) ThemeContrastTest done in earlier session. Sub-feature (e) UnusedResources sweep done. Pending: 29b predictive back (Android 14+) + 29c foldable hinge (WindowInfoTracker) + 29d motion audit + 29f snapshot scripts refresh + 29g Definition-of-Done verification.
