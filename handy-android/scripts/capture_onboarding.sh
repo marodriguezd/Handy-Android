@@ -1,6 +1,34 @@
 #!/usr/bin/env bash
-# Capture onboarding screenshots for visual regression reference.
-# Usage: ./capture_onboarding.sh [DEVICE_SERIAL]
+#
+# capture_onboarding.sh -- per-step screenshot capture for the Handy
+# onboarding flow.
+#
+# Usage:
+#   ./capture_onboarding.sh [DEVICE_SERIAL]
+#
+# Sprint 29f refresh:
+#   - Sprint 27a onboarding MD3 refinement (StepIndicator + IconContainer +
+#     ButtonRow + ProgressBar components) -- step N/4 label format.
+#   - Sprint 27b adaptive launcher icon -- onboarding Step 1 icon now
+#     uses vector mic glyph (was raster PNGs).
+#   - Sprint 28b-v11+v12 DevTools toggle (gated) -- not relevant for
+#     onboarding flow (debugMode defaults false in release).
+#   - Sprint 28c LazyColumn -- settles the runtime crash on
+#     PostProcess / AboutContent (onboarding itself uses Column so
+#     unaffected but documented).
+#
+# Coordinates still hardcoded (the onboarding flow is small enough that
+# the StepIndicator + ButtonRow layout is stable across recent sprints).
+# Refresh: Sprint 29f marks the bottom-button area at y=2200 (Skip/Back)
+# vs y=2100 (primary action). Verify these after any MD3 button-spec
+# change.
+#
+# Output: screenshots/onboarding/step0_welcome.png ... step4_ready.png
+#
+# Note: synthetic 'input tap' from agent subprocesses hits NothingLauncher
+# gesture-nav bottom edge on A059. Manual finger tap is the only
+# reliable ground-truth; this script is best-effort automation.
+#
 set -euo pipefail
 
 DEVICE="${1:-adb-00143154F001971-AbAnvz._adb-tls-connect._tcp}"
