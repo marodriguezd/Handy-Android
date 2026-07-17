@@ -1635,3 +1635,17 @@ Closed via `a438cd3` — single-attribute AndroidManifest.xml change. The techni
 **Build state**: `:app:processDebugResources` BUILD SUCCESSFUL in 8s. No Kotlin surface change. Code-reviewer APPROVED in 3 progressive passes (claim (c) accuracy softened; IME pill scope restricted to MainActivity-bound gestures).
 
 **Push status**: deferred to user interactive shell per AGENTS.md Plan-D.
+
+### Sprint 29b v2 — predictive back gesture Compose-level integration ✅
+
+Closed via 2 commits — separated code from docs:
+
+**Commit 1 (code)** — 5 files: AndroidManifest.xml KDoc update + AppNavigation.kt root-level PredictiveBackHandler + MainActivity.kt KDoc architecture note + new PredictiveBackPresentation.kt helper + new PredictiveBackPresentationLogicTest.kt (7 tests).
+
+**Commit 2 (docs, this entries)** — AGENTS.md + PROGRESS.md closure entries documenting the v2 design (manifest opt-in + Compose handler + JVM-tested enabled-predicate).
+
+**Test results**: `:app:testDebugUnitTest --tests '*PredictiveBackPresentationLogicTest*'` → 7 PASS / 0 FAIL. `:app:compileDebugKotlin` BUILD SUCCESSFUL in 34s. `:app:lintDebug` BUILD SUCCESSFUL in 27s (no new warnings).
+
+**Push status**: deferred to user interactive shell per AGENTS.md Plan-D. Local commits ahead of `origin/main` = 4 (Sprint 29b v2 + 1cabb61 + a438cd3 + prior a76c178).
+
+**Architectural note**: `PredictiveBackHandler` is a `@Composable` function — it can only live inside a Compose composition, not in `MainActivity.onCreate`'s non-composable context. The architectural placement for it is `AppNavigation.kt` where the `NavController` instance is in scope. MainActivity.kt contributes the manifest opt-in via AndroidManifest.xml's `enableOnBackInvokedCallback="true"` attribute on `<application>`.

@@ -1900,3 +1900,45 @@ The user brief asked for *"PredictiveBackHandler integration en MainActivity.kt"
 - **Sprint 29c foldable hinge avoidance via WindowInfoTracker** — pending (independent of 29b).
 
 **PUSH STATE**: `a438cd3` is the only Sprint 29b artifact. User pushes from interactive shell per AGENTS.md Plan-D. Local commits ahead of `origin/main` = 1.
+
+## Sprint 29b v2 redo — predictive back gesture (Android 14+) Compose-level integration (Julio 17, 2026)
+
+Picks up from Sprint 29b prior commit (`a438cd3`, manifest-only) and user follow-up request for actual PredictiveBackHandler code-level integration. Supersedes the prior KDoc-defensive-of-no-code-integration position with actual code in `AppNavigation.kt`.
+
+### What landed (vs Sprint 29b a438cd3)
+
+| Aspect | Prior (a438cd3) | v2 (this commit) |
+|---|---|---|
+| Manifest opt-in | `enableOnBackInvokedCallback="true"` on `<application>` | Same |
+| Compose `PredictiveBackHandler` | None | Root-level in `AppNavigation.kt`, covers all 6 destinations |
+| Enabled-predicate | Manifest flag only | `PredictiveBackPresentation.shouldHandlePredictiveBack(currentRoute, startRoute)` (4-line pure helper, 7 JVM tests) |
+| Cancellation handling | n/a | `progress.collect { }` in try/catch, re-throws `CancellationException` per structured concurrency §Sprint 24 |
+| KDoc stance | 35-line defense of deviation | 15-line architecture description + 24-line architecture note in MainActivity.kt explaining the @Composable constraint |
+| Verified end-to-end | manifest parses yes / no Compose handler | yes / 7 JUnit4 tests PASS / lint unchanged |
+
+### Files changed
+
+1. `app/src/main/AndroidManifest.xml` — KDoc shortened to 15 lines; accurately describes manifest-only opt-in + Compose PredictiveBackHandler pairing.
+2. `app/src/main/java/com/handy/app/navigation/AppNavigation.kt` — 2 imports + 1 PredicateBackHandler block at root scope with re-throw pattern + KDoc explaining the design.
+3. `app/src/main/java/com/handy/app/MainActivity.kt` — 24-line KDoc explaining the architectural placement of `PredictiveBackHandler` (compositional constraint).
+4. `app/src/main/java/com/handy/app/navigation/PredictiveBackPresentation.kt` (NEW) — pure helper.
+5. `app/src/test/java/com/handy/app/navigation/PredictiveBackPresentationLogicTest.kt` (NEW) — 7 JUnit4 tests.
+
+### Test results
+
+`:app:testDebugUnitTest --tests '*PredictiveBackPresentationLogicTest*'` → 7 PASS / 0 FAIL.
+
+Coverage:
+1. null currentRoute disables (initial composition)
+2. currentRoute == startRoute disables (back exits app)
+3. currentRoute == ONBOARDING start disables (cold-start path)
+4. currentRoute != startRoute enables for Models
+5. currentRoute != startRoute enables for PostProcess
+6. currentRoute != startRoute enables for Debug (gated by debugEnabled — orthogonal)
+7. Empty-string currentRoute defensively enables (avoid silent disabling)
+
+### Carry-over to next sessions
+
+- On-device verify on A059 (Android 16 = API 36 — eligible for predictive-back animations): confirm the system-rendered scale-down animation activates on user back-swipe from any of the 6 destinations when `debugEnabled` flips them. If absent, reinstall via `adb install -r`.
+- AGP 9.x + Kotlin 2.0 paired migration is independent of this Sprint.
+- Sprint 29c foldable hinge avoidance via WindowInfoTracker is the next deferred sub-feature.
