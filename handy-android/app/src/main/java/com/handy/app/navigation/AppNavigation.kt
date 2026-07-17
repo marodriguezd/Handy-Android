@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
@@ -52,6 +53,7 @@ private val NavScreens = listOf(
     Screen.General,
     Screen.Models,
     Screen.History,
+    Screen.PostProcess,
     Screen.About,
 )
 
@@ -59,6 +61,7 @@ private enum class Screen(val route: String, val titleRes: Int, val icon: ImageV
     General("general", R.string.settings_title, Icons.Default.Settings),
     Models("models", R.string.tab_models, Icons.Default.Build),
     History("history", R.string.history_title, Icons.Default.History),
+    PostProcess("post_process", R.string.tab_post_process, Icons.Default.AutoAwesome),
     About("about", R.string.settings_about, Icons.Default.Info),
 }
 
@@ -70,7 +73,7 @@ fun AppNavigation(
     generalTabContent: @Composable () -> Unit,
     advancedTabContent: @Composable () -> Unit,
     modelsTabContent: @Composable () -> Unit,
-    postProcessTabContent: @Composable () -> Unit,
+    postProcessContent: @Composable () -> Unit,
     historyContent: @Composable () -> Unit,
     aboutContent: @Composable () -> Unit,
 ) {
@@ -132,12 +135,8 @@ fun AppNavigation(
                             advancedTabContent = advancedTabContent,
                         )
                     }
-                    composable(Screen.Models.route) {
-                        ModelsTabsScreen(
-                            modelsTabContent = modelsTabContent,
-                            postProcessTabContent = postProcessTabContent,
-                        )
-                    }
+                    composable(Screen.Models.route) { modelsTabContent() }
+                    composable(Screen.PostProcess.route) { postProcessContent() }
                     composable(Screen.History.route) { historyContent() }
                     composable(Screen.About.route) { aboutContent() }
                 }
@@ -230,27 +229,8 @@ private fun SettingsTabsScreen(
     }
 }
 
-@Composable
-private fun ModelsTabsScreen(
-    modelsTabContent: @Composable () -> Unit,
-    postProcessTabContent: @Composable () -> Unit,
-) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf(stringResource(R.string.tab_models), stringResource(R.string.tab_post_process))
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) },
-                )
-            }
-        }
-        when (selectedTab) {
-            0 -> modelsTabContent()
-            1 -> postProcessTabContent()
-        }
-    }
-}
+// Sprint 26: Post-Process was promoted to its own top-level
+// Screen.PostProcess destination; ModelsTabsScreen tab-pill logic
+// was removed because Models is now the sole route content. This
+// function slot is retained as a breadcrumb so future agents can
+// see the prior 2-tab structure for reference.

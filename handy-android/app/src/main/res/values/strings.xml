@@ -247,6 +247,36 @@
     <string name="history_audio_play">Play</string>
     <string name="history_audio_pause">Pause</string>
 
+    <!-- Sprint 26: Post-Process top-level destination -->
+    <string name="postprocess_section_provider">PROVIDER</string>
+    <string name="postprocess_section_endpoint">ENDPOINT</string>
+    <string name="postprocess_provider_label">Provider</string>
+    <string name="postprocess_provider_openai">OpenAI</string>
+    <string name="postprocess_provider_anthropic">Anthropic</string>
+    <string name="postprocess_provider_ollama">Ollama (local)</string>
+    <string name="postprocess_provider_custom">Custom</string>
+    <string name="postprocess_baseurl_label">Base URL</string>
+    <string name="postprocess_baseurl_hint_openai">https://api.openai.com/v1/chat/completions</string>
+    <string name="postprocess_baseurl_hint_anthropic">https://api.anthropic.com/v1/messages</string>
+    <string name="postprocess_baseurl_hint_ollama">http://10.0.2.2:11434/api/chat</string>
+    <string name="postprocess_baseurl_hint_custom">https://</string>
+    <string name="postprocess_baseurl_supporting">HTTPS required for hosted providers; HTTP allowed for Ollama loopback.</string>
+    <string name="postprocess_apikey_label">API key</string>
+    <string name="postprocess_apikey_placeholder">sk-</string>
+    <string name="postprocess_apikey_required">Required for hosted providers.</string>
+    <string name="postprocess_apikey_optional">Optional for local Ollama.</string>
+    <string name="postprocess_model_label">Model id</string>
+    <string name="postprocess_prompts_section">PROMPTS</string>
+    <string name="postprocess_prompts_empty_state">No prompts yet. Tap below to add one.</string>
+    <string name="postprocess_prompt_add">Add prompt</string>
+    <string name="postprocess_prompt_editor_title_new">New prompt</string>
+    <string name="postprocess_prompt_editor_title_edit">Edit prompt</string>
+    <string name="postprocess_prompt_name_label">Name</string>
+    <string name="postprocess_prompt_text_label">Prompt text</string>
+    <string name="content_desc_edit">Edit</string>
+    <string name="content_desc_add">Add</string>
+    <string name="dialog_save">Save</string>
+
     <!-- Sprint 25b Phase C: Advanced Settings controls (MD3) -->
     <string name="advanced_section_history_retention">HISTORY &amp; RETENTION</string>
     <string name="advanced_section_experimental_features">EXPERIMENTAL FEATURES</string>

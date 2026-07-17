@@ -184,6 +184,22 @@ class SettingsStore(context: Context) {
         get() = prefs.getString("post_process_model", "gpt-4o-mini") ?: "gpt-4o-mini"
         set(value) = prefs.edit().putString("post_process_model", value).apply()
 
+    /** Sprint 26: user-defined prompt templates. Persisted as a
+     *  newline-separated list of strings; the post-process screen
+     *  wraps each in a [com.handy.app.ui.postprocess.PostProcessPrompt]
+     *  for editing (name + text). Default empty list. */
+    var postProcessPrompts: List<String>
+        get() = prefs.getString("post_process_prompts", "")
+            ?.split('\n')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        set(value) {
+            prefs.edit()
+                .putString("post_process_prompts", value.joinToString("\n"))
+                .apply()
+        }
+
     // ── Sprint 21: IME pill placement (top vs bottom anchor) ────────────────
     //
     // The HandyVoiceBar in `HandyInputMethodService.kt` reads this via

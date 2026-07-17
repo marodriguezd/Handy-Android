@@ -232,6 +232,14 @@ private fun shizukuStatus(app: HandyApplication): Status = try {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Deprecated(
+    message = "Sprint 26: Post-Process migrated to ui/postprocess/PostProcessScreen.kt. " +
+        "Replaced with a top-level navigation-rail destination.",
+    replaceWith = ReplaceWith(
+        "PostProcessScreen()",
+        "com.handy.app.ui.postprocess.PostProcessScreen",
+    ),
+)
 fun PostProcessContent(viewModel: SettingsViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     SettingsGroup(title = stringResource(R.string.settings_postproc)) {

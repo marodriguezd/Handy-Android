@@ -21,7 +21,7 @@ import com.handy.app.ui.onboarding.OnboardingScreen
 import com.handy.app.ui.about.AboutContent
 import com.handy.app.ui.settings.AdvancedSettingsContent
 import com.handy.app.ui.settings.GeneralSettingsContent
-import com.handy.app.ui.settings.PostProcessContent
+import com.handy.app.ui.postprocess.PostProcessScreen
 import com.handy.app.ui.theme.HandyTheme
 import com.handy.app.ui.theme.ThemeMode
 import com.handy.app.viewmodel.HistoryViewModel
@@ -112,13 +112,13 @@ class MainActivity : ComponentActivity() {
                         )
                         ModelCatalogScreen(viewModel = vm)
                     },
-                    postProcessTabContent = {
+                    postProcessContent = {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
                         ) {
-                            PostProcessContent(viewModel = settingsViewModel)
+                            PostProcessScreen()
                         }
                     },
                     historyContent = {

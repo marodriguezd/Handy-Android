@@ -630,3 +630,44 @@ Sprint 25 closed end-to-end on top of Sprint 25a (factory binding) + Sprint 25b 
 **Push status**: 0 commits pushed in this turn. User must `git push origin main` from interactive shell per AGENTS.md keyring/SSH intermittent note + Plan-D ladder.
 
 **Next session**: pick up Sprint 26 — Post-processing MD3 + AGP bump (8.x → 9.x) + `network_security_config.xml` (cleartext for `10.0.2.2` + `localhost` for Ollama default) + 8 `PostProcessFormValidatorTest` tests → **114 PASS expected**. AGP bump alone closes 21 lint warnings (`GradleDependency` × 18 + `AndroidGradlePluginVersion` × 3).
+
+## 馃 Session 2026-07-17 (Sprint 26 closure) — fourth resumed pass
+
+Sprint 26 closed end-to-end. Post-Process promoted to its own navigation-rail destination (5 items total). **114 PASS / 0 FAIL**.
+
+**What shipped (Sprint 26, 11 new + 8 modified + 26 new strings + 1 build-config bump)**
+
+Production (11 new):
+- `app/src/main/java/com/handy/app/ui/postprocess/{PostProcessProvider.kt, PostProcessFormValidator.kt, ProviderSelect.kt, BaseUrlField.kt, ApiKeyField.kt, ModelSelectField.kt, PromptList.kt, PostProcessPrompt data class in PromptList.kt, PromptEditor.kt, PostProcessScreen.kt}` — full Sprint 26 feature.
+- `app/src/main/res/xml/network_security_config.xml` — per-domain cleartext for `10.0.2.2` + `localhost` only.
+
+Tests (1 new file, 8 JVM tests):
+- `app/src/test/java/com/handy/app/ui/postprocess/PostProcessFormValidatorTest.kt`.
+
+Modified (8):
+- `gradle/libs.versions.toml`: `agp = "8.7.3"` → `agp = "8.8.2"`.
+- `gradle/wrapper/gradle-wrapper.properties`: `gradle-8.9-bin.zip` → `gradle-8.11.1-bin.zip`. Required by AGP 8.8.x.
+- `app/src/main/AndroidManifest.xml`: added `android:networkSecurityConfig`.
+- `app/src/main/java/com/handy/app/navigation/AppNavigation.kt`: added `Screen.PostProcess` enum entry + 5 nav items + deleted `ModelsTabsScreen` (breadcrumb comment retains slot).
+- `app/src/main/java/com/handy/app/MainActivity.kt`: replaced `postProcessTabContent` lambda with `postProcessContent`.
+- `app/src/main/java/com/handy/app/SettingsStore.kt`: added `postProcessPrompts: List<String>` on `post_process_prompts` SharedPreferences key.
+- `app/src/main/java/com/handy/app/ui/settings/SettingsScreen.kt`: @Deprecated on legacy `PostProcessContent`.
+- `app/src/main/res/values/strings.xml`: 27 new keys (postprocess_*, dialog_save, content_desc_edit/add).
+
+**Build state at closure**:
+- `:app:compileDebugKotlin` — BUILD SUCCESSFUL, 0 errors, 0 warnings.
+- `:app:testDebugUnitTest --rerun-tasks` — **114 PASS / 0 FAIL** (106 pre-existing + 8 new).
+- `:app:lintDebug` — 0 errors / **86 warnings** (unchanged from Sprint 25b closure).
+- `cargo check` (handy-core/) — green; 2 pre-existing `dead_code` warnings unrelated.
+
+**Build blockers surfaced & closed this turn**:
+1. **AGP 8.8.2 required Gradle 8.10.2+** — wrapper bumped 8.9 → 8.11.1.
+2. **Duplicate `content_desc_delete` strings.xml** — de-duplicated by removing the new one (kept the original; reused for cross-screen purposes).
+3. **`PromptEditor.kt` compile errors** — added missing `@OptIn(ExperimentalMaterial3Api::class)` annotation + missing `import androidx.compose.material3.MaterialTheme`.
+4. **Code-reviewer-minimax-m3 APPROVED** on the architectural review pass (Tab/TabRow dead-imports audit, `var by remember` patterns, `validateBaseUrl` boundary semantics, postProcessPrompts edge-case handling, MainActivity lambda rename, pure JVM test surface, AGP 8.8.2 + Kotlin 1.9.24 + Gradle 8.11.1 compatibility, Phase D AlertDialog audit regression-clean).
+
+**🟡 AGP 9.x deviation from plan**: User's plan specified AGP 9.x. AGP 9.x requires Kotlin 2.0+ which forces compose-compiler-plugin migration; libs.versions.toml pin Kotlin 1.9.24 + compose-compiler 1.5.14 blocks this in-cycle. Landed at AGP 8.8.2 instead. Defer AGP 9.x + Kotlin 2.0 to Sprint 26b or Sprint 29 polish together.
+
+**Push status**: 0 pushes in this turn (one local commit). User runs `git push origin main` from interactive shell per AGENTS.md keyring/SSH intermittent note.
+
+**Next session**: Sperint 27 — Onboarding MD3 refinement + 14 launcher/icon warnings cleanup + adaptive icon ship. Or Sprint 28 if design assets aren't ready.

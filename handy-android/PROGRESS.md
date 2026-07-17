@@ -786,3 +786,60 @@ Codebase grep `androidx.compose.material3.AlertDialog` over `handy-android/app/s
 - Toggle off → both fields disable correctly.
 
 🟢 Sprint 25 FULL closed. Sprint 26 unblocked.
+### Sperint 26 — Post-processing MD3 + AGP bump (Julio 17, 2026)
+
+**Decision: AGP 9.x NOT bumped (deviation from plan).** AGP 9.x requires Gradle 8.11+ and Kotlin 2.0+. Kotlin 1.9.24 + compose-compiler 1.5.14 pin in `libs.versions.toml` blocks a clean in-cycle bump. Closed partial lint reduction via **AGP 8.7.3 → 8.8.2** + **Gradle wrapper 8.9 → 8.11.1** (AGP 8.8.x declares Gradle 8.10.2 minimum, so wrapper had to bump as a side-effect). Lint warnings landed at 86 (unchanged) — the 8-deps didn't bump, so fewer `GradleDependency` warnings closed than AGP 9.x would have. Defer AGP 9.x + Kotlin 2.0 to Sprint 26b or Sprint 29 polish together.
+
+**Files added (11)**
+
+- `app/src/main/java/com/handy/app/ui/postprocess/PostProcessProvider.kt` — enum `PostProcessProvider { OpenAI, Anthropic, Ollama, Custom }` with hardcoded `defaultBaseUrl` + `requiresApiKey` flag. JVM-testable. Companion `fromToken`/`tokenFor` for String ↔ enum rehydration.
+- `app/src/main/java/com/handy/app/ui/postprocess/PostProcessFormValidator.kt` — pure `internal object` + sealed `PostProcessValidation { Valid | Invalid(errors: List<String>) }`. Four checks: `validateBaseUrl` (per-provider), `validateModelId` (alnum + . - _ : / +), `validateApiKey` (optional/required per provider), composite `validateForm`.
+- `app/src/main/java/com/handy/app/ui/postprocess/ProviderSelect.kt` — `HandyDropdown` wrapper.
+- `app/src/main/java/com/handy/app/ui/postprocess/BaseUrlField.kt` — `OutlinedTextField` with provider-aware placeholder + live `isError` from `validateBaseUrl`.
+- `app/src/main/java/com/handy/app/ui/postprocess/ApiKeyField.kt` — password-toggle + provider-conditional required/optional hint.
+- `app/src/main/java/com/handy/app/ui/postprocess/ModelSelectField.kt` — `OutlinedTextField` with provider-aware placeholder.
+- `app/src/main/java/com/handy/app/ui/postprocess/PromptList.kt` — `data class PostProcessPrompt` + `ElevatedCard`-styled list with per-row edit/delete + "Add prompt" affordance.
+- `app/src/main/java/com/handy/app/ui/postprocess/PromptEditor.kt` — `HandyModalBottomSheet`-hosted multi-line editor (NOT `BasicAlertDialog` per Sprint 26 plan).
+- `app/src/main/java/com/handy/app/ui/postprocess/PostProcessScreen.kt` — root composable reading SettingsStore directly + hosting `PromptEditor` overlay.
+- `app/src/main/res/xml/network_security_config.xml` — per-domain cleartext (`10.0.2.2` + `localhost` only); `<base-config cleartextTrafficPermitted="false">` for everything else.
+- `app/src/test/java/com/handy/app/ui/postprocess/PostProcessFormValidatorTest.kt` — 8 pure JVM tests.
+
+**Files modified (8)**
+
+- `gradle/libs.versions.toml` — `agp = "8.7.3"` → `agp = "8.8.2"`.
+- `gradle/wrapper/gradle-wrapper.properties` — `gradle-8.9-bin.zip` → `gradle-8.11.1-bin.zip`.
+- `app/src/main/AndroidManifest.xml` — new `android:networkSecurityConfig="@xml/network_security_config"` on `<application>`.
+- `app/src/main/java/com/handy/app/navigation/AppNavigation.kt` — added `Screen.PostProcess` enum entry. Added PostProcess slot in `NavScreens` (now 5 items: General / Models / History / PostProcess / About). Added `postProcessContent: @Composable () -> Unit` parameter. Added `composable(Screen.PostProcess.route) { postProcessContent() }` block. Replaced the `ModelsTabsScreen` tab-pill wrapper with a breadcrumb comment block (Models is now sole content on its route).
+- `app/src/main/java/com/handy/app/MainActivity.kt` — replaced `postProcessTabContent = { ... PostProcessContent(viewModel = settingsViewModel) }` lambda with `postProcessContent = { ... PostProcessScreen() }`. Updated import.
+- `app/src/main/java/com/handy/app/SettingsStore.kt` — added `postProcessPrompts: List<String>` getter/setter on `post_process_prompts` SharedPreferences key (newline-separated, trim + non-blank filter on read).
+- `app/src/main/java/com/handy/app/ui/settings/SettingsScreen.kt` — marked legacy `PostProcessContent` with `@Deprecated(replaceWith = PostProcessScreen())`. Function body retained (gives any straggler caller a deprecation warning rather than a silent runtime path). Cleanup in Sprint 29 polish.
+- `app/src/main/res/values/strings.xml` — 27 new keys: `postprocess_*` (provider/section/baseurl/apikey/model/prompts labels + hints + supporting text), `content_desc_edit`, `content_desc_add`, `dialog_save`. (`content_desc_delete` already existed; reused not duplicated.)
+
+**Tests (1 file, 8 JVM tests)** — see `app/src/test/java/com/handy/app/ui/postprocess/PostProcessFormValidatorTest.kt`:
+
+| # | Test | Surface |
+|---|---|---|
+| T1 | OpenAI accepts canonical https base URL | `validateBaseUrl(OpenAI, "https://api.openai.com/v1/chat/completions")` → true |
+| T2 | Anthropic accepts canonical https base URL | `validateBaseUrl(Anthropic, "https://api.anthropic.com/v1/messages")` → true |
+| T3 | Ollama accepts http loopback base URL | both `http://10.0.2.2:11434/api/chat` and `http://localhost:11434/api/chat` accepted |
+| T4 | Custom accepts any non-empty http(s), rejects empty | free-form https/http accepted; empty + blank rejected |
+| T5 | validateModelId accepts free-form alphanumeric, rejects blank | `gpt-4o-mini` / `claude-3-5-sonnet` / `Qwen2-VL-7B`; empty rejected |
+| T6 | validateModelId accepts Ollama tag-style id | `llama3.2:3b` / `qwen2:7b-instruct` / `meta-llama/Llama-3-8B` |
+| T7 | validateApiKey required for hosted, optional for loopback | OpenAI/Anthropic reject blank; Ollama/Custom accept blank |
+| T8 | validateForm composes the three checks | happy-path OpenAI = Valid; missing apiKey = Invalid("apiKey") |
+
+**Build verification**
+
+| Metric | Result |
+|---|---|
+| `:app:compileDebugKotlin` | **BUILD SUCCESSFUL**, 0 errors, 0 warnings |
+| `:app:testDebugUnitTest --rerun-tasks` | **114 PASS / 0 FAIL** (106 pre-existing + 8 new = target met) |
+| `:app:lintDebug` | 0 errors / **86 warnings** (unchanged from Sprint 25b closure — the AGP 8.7.3 → 8.8.2 bump closed fewer `GradleDependency` warnings than originally projected because the underlying deps themselves didn't bump) |
+| `cargo check` (handy-core/) | green; 2 pre-existing `dead_code` warnings in `transcription/engine.rs` StreamWorker/PeriodicWorker unrelated to Sprint 26 |
+
+**Revision notes for the dev who picks up Sprint 27**
+
+- The `@Deprecated` breadcrumb on `PostProcessContent` (SettingsScreen.kt) can be entirely removed in Sprint 29 polish; the function body becomes unreachable.
+- AccelerationBackend → Rust engine wiring (Vulkan + NNAPI) deferred per Sprint 25b closure; lands when Sprint 26b/29 reintroduces a Sprint 26+ backend-wiring sprint.
+- AGP 9.x + Kotlin 2.0 migration would close ~21 lint warnings in block — currently deferred.
+- 1 `UnusedResources` went up (new `postprocess_*` strings not yet referenced in toolbar/help text) — runs `:app:lintDebug focus UnusedResources` to enumerate.
