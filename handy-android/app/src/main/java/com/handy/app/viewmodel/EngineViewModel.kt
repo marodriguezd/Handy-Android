@@ -100,11 +100,22 @@ class EngineViewModel(
     init {
         modelsDir.mkdirs()
         viewModelScope.launch(Dispatchers.IO) {
-            EngineBridge.nativeInit(
-                modelDir = modelsDir.absolutePath,
-                configDir = configDir.absolutePath,
-                callback = this@EngineViewModel,
-            )
+            try {
+                EngineBridge.nativeInit(
+                    modelDir = modelsDir.absolutePath,
+                    configDir = configDir.absolutePath,
+                    callback = this@EngineViewModel,
+                )
+            } catch (t: Throwable) {
+                // Preserve structured-concurrency cancellation semantics
+                // (mirrors the HistoryViewModel.retry pattern from Sprint 24).
+                if (t is CancellationException) throw t
+                // Native library unavailable (Robolectric test / pure-JVM CI).
+                // EngineBridge.init already catches UnsatisfiedLinkError at
+                // class-load; this catches invocation-time failures so the
+                // VM remains usable for layout-only / pure-Compose tests.
+                Log.w(TAG, "nativeInit unavailable; engine will be non-functional", t)
+            }
             // Capability + settings snapshot for logcat observability
             val snapshot = DeviceCapabilityDetector.detect(getApplication())
             val settings = SettingsStore(getApplication())

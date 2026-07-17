@@ -10,7 +10,25 @@ import java.nio.ByteBuffer
 object EngineBridge {
 
     init {
-        System.loadLibrary("handy_core")
+        try {
+            System.loadLibrary("handy_core")
+        } catch (e: UnsatisfiedLinkError) {
+            // Native library is not available in JVM-only environments
+            // (Robolectric tests, pure-JVM CI runners). Individual
+            // `external fun` calls already throw UnsatisfiedLinkError at
+            // invocation time. Without this try/catch, the
+            // ExceptionInInitializerError poisons the whole class
+            // (NoClassDefFoundError on every subsequent access).
+            //
+            // Logged at WARN so a real production packaging bug (missing
+            // libhandy_core.so in APK `lib/`) surfaces in logcat instead
+            // of being silently swallowed.
+            android.util.Log.w(
+                "EngineBridge",
+                "handy_core native lib not loaded \u2014 engine will be non-functional",
+                e,
+            )
+        }
     }
 
     // ── Lifecycle ──────────────────────────────────────────────
