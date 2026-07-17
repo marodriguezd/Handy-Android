@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun OnboardingIconContainer(
     icon: ImageVector,
-    contentDescription: String? = null,
     modifier: Modifier = Modifier,
+    contentDescription: String? = null,
 ) {
     Box(
         modifier = modifier

@@ -691,3 +691,30 @@ Sprint 27a implemented end-to-end. **27a scope only — adaptive icons deferred 
 **Carry-over to Sprint 28:** Debug panel gated by `Settings.debugMode == true` (LogLevelSelector, WhatsNewPreview, UpdateChecksToggle, PasteDelay slider, AlwaysOnMicrophone switch, LiveLogViewer ring buffer of `Log.X` calls); Shizuku Android 16 reflection probe for `PrivateApi` (3 lint warnings).
 
 **Build state: 119 PASS / 0 FAIL, 0 compile warnings, 0 lint errors, 86 lint warnings (matches baseline).** Code-reviewer APPROVED in 2 passes. Commit pending user-push approval per AGENTS.md auth note.
+
+## 📌 Session 2026-07-17 (resumed, fifth pass) — Sprint 27b closure
+
+This session continued immediately after Sprint 27a closure and shipped the deferred adaptive launcher icon regeneration that the original Sprint 27 plan tagged "designer-asset-required." Delivered with a clean semantic vector (no designer wait) plus the carry-over ModifierParameter fix from Sprint 27a.
+
+**What landed (Sprint 27b, 4 modified + 1 new + 16 deletes = 21 files)**
+
+- **NEW** `app/src/main/res/drawable/ic_launcher_foreground.xml` — single-color (white) vector mic glyph; 108×108 dp viewport with all artwork inside the 72dp safe zone. Capsule body (filled) + stand U-arc (stroked `#FFFFFF`, `strokeLineCap="round"`, `strokeWidth="4"`) + stem + base bar. Reused for both `<foreground>` (against `@color/primary` pink background) and `<monochrome>` (Android 13+ Themed Icons tinted with the user's theme color).
+- **MOD** `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` — `<foreground>` swapped from raster to vector; added `<monochrome>` tag for Themed Icons.
+- **MOD** `app/src/main/AndroidManifest.xml` — `android:roundIcon="@mipmap/ic_launcher_round"` → `@mipmap/ic_launcher` (system applies launcher mask shape automatically).
+- **MOD** `app/src/main/java/com/handy/app/ui/onboarding/components/OnboardingIconContainer.kt` — parameter reorder `(icon, contentDescription, modifier)` → `(icon, modifier, contentDescription)`. Closes the latent `Modifier parameter should be the first optional parameter` lint warning that Sprint 23 partial-lint-cleanup had `@Suppress`'d on HandyFab/HandyTonalBlock/SettingsGroup but missed this Sprint 27a-shipped component.
+- **DEL** `mipmap-anydpi-v26/ic_launcher_round.xml` + 15 legacy raster PNGs across `mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher{,_round,_foreground}.png` — redundant since minSdk=26 reads adaptive-icon XML directly; all `ic_launcher.png` byte-identical to `ic_launcher_round.png`; hdpi variant was 49×49 px (33 dp) instead of 72×72.
+
+**Build state at Sprint 27b closure**:
+
+- `:app:compileDebugKotlin` — BUILD SUCCESSFUL, 0 warnings.
+- `:app:lintDebug --rerun-tasks` — 0 errors, **76 warnings** (= baseline 86 − 14 Icon*Launcher* − 1 modifier + 1 UnusedRes + 3 GradleDep cache artifacts).
+- `:app:testDebugUnitTest --rerun-tasks` — **117 PASS / 0 FAIL** (corrected count via per-file XML sum; Sprint 27a-reported 119 was enumeration drift over `MobileRecommendations` (10) + `ModelCapability` (11)).
+- `cargo check` (handy-core/) — green; no Rust change this sprint.
+
+**Code-reviewer-minimax-m3 (1 pass)**: APPROVED. Two nit-quality items raised and addressed in this turn: (a) the base bar geometry was on the safe-zone edge — shifted from `M44,88 H64` to `M44,86 H64` for 2dp safety margin from the safe-zone bottom (Pixel squircle / One UI teardrop mask can be aggressive at the bottom edge); (b) parameter reorder in `OnboardingIconContainer` matched the M3 stdlib convention; no Kotlin callsite breaks because Sprint 27a's 5 call sites all passed `icon = ...` via named args.
+
+**Lint trajectory reset (post-cache-correction)**: The previous "84 → 86 → 76" trajectory had two stale-cache artifacts around `--rerun-tasks`-less runs. The canonical Sprint 27b baseline is **76**. Sprint 29's `~9 residuals` target should be recalibrated against this 76: 1 `mipmap-anydpi-v26` carry-over (structure, fixed by adaptive icon), up to 3 `PrivateApi`/`DiscouragedPrivateApi` (Shizuku Android 16 probe in Sprint 28), 1 `OldTargetApi` (informational, AGP bump needs Kotlin 2.0), 1 `UseTomlInstead`, 41 `UnusedResources` (string sweep in Sprint 29), 27 `GradleDependency` (AGP bump carries 18 of the 27, AGP 9.x + Kotlin 2.0 deferred).
+
+**Push status**: 1 local commit pending (parent root + `handy-android` submodule, per the cross-submodule commit pairing pattern in Sprint 27a). User runs `git push origin main` from interactive shell per AGENTS.md auth notes (Plan-D of the release-body-update ladder).
+
+**Next session**: Sprint 28 — Debug panel gated by `Settings.debugMode == true` (LogLevelSelector, WhatsNewPreview, UpdateChecksToggle, SoundPicker, PasteDelay slider, RecordingBuffer slider, AlwaysOnMicrophone switch, LiveLogViewer ring buffer of `android.util.Log`). Plus Shizuku Android 16 reflection probe (3 PrivateApi warnings). Target 122+ tests with new `RingBufferLogTest` (5). The previous optional planning also includes a partial Vulkan re-enable test report (`BACKENDS.md`) and a QNN/Hexagon NPU maintenance-cost evaluation, both deferred indefinitely until AGP/Kotlin 2.0 migration lands (Sprint 26b / 29).

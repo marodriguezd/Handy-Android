@@ -881,3 +881,49 @@ Codebase grep `androidx.compose.material3.AlertDialog` over `handy-android/app/s
 | `:app:lintDebug` | 0 errors, 86 warnings (matches baseline) |
 | Code-reviewer | APPROVED in 2 passes (refactor completeness + remember perf nit) |
 
+### Sprint 27b — Adaptive launcher icon MD3 + 14 lint warnings closed (Julio 17, 2026)
+
+**Decision**: Sprint 27b was deferred from Sprint 27a because adaptive launcher icons were tagged "designer-asset-required" in the original plan. Picked up with a clean semantic vector icon (mic glyph) that closes all 14 icon-related lint warnings and produces an MD3-native adaptive launcher icon set. Also closes a latent `ModifierParameter` lint regression that slipped through Sprint 27a.
+
+**What shipped (5 file changes, 16 deletes)**
+
+| Path | Change |
+|------|--------|
+| `app/src/main/res/drawable/ic_launcher_foreground.xml` | **NEW** — single-color (white) vector mic glyph: 4 paths in 108×108 dp viewport, all artwork inside the 72dp safe zone (y=18..90). Capsule body (filled) + stand U-arc (stroked) + stem + base bar. Single fill color so the same vector serves both `<foreground>` against `@color/primary` background and `<monochrome>` for Android 13+ Themed Icons tinted with the user's theme color. |
+| `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` | MODIFIED — `<foreground>` swapped from `@mipmap/ic_launcher_foreground` (raster) → `@drawable/ic_launcher_foreground` (vector); added `<monochrome android:drawable="@drawable/ic_launcher_foreground"/>` tag for Themed Icons. |
+| `app/src/main/AndroidManifest.xml` | MODIFIED — `android:roundIcon("@mipmap/ic_launcher_round")` → `android:roundIcon("@mipmap/ic_launcher")`. Same adaptive icon; launcher applies the mask shape automatically. |
+| `app/src/main/java/com/handy/app/ui/onboarding/components/OnboardingIconContainer.kt` | MODIFIED — reordered parameters from `(icon, contentDescription, modifier)` → `(icon, modifier, contentDescription)` to satisfy the `Modifier parameter should be the first optional parameter` lint rule. Carry-over from Sprint 27a: the partial lint cleanup in Sprint 23 had `@Suppress('ModifierParameter')`'d HandyFab/HandyTonalBlock/SettingsGroup but NOT this Sprint 27a-shipped component. |
+| `app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml` + 15 PNGs | DELETED — 1 redundant adaptive-icon XML + 15 legacy raster icon files across 5 densities (`ic_launcher{,_round,_foreground}.png` × `{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}`). All `ic_launcher.png` byte-identical to `ic_launcher_round.png` (IconDuplicates); hdpi variant was 49×49 px (33dp) instead of 72×72 (IconDipSize); `ic_launcher_round.png` was square instead of circular (IconLauncherShape). minSdk=26 makes every supported device read the adaptive-icon XML directly. |
+
+**Lint delta (true, post `--rerun-tasks` cache invalidation)**
+
+| Category | Pre | Post | Δ |
+|---|---|---|---|
+| `IconLauncherShape` | 5 | 0 | **−5** |
+| `IconDuplicates` | 5 | 0 | **−5** |
+| `IconDipSize` | 2 | 0 | **−2** |
+| `MonochromeLauncherIcon` | 2 | 0 | **−2** |
+| `ModifierParameter` (carry-over Sprint 27a latent) | 1 | 0 | **−1** |
+| `UnusedResources` | 40 | 41 | +1 (stale-cache corrected — `dialog_confirm`/`ime_error_retry_hint`/etc.) |
+| `GradleDependency` | 24 | 27 | +3 (stale-cache corrected — transitive bumps incl. `io.sentry:sentry-android 7.14.0 → 8.43.2`) |
+| `(rest)` | unchanged | unchanged | 0 |
+| **TOTAL** | **86** | **76** | **−10** net |
+
+The +1 `UnusedResources` and +3 `GradleDependency` jumps are stale-cache artifacts: prior `--rerun-tasks`-less `:app:lintDebug` runs cached an under-count because lint skipped re-analysis. New TRUE counts surfaced two libs that had quietly transitively bumped (`io.sentry:sentry-android`, `com.google.android.material`) and a substring entry (`dialog_confirm`, `ime_error_retry_hint`) that were already unused but missed by the stale cache. PROGRESS baseline is now **76**.
+
+**Verification (force-rerun, latency 33s lint + 31s test)**
+
+| Metric | Result |
+|---|---|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:lintDebug --rerun-tasks` | 0 errors, **76 warnings** (= 86 baseline − 14 Icon*Launcher* − 1 modifier + 1 unusedRes + 3 gradleDep cache artifacts) |
+| `:app:testDebugUnitTest --rerun-tasks` | **117 PASS / 0 FAIL** — corrected count via per-file XML sum (11+4+23+10+11+4+6+2+2+14+5+8+6+9+2 = 117). Sprint 27a-reported 119 was an enumeration drift over `MobileRecommendations` (10) + `ModelCapability` (11) tests that were always counted but rolled up by hand. |
+| Code-reviewer-minimax-m3 | APPROVED in 1 pass after cosmetic safe-zone nit (base bar `M44,88 H64` → `M44,86 H64` for 2dp safety margin from the safe-zone bottom edge). |
+
+**Design choice (vector over raster, single-color for monochrome reuse)**
+
+The bg + fg + monochrome-share-same-vector pattern is the canonical MD3 / Android adaptive-icon shape. Path strokes use `#FFFFFF` only with `android:strokeLineCap="round"` for soft ends and a 4dp stroke width matching the capsule body's half-width — silhouette stays coherent at small (Pixel launcher surface) and large (Splash Screen, AOD) sizes. Adding a `io.sentry:sentry-android 8.x` bump is intentionally deferred to Sprint 29 (avoid in-cycle Kotlin/Compose compiler churn mid-MD3 migration; the lint warning is informational).
+
+**Push status**: One local commit pending (parent root + `handy-android` submodule, per the cross-submodule commit pairing pattern established in Sprint 27a). User runs `git push origin main` from interactive shell per AGENTS.md auth notes (Plan-D of the release-body-update ladder is the only reliable push workflow in this environment).
+
+**Carry-over to Sprint 28**: Debug panel gated by `Settings.debugMode == true` (LogLevelSelector, WhatsNewPreview, UpdateChecksToggle, PasteDelay slider, AlwaysOnMicrophone switch, LiveLogViewer ring buffer of `Log.X`). Plus Shizuku Android 16 reflection probe for the 3 `PrivateApi` warnings (replace reflection-based hidden API calls where public API suffices). Target 122+ tests with new `RingBufferLogTest`. Lint trajectory expected: 76 → ~73 (close the 3 `PrivateApi` if reflection-alternatives succeed).
