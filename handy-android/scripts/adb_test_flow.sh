@@ -18,8 +18,18 @@ DEVICE="${1:-$DEFAULT_DEVICE}"
 MODEL_ID="${2:-$DEFAULT_MODEL}"
 
 # Derive package/activity from the debug build configuration.
+# Sprint 28b-v10 — explicit absolute-class receiver component. The `.Class`
+# shorthand in `am broadcast -n pkg/.Class` is resolved by `am` against
+# the runtime applicationId (com.handy.app.debug), but the Kotlin source
+# lives under `namespace = "com.handy.app"`. The two diverge → Android
+# silently drops the broadcast, so use the absolute class form (below)
+# and never the relative `-n $pkg/.Class` form.
+# (added 2026-07-17, Sprint 28b-v10; if this lesson ever ages out of
+#  AGENTS.md/MIGRATION_PLAN_MD3.md, grep `# Sprint 28b-v10` to find
+#  it again.)
 PACKAGE="com.handy.app.debug"
 ACTIVITY="${PACKAGE}/com.handy.app.MainActivity"
+RECEIVER="${PACKAGE}/com.handy.app.TestCommandReceiver"
 APK="app/build/outputs/apk/debug/app-debug.apk"
 
 # Path resolution for sibling scripts (check_device.sh lives next door).
@@ -71,10 +81,11 @@ launch_app() {
 
 download_model() {
     log_info "Requesting download of model $MODEL_ID..."
+    # Explicit absolute-class component target. See $RECEIVER above.
     run_adb shell am broadcast \
+        -n "$RECEIVER" \
         -a com.handy.app.action.DOWNLOAD_MODEL \
-        --es model_id "$MODEL_ID" \
-        "$PACKAGE"
+        --es model_id "$MODEL_ID"
 }
 
 poll_for_download_complete() {
@@ -100,10 +111,11 @@ poll_for_download_complete() {
 
 set_active_model() {
     log_info "Requesting activation of model $MODEL_ID..."
+    # Explicit absolute-class component target. See $RECEIVER above.
     run_adb shell am broadcast \
+        -n "$RECEIVER" \
         -a com.handy.app.action.SET_ACTIVE_MODEL \
-        --es model_id "$MODEL_ID" \
-        "$PACKAGE"
+        --es model_id "$MODEL_ID"
 }
 
 poll_for_active_model() {

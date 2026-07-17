@@ -68,6 +68,20 @@ class TestCommandReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Sprint 28b-v10 — defensive `Log.i` BEFORE any gate. Reports whether
+        // onReceive is being invoked at all, so we can distinguish upstream
+        // gate failures (manifest placeholder substitution defect, ICE
+        // permission denial, DUMP permission revocation) from downstream
+        // handler bugs. Tag is unique for grep: `adb logcat -d -s TCR-DIAG:I`.
+        // Should appear on EVERY broadcast call to TestCommandReceiver.
+        Log.i(
+            "TCR-DIAG",
+            "onReceive entry" +
+                " action=${intent.action}" +
+                " enabledExtra=${intent.getBooleanExtra("enabled", false)}" +
+                " component=${intent.component?.flattenToShortString()}" +
+                " extrasKeys=${intent.extras?.keySet()?.sorted()}",
+        )
         // Defense-in-depth: this receiver should only be reachable in debug builds,
         // but make it a no-op in release just in case the manifest merge ever fails.
         if (!BuildConfig.DEBUG) {
