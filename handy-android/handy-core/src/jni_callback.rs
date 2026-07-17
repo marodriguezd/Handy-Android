@@ -47,6 +47,41 @@ pub fn dispatch_vad_level(env: &mut JNIEnv, callback: &GlobalRef, level: f32) {
     }
 }
 
+/// Sprint 25b — per-frame audio dispatch. The Rust pipeline emits
+/// 480-sample @ 16 kHz Float32 frames (post-resampling) on the AAudio
+/// real-time thread. We dispatch each frame to Kotlin's
+/// `EngineCallback.onAudioFrames(FloatArray)` so that the Kotlin-side
+/// `RecordingRepository.pushFloatArrayFrames` can persist PCM bytes
+/// alongside the transcript.
+///
+/// Performance note: at 30 fps (one frame per ~33ms), this is one
+/// JNI round-trip per polling interval. Sprint 25b Q4 verdict: this
+/// is well within budget on modern Android devices. If profiling
+/// later shows this is the bottleneck, batching to 100ms windows is
+/// the natural next step (the consumer thread already can be
+/// parameterized for batched dispatch).
+pub fn dispatch_audio_frames(env: &mut JNIEnv, callback: &GlobalRef, frames: &[f32]) {
+    let j_array = match env.new_float_array(frames.len() as i32) {
+        Ok(a) => a,
+        Err(e) => {
+            warn!("dispatch_audio_frames: new_float_array: {e}");
+            return;
+        }
+    };
+    if let Err(e) = env.set_float_array_region(&j_array, 0, frames) {
+        warn!("dispatch_audio_frames: set_float_array_region: {e}");
+        return;
+    }
+    if let Err(e) = env.call_method(
+        callback.as_obj(),
+        "onAudioFrames",
+        "([F)V",
+        &[JValue::Object(&j_array)],
+    ) {
+        warn!("dispatch_audio_frames: call_method failed: {e}");
+    }
+}
+
 pub fn dispatch_error(env: &mut JNIEnv, callback: &GlobalRef, code: i32, message: &str) {
     let j_message = match env.new_string(message) {
         Ok(s) => s,

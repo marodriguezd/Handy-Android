@@ -1,4 +1,5 @@
 use crate::engine::{ensure_engine_init, EngineState, ENGINE, JAVA_VM};
+use crate::history::retry as wav_decode;
 use crate::jni_callback;
 use jni::objects::{JByteBuffer, JClass, JObject, JString};
 use jni::sys::{jboolean, jint, jlong, jstring};
@@ -161,6 +162,15 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeInit<'local>
 
         info!("Handy engine initialized");
 
+        // Sprint 25b — start the per-frame audio recording sink so the
+        // consumer thread is alive and waiting before any recording
+        // session begins. The sink dispatches each Float32 frame to
+        // Kotlin's `EngineCallback.onAudioFrames` via the existing
+        // jni_callback helper, feeding `RecordingRepository`.
+        with_engine(|state| {
+            state.recording_sink.start(state.callback.clone());
+        });
+
         if let Ok(mut attached_env) = get_env_attached() {
             with_engine(|state| {
                 jni_callback::dispatch_state_change(&mut attached_env, &state.callback, 0);
@@ -177,6 +187,10 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeDestroy<'loc
     with_guard(&mut _env, "nativeDestroy", |_env| {
         with_engine(|state| {
             state.idle_watcher.stop();
+            // Sprint 25b — stop the per-frame audio sink and detach from
+            // the pipeline before tearing down the audio machinery.
+            state.audio_pipeline.set_recording_sink(None);
+            state.recording_sink.stop();
             if state.is_streaming {
                 state.transcription_engine.cancel_stream();
                 state.audio_pipeline.set_stream_router(None);
@@ -323,6 +337,15 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeStartRecordi
             // setup happens asynchronously via nativeAttemptStreaming().
             // Audio accumulates in the pipeline buffer until then.
             state.audio_pipeline.set_stream_router(None);
+            // Sprint 25b — attach the per-frame audio sink so each
+            // resampled Float32 frame is forwarded into Kotlin's
+            // RecordingRepository.pushFloatArrayFrames. The sink was
+            // started once in nativeInit; here we just bind it to the
+            // pipeline for this recording session. Detachment happens
+            // in nativeFinalizeStream / nativeCancelRecording to drop
+            // the pipeline ref while the sink is still alive (the
+            // RecordingSink Arc outlives any single session).
+            state.audio_pipeline.set_recording_sink(Some(state.recording_sink.clone()));
 
             if let Err(e) = state.audio_pipeline.start(sample_rate) {
                 jni_callback::dispatch_error(&mut attached_env, &state.callback, 2, &e);
@@ -513,6 +536,9 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStre
                 };
                 state.audio_pipeline.set_stream_router(None);
 
+                // Sprint 25b — detach the per-frame sink so subsequent
+                // frames arriving in post-recording teardown are dropped.
+                state.audio_pipeline.set_recording_sink(None);
                 match state.transcription_engine.finalize_stream() {
                     Some(text) => {
                         info!("Streaming transcription complete ({} chars): {}", text.len(), text);
@@ -539,6 +565,8 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeFinalizeStre
                     }
                 }
             } else {
+                // Sprint 25b — same sink detachment in batch mode.
+                state.audio_pipeline.set_recording_sink(None);
                 // Batch mode (existing code)
                 let accumulated = match state.audio_pipeline.stop() {
                     Ok(a) => a,
@@ -598,6 +626,9 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeCancelRecord
         };
 
         with_engine(|state| {
+            // Sprint 25b — detach sink before cancel so frames
+            // arriving mid-cancel don't leak into a stale recording.
+            state.audio_pipeline.set_recording_sink(None);
             if state.is_streaming {
                 state.transcription_engine.cancel_stream();
                 let _ = state.audio_pipeline.cancel();
@@ -950,4 +981,135 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeToggleHistor
             }
         });
     });
+}
+
+// ── Sprint 25b: native retry ─────────────────────────────────────────────
+//
+// Sprint 24 declared `EngineBridge.nativeRetryHistoryEntry` in Kotlin
+// (Grep that file: line 143). The symbol was missing from Rust, so the
+// framework fell back to a simulated 2-second delay in
+// `HistoryViewModel.retry()`. Sprint 25b lands the actual JNI binding.
+//
+// Concurrency note (Sprint 25b Thinker Q10): the function holds the
+// global `ENGINE` Mutex for the duration of `transcription_engine.run`
+// (typically ~3-10s for a 30s clip on mobile hardware). This means
+// concurrent JNI calls (`nativeStartRecording`,
+// `nativeCancelRecording`, `nativeSetIdleTimeout`, the IdleWatcher
+// tick, etc.) will STALL during retry until transcription returns.
+//
+// Documented mitigations:
+//   * `HistoryViewModel.UiState.retryingId` already disables the
+//     Retry button on the History card while a retry is in flight.
+//   * `nativeRetryHistoryEntry` bails out (`is_recording` check) if a
+//     recording session is active, so the user can always start fresh
+//     after Cancel.
+//   * If the stall becomes a UX problem in Sprint 26+, the proper fix
+//     is to make `TranscriptionEngine` lock-free for read-only
+//     inference (wrap model in `Arc<Mutex<>>` and clone the handle
+//     outside the global mutex). Tracked in PROGRESS.md.
+#[no_mangle]
+pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeRetryHistoryEntry<'local>(
+    mut _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    entry_id: jlong,
+) -> jboolean {
+    with_guard(&mut _env, "nativeRetryHistoryEntry", |_env| {
+        let entry_id = entry_id;
+        with_engine(|state| {
+            // Bail out if a recording session is currently active — the
+            // caller must cancel first. See Thinker Q10 caveat above.
+            if state.is_recording {
+                info!(
+                    "nativeRetryHistoryEntry({entry_id}): rejected — recording active"
+                );
+                return false as jboolean;
+            }
+
+            // Phase 1: lookup the entry by id. Returns EntryNotFound
+            // if a concurrent delete landed between retry() and
+            // nativeGetHistory.
+            let entry = match state.history_manager.get_entry_by_id(entry_id) {
+                Ok(e) => e,
+                Err(crate::history::manager::HistoryError::EntryNotFound(_)) => {
+                    info!("nativeRetryHistoryEntry({entry_id}): entry not found");
+                    return false as jboolean;
+                }
+                Err(e) => {
+                    warn!("nativeRetryHistoryEntry({entry_id}): lookup failed: {e}");
+                    return false as jboolean;
+                }
+            };
+
+            // Phase 2: decode WAV. Strict 16-bit mono 16 kHz (matches
+            // RecordingRepository.writeBytes shape; verified by the
+            // WAV header test in RecordingRepositoryTest).
+            let wav_path = match entry.wav_path.as_deref() {
+                Some(p) => p,
+                None => {
+                    info!(
+                        "nativeRetryHistoryEntry({entry_id}): entry has no wav_path"
+                    );
+                    return false as jboolean;
+                }
+            };
+            let samples = match wav_decode::decode_wav_to_f32(wav_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!(
+                        "nativeRetryHistoryEntry({entry_id}): wav decode failed: {e}"
+                    );
+                    // Surface the format error to the Kotlin onError
+                    // channel with a dedicated code (4) so the History
+                    // card can render a localizable message.
+                    if let Ok(mut env_attached) = get_env_attached() {
+                        jni_callback::dispatch_error(
+                            &mut env_attached,
+                            &state.callback,
+                            4,
+                            &format!("retry failed: {e}"),
+                        );
+                    }
+                    return false as jboolean;
+                }
+            };
+            if samples.is_empty() {
+                warn!("nativeRetryHistoryEntry({entry_id}): WAV has zero samples");
+                return false as jboolean;
+            }
+
+            // Phase 3: run inference. This is the long pole (~3-10s
+            // on mobile). Holds the ENGINE Mutex for the entire
+            // duration — see Thinker Q10 caveat.
+            let text = match state.transcription_engine.run(&samples) {
+                Ok(t) => t,
+                Err(e) => {
+                    warn!(
+                        "nativeRetryHistoryEntry({entry_id}): run failed: {e}"
+                    );
+                    return false as jboolean;
+                }
+            };
+
+            // Phase 4: writeback. We pass `None` for `post_processed`
+            // to INVALIDATE the previous LLM cleanup — keeping an old
+            // post_processed while the raw text has been refreshed is
+            // user-confusing (Thinker Q2 verdict).
+            if state
+                .history_manager
+                .update_text_full(entry_id, &text, None)
+                .is_err()
+            {
+                warn!(
+                    "nativeRetryHistoryEntry({entry_id}): update_text_full failed"
+                );
+                return false as jboolean;
+            }
+
+            info!(
+                "nativeRetryHistoryEntry({entry_id}) ok: {} chars",
+                text.len()
+            );
+            true as jboolean
+        })
+    })
 }

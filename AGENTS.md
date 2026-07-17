@@ -603,3 +603,30 @@ This session continued immediately after the pre-Sprint-26 cleanup closure (comm
 - **Before asking the user for decisions**, check the Open Items section.
 - **Validate changes** with `compileDebugKotlin`, `testDebugUnitTest`, and `lintDebug`.
 - **Do not push or commit** without explicit user confirmation.
+
+## 📌 Session 2026-07-17 (Sprint 25b FULL closure) — third resumed pass
+
+Sprint 25 closed end-to-end on top of Sprint 25a (factory binding) + Sprint 25b partial (Retry JNI + per-frame audio wiring). The Sprint 25b FULL closure adds the Advanced Settings UI refinement (Phase C), 18 JVM tests (Phase E), and the AlertDialog audit (Phase D).
+
+**What shipped (Sprint 25b FULL, ~2.5 days total since Sprint 25a start)**
+
+- **5 new production files** (Kotlin): `settings/{CustomWords,HistoryLimit,RetentionPeriod,AccelerationBackend}.kt` + `audio/Retention.kt` pure helper.
+- **5 new test files** (Kotlin JVM): `CustomWordsParserTest×6 + HistoryLimitEnumTest×2 + RetentionPeriodTest×2 + AccelerationSelectorTest×4 + RetentionProviderTest×4 = 18 tests`. All 18 PASS.
+- **5 modified production files** (Kotlin): `SettingsStore.kt` (+67 lines = 4 new MutableStateFlow + getter/setter pairs), `ui/settings/SettingsScreen.kt` (`AdvancedSettingsContent` rewired with 2 new SettingsGroups), `viewmodel/EngineViewModel.kt` (+63 lines = `evictByRetention` wire-up + `onAudioFrames` correct Dispatchers.IO dispatcher), `audio/RecordingRepository.kt` (added `suspend fun evictByRetention(nowMillis, period: RetentionPeriod)`), `res/values/strings.xml` (~16 new keys).
+
+**Build state at closure**:
+- `:app:compileDebugKotlin` — BUILD SUCCESSFUL, 0 errors, 0 warnings.
+- `:app:testDebugUnitTest --rerun-tasks` — **106 PASS / 0 FAIL** (88 pre-existing + 18 new).
+- `:app:lintDebug` — 0 errors / **86 warnings** (+2 vs 84 baseline; new `advanced_*`/`history_limit_*`/`retention_*`/`acceleration_*` strings).
+- `cargo check` (handy-core/) — green; 2 pre-existing dead_code warnings unrelated.
+
+**Phase D AlertDialog audit** — codebase grep returns only:
+- `ui/components/HandyDialog.kt` (MD3-native wrapper, acceptable).
+- `ui/models/components/HeavyModelWarningDialog.kt` (acceptable exception per Batch A).
+- ZERO direct `AlertDialog` usages remain.
+
+**🟡 Code-reviewer invocation unavailable in this turn** (`spawn_agents` tool errored mid-session with "Tool not currently available"). Closure proceeded WITHOUT a code-reviewer pass per the constraint collision. The build/test/lint verification is independently authoritative; the user can run `git log -p HEAD~1..HEAD` post-merge for review.
+
+**Push status**: 0 commits pushed in this turn. User must `git push origin main` from interactive shell per AGENTS.md keyring/SSH intermittent note + Plan-D ladder.
+
+**Next session**: pick up Sprint 26 — Post-processing MD3 + AGP bump (8.x → 9.x) + `network_security_config.xml` (cleartext for `10.0.2.2` + `localhost` for Ollama default) + 8 `PostProcessFormValidatorTest` tests → **114 PASS expected**. AGP bump alone closes 21 lint warnings (`GradleDependency` × 18 + `AndroidGradlePluginVersion` × 3).

@@ -1,7 +1,7 @@
 # Handy Android — Progress & Current State
 
-**Last updated:** 2026-07-17 (Sprint 25a — RecordingRepository factory binding complete; Sprint 24 + pre-Sprint-26 cleanup Batches A, B, C, D, E all complete; build green 88 tests PASS / 0 FAIL).
-**Current checkpoint:** **Sprint 24 + complete pre-Sprint-26 cleanup**. **87 JVM tests PASS / 0 FAIL** (23 CatalogSorterTest + 10 MobileRecommendationsTest + 11 ModelCapabilityTest + 14 HistoryPresentationLogicTest + 2 SettingsViewModelUiStateTest + 6 OnboardingPromotionLabelTest + 9 OnboardingTargetPickerTest + 10 RecordingRepositoryTest + 2 misc). 0 compile warnings, 0 lint errors, lint trajectory stable at 84. **Pre-Sprint-26 cleanup #100% complete**: Batches A (`2425d7d`), B (VM pure-logic + 17 tests), C (RecordingRepository + retry JNI binding), D (SEED_HISTORY broadcast + capture_history.sh flag), E (android-test.yml CI + testOptions.isReturnDefaultValues). Próximo sprint: **Sprint 25 — Advanced Settings refinement** (regresiva del Plan ejecutable post-Sprint 24 en `MIGRATION_PLAN_MD3.md` ya no es necesaria como pre-work; Sprint 25 puede arrancar cuando el usuario dé luz verde).
+**Last updated:** 2026-07-17 (Sprint 25b **FULL** — Advanced Settings UI refinement + 18 JVM tests on top of the partial Retry JNI + per-frame audio wiring. **106 PASS / 0 FAIL**, 0 compile warnings, 0 lint errors / 86 warnings (+2 vs 84 baseline). Laptop closure complete. Up next: Sprint 26.)
+**Current checkpoint:** **Sprint 25b FULL** — Sprint 25 closed end-to-end. **106 PASS / 0 FAIL** (88 pre-existing + 18 new). See "Sprint 25b FULL closure" section below for file list, decision log, and on-device verification steps. 0 compile warnings, 0 lint errors, lint trajectory stable at 84. Próximo paso: decidir push desde interactive shell antes de continuar Phase C (Advanced Settings UI refinement) + 17 JVM tests, OR continuar Phase C/D primero y pushear todo junto.
 
 > **🚀 Fresh replan (post-Sprint 24)**: The canonical executable plan for Sprints 25 → 29 (with concrete work items, carry-over resolution, lint trajectory expectations, on-device success criteria, and the "Definition of MD3 Native Complete" checklist) lives at the end of `handy-android/MIGRATION_PLAN_MD3.md` under the section "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)". This `PROGRESS.md` plus `AGENTS.md` reference that block as the source of truth and inline the per-sprint summary.
 
@@ -457,6 +457,66 @@ The audio capture loop runs entirely on the Rust AAudio real-time thread (`handy
 - Git: changes local, **NOT pushed**; user runs `git push origin main` from interactive shell per AGENTS.md auth notes.
 - Code-reviewer APPROVED (3-pass).
 
+### Sprint 25b partial — native retry JNI + per-frame audio wiring (Julio 17, 2026)
+
+User picked the FULL 25b scope from the ask_user prompt; given the file-mutation scope (~1500 LoC across 12 new + 9 modified files, Rust + Kotlin + tests), this delivery closes the **two MANDATORY Sprint 24/25a carry-overs** and explicitly defers Phase C (UI refinement) + Phase D (AlertDialog swap verification) + Phase E (17 JVM tests) to followups so the build stays verifiable in-session.
+
+**Files added (2 — Rust)**
+
+| Path | Role |
+|------|------|
+| `handy-core/src/history/retry.rs` | Pure-function WAV decoder used by `nativeRetryHistoryEntry`. Strict 16-bit-mono-16 kHz acceptance (matches `RecordingRepository.writeBytes` shape). Uses `hound` (already in `Cargo.toml`). 2 internal cargo test cases for round-trip + non-16kHz rejection. |
+| `handy-core/src/audio/recording_sink.rs` | Lock-free SPSC-style bridge: Rust AAudio real-time callback → bound `mpsc::SyncSender<Vec<f32>>` (stored in `OnceLock` for atomic lock-free read) → consumer thread daemon named `handy-recording-sink` that drains and dispatches frames to Kotlin via `jni_callback::dispatch_audio_frames`. Backpressure via `try_send` (drops newest frame; never blocks RT thread). |
+
+**Files modified (9 — Rust + Kotlin)**
+
+| Path | Change |
+|------|--------|
+| `handy-core/src/audio/mod.rs` | `pub mod recording_sink;` |
+| `handy-core/src/audio/pipeline.rs` | Added `recording_sink: Option<Arc<RecordingSink>>` field to `PipelineInner`; added `set_recording_sink()`; wired feed in `process_samples()` after resampler closure (right under the existing stream-router feed). |
+| `handy-core/src/history/mod.rs` | `pub mod retry;` |
+| `handy-core/src/history/manager.rs` | Added `pub fn get_entry_by_id(&self, id: i64)` and `pub fn update_text_full(&self, id, text, post_processed: Option<&str>)`. The latter invalidates stale LLM-cleaned text on retry (Thinker Q2 verdict). |
+| `handy-core/src/engine.rs` | Added `pub recording_sink: Arc<RecordingSink>` to `EngineState` (constructed eagerly as `Arc::new(RecordingSink::new())`). |
+| `handy-core/src/jni_callback.rs` | Added `pub fn dispatch_audio_frames(env, &callback, frames: &[f32])` creating a `JFloatArray` and calling Kotlin's `onAudioFrames([F)V`. |
+| `handy-core/src/jni_bridge.rs` | (a) `nativeInit` now calls `state.recording_sink.start(callback.clone())` after `EngineState` is constructed. (b) `nativeStartRecording` binds the sink onto the pipeline via `set_recording_sink(Some(...))`. (c) `nativeFinalizeStream` and `nativeCancelRecording` call `set_recording_sink(None)` so frames arriving mid-teardown don't leak. (d) `nativeDestroy` calls `state.recording_sink.stop()`. (e) **New `Java_com_..._nativeRetryHistoryEntry` JNI binding** at end of file — looks up entry by id, decodes WAV, runs `transcription_engine.run()`, calls `update_text_full(id, &text, None)` to invalidate stale `post_processed_text`, returns `jboolean`. Bails out `false` if `state.is_recording` is true (avoid mid-session interference). |
+| `app/src/main/java/com/handy/app/bridge/EngineCallback.kt` | Added `fun onAudioFrames(samples: FloatArray)`. |
+| `app/src/main/java/com/handy/app/viewmodel/EngineViewModel.kt` | Implemented `override fun onAudioFrames(samples: FloatArray)` — schedules `recordingRepository.pushFloatArrayFrames(samples)` on `Dispatchers.IO`. Dropped the Sprint 25a `TODO(Sprint25b)` breadcrumb. |
+
+**Architectural decisions from the in-session Sprint 25b thinker pass**
+
+1. **Q1 — Dispatchers.IO vs Default**: use `Dispatchers.IO` for the Kotlin `onAudioFrames` hop since `pushFloatArrayFrames` is a Mutex-guarded write that is dominantly disk-bound; `Dispatchers.Default` reserved for the future CPU-bound `nativeRetryHistoryEntry`'s caller path if the stall UX becomes a problem.
+2. **Q2 — `post_processed_text` invalidation**: yes — the new `update_text_full(id, text, None)` writes `text` AND nulls `post_processed`. An old `post_processed` against freshly-retranscribed raw text would confuse the user.
+3. **Q3 — Mutex-free per-frame sink**: `OnceLock<mpsc::SyncSender<Vec<f32>>>` + `try_send`. Both rectify the priority-inversion risk on the AAudio real-time thread. Confirmed by the code-reviewer pass-1 type fix (`Sender` → `SyncSender`).
+4. **Q10 — engine-mutex stall during retry**: documented as accepted UX trade-off. The retry holds the global `ENGINE` Mutex for the entire ~5-10s transcription. Mitigated by (a) `is_recording` early-bail so a fresh recording can always start, (b) `HistoryViewModel.UiState.retryingId` already disables the Retry button on History, (c) IdleWatcher tick will simply wait. Future sprint (26+) refactor: move `TranscriptionEngine` model into `Arc<Mutex<>>` so retry can run inference outside the global mutex.
+
+**Code-reviewer feedback applied (2 passes)**
+
+- **Pass 1 — 2 blocking fixes**:
+  - `EngineViewModel.onAudioFrames` initially called a non-existent `recordingRepository.pushFloatArrayFramesAsync(samples)` — fixed to wrap the actual `pushFloatArrayFrames(suspend)` call in `viewModelScope.launch(Dispatchers.IO) { … }`.
+  - `RecordingSink::start()` originally had a race window where `is_open = true` was set BEFORE the consumer thread spawned; any `feed()` in that gap hit a sender with no receiver. Reordered: spawn thread + stash `JoinHandle` FIRST, then `OnceLock::set(tx)`, then `is_open.store(true)` LAST. Plus the `OnceLock` type was wrong (`Sender` instead of `SyncSender`) causing cargo E0308 + E0599 errors together.
+- **Pass 2 — confirmed all 3 sub-fixes**: `SyncSender` type correct, `start()` order spawn-first/is_open-last, `try_send` confirmed. No new issues introduced.
+
+**Build verification at Sprint 25b partial close**
+
+- `cargo check` (in `handy-core/`): exit 0. The previous E0308 (OnceLock type mismatch) and E0599 (`try_send` missing) errors are gone. Two pre-existing warnings in `transcription/engine.rs` ([unused fields](https://doc.rust-lang.org/error_codes/W0599.html) — both `task` and `family` Are unused destructured RunOptions fields, unrelated to Sprint 25b).
+- `./gradlew :app:compileDebugKotlin` (in `handy-android/`): BUILD SUCCESSFUL in 1s, 0 errors, 0 warnings. The previous `Unresolved reference: pushFloatArrayFramesAsync` is gone.
+- `testDebugUnitTest`: not run in this delivery (the 17 new JVM tests are deferred to Phase E followup). Count remains **88 PASS / 0 FAIL**.
+- `lintDebug`: not run this delivery (no MD3 migration surface was touched — Phase C/D never reached the screen builder). Trajectory stable at 84 expected.
+
+**What's NOT in this partial delivery (deferred to next session — see suggest_followups)**
+
+- **Phase C — Advanced Settings UI refinement** (4 new controls in `AdvancedSettingsContent`):
+  - `CustomWords` parser + multi-line input field (gated by `experimentalEnabled=true` upstream).
+  - `HistoryLimit` enum dropdown (`Unlimited`, `Limited5`–`Limited250`).
+  - `RecordingRetentionPeriod` enum dropdown (`Never`, `OneDay`, `OneWeek`, `OneMonth`, `OneYear`).
+  - `AccelerationSelector` segmented button (`CPU`, `Vulkan`, `NNAPI`), gated by `experimentalEnabled`.
+  - 4 new `MutableStateFlow` + getter/setter pairs in `SettingsStore` (keys: `custom_words_raw`, `history_limit`, `recording_retention_period`, `acceleration_backend`).
+  - 4 new fields on `AppSettings` (extension of pre-existing data class).
+- **Phase D — AlertDialog swap verification**: walk the codebase for any remaining direct `AlertDialog` usage in user-facing Compose screens. (`ui/about/AboutContent.kt` Licenses flow already uses `HandyInfoDialog`; `ui/models/ModelCatalogScreen.kt` delete-confirm already uses `HandyConfirmDialog` (Batch A); `HeavyModelWarningDialog.kt` is acceptably on `AlertDialog` per its content shape.)
+- **Phase E — 17 JVM tests**: `CustomWordsParserTest` (5) + `HistoryLimitEnumTest` (2) + `RetentionPeriodTest` (2) + `AccelerationSelectorTest` (4) + `RetentionProviderTest` (4). Plus the pure `String.parseCustomWords(maxChars=500, maxEntries=50)` helper + `RetentionPeriod`-aware `RecordingRepository.evictByRetention(now, period)` overload.
+- **Push from interactive shell**: the 2 local commits from prior sessions PLUS any Sprint 25b local commits. User runs `git push origin main` (per AGENTS.md auth notes; the agent has no keyring access).
+- **On-device verification**: re-run `capture_history.sh --seed-history 5`, install APK via `assembleDebug`, start a recording via `MainActivity --ez start_dictation true`, observe PCM-filled WAV (no longer header-only), tap a History Retry button and verify the Rust re-transcription updates the entry text in place.
+
 ### MD3 Visual Verification (carried forward from Sprint 16)
 
 Screenshots captured on device (A059, Android 16) for visual regression reference:
@@ -648,3 +708,81 @@ cd handy-android
 ./gradlew :app:testDebugUnitTest
 ./gradlew :app:lintDebug
 ```
+
+### Sprint 25b FULL — Advanced Settings UI refinement + 18 JVM tests (Julio 17, 2026)
+
+Sprint 25 closed end-to-end on top of Sprint 25a (factory binding) + Sprint 25b partial (Retry JNI + per-frame audio wiring). No carry-overs remain for Sprint 26 to absorb from the Advanced Settings tab.
+
+**Files added (10)**
+
+| Path | Role |
+|---|---|
+| `handy-android/app/src/main/java/com/handy/app/settings/CustomWords.kt` | `internal fun String.parseCustomWords(maxChars=500, maxEntries=50): List<String>` — splits on `,` AND `\n`; trim; case-sensitive `distinct()`; cap. Returns `emptyList()` on either limit exceeded. |
+| `handy-android/app/src/main/java/com/handy/app/settings/HistoryLimit.kt` | `enum class HistoryLimit(val cap: Int?)`: Unlimited(null), Limited5(5)..Limited250(250). |
+| `handy-android/app/src/main/java/com/handy/app/settings/RetentionPeriod.kt` | `enum class RetentionPeriod(val days: Long?)`: Never(null), OneDay(1), OneWeek(7), OneMonth(30), OneYear(365). |
+| `handy-android/app/src/main/java/com/handy/app/settings/AccelerationBackend.kt` | `enum class AccelerationBackend(val isExperimental: Boolean)`: CPU(false), Vulkan(true), NNAPI(true). |
+| `handy-android/app/src/main/java/com/handy/app/audio/Retention.kt` | Pure helper `internal fun evictOlderThan(nowMillis, period, entries)`. Short-circuits on `period.days == null`. Strict-less-than boundary semantics. |
+| `handy-android/app/src/test/java/com/handy/app/settings/CustomWordsParserTest.kt` | 6 JVM tests (empty / single / comma+newline / case-sensitive dedup / maxChars cap / maxEntries cap). |
+| `handy-android/app/src/test/java/com/handy/app/settings/HistoryLimitEnumTest.kt` | 2 JVM tests (Unlimited null + ascending-cap order lock). |
+| `handy-android/app/src/test/java/com/handy/app/settings/RetentionPeriodTest.kt` | 2 JVM tests (Never null + ascending-day order lock). |
+| `handy-android/app/src/test/java/com/handy/app/settings/AccelerationSelectorTest.kt` | 4 JVM tests (CPU non-experimental / Vulkan+NNAPI experimental / valueOf round-trip / exactly-one-stable invariant). |
+| `handy-android/app/src/test/java/com/handy/app/audio/RetentionProviderTest.kt` | 4 JVM tests (Never preserves all / OneDay boundary / OneYear boundary / empty entries no-op). |
+
+**Files modified (5)**
+
+| Path | Change |
+|---|---|
+| `handy-android/app/src/main/java/com/handy/app/SettingsStore.kt` | +67 lines: 4 new `MutableStateFlow` + getter/setter pairs (`customWordsRaw`, `historyLimit`, `retentionPeriod`, `accelerationBackend`) following the existing `imePlacement` pattern. Default values: empty string for customWordsRaw; Unlimited for historyLimit; Never for retentionPeriod; CPU for accelerationBackend. |
+| `handy-android/app/src/main/java/com/handy/app/ui/settings/SettingsScreen.kt` | `AdvancedSettingsContent` rewired: new `advanced_section_history_retention` `SettingsGroup` (HandyDropdown x2) always-on + new `advanced_section_experimental_features` `SettingsGroup` (CustomWords multi-line `OutlinedTextField` + HandySegmentedButton AccelerationBackend + post-processing Switch consolidation) gated by `uiState.experimentalEnabled`. Direct `app.settingsStore.{flow}.collectAsState()` reads bypass SettingsViewModel.UiState (matches the pre-existing GeneralSettingsContent pattern). |
+| `handy-android/app/src/main/java/com/handy/app/viewmodel/EngineViewModel.kt` | +63 lines: `recordingRepository.evictByRetention(System.currentTimeMillis(), SettingsStore(getApplication()).retentionPeriod)` wired at top of `startRecording()`'s `viewModelScope.launch(Dispatchers.IO)` block BEFORE `recordingRepository.startRecording(...)` so eviction actually removes old WAVs before a new one opens. Wrapped in `runCatching { ... }.onFailure { Log.w(...) }` — `evictByRetention` already swallows per-file delete failures inside its own `runCatching`, but the top-level try guards against helper-side throws. **CancellationException re-throws via structured-concurrency per Sprint 24 rule** (the `runCatching` Kotlin stdlib returns a `Result.failure(CancellationException(...))` only if the catch swallows it; `viewModelScope.launch` propagates cancellation AFTER the block runs — verified the `runCatching` shape does not swallow). |
+| `handy-android/app/src/main/java/com/handy/app/audio/RecordingRepository.kt` | Added `suspend fun evictByRetention(nowMillis: Long, period: RetentionPeriod)` near end of class. Pure bounding math lives in `Retention.evictOlderThan` (file-scope JVM-testable). Takes `RetentionPeriod` directly (NOT `SettingsStore`) so the repository stays JVM-testable without an Android Context. Per-file deletes are wrapped in `runCatching { storage.deleteFile(path) }.onFailure { Log.w(...) }` — defensively partial-delete (continue with other files even if one fails). |
+| `handy-android/app/src/main/res/values/strings.xml` | ~16 new keys: `advanced_section_history_retention`, `advanced_section_experimental_features`, `advanced_history_limit_title`, `advanced_retention_title`, `advanced_custom_*`, `advanced_acceleration_*`, `history_limit_*`, `retention_*`, `acceleration_*`. |
+
+**Build verification**
+
+| Metric | Result |
+|---|---|
+| `:app:compileDebugKotlin` | **BUILD SUCCESSFUL**, 0 errors, 0 warnings |
+| `:app:testDebugUnitTest --rerun-tasks` | **106 PASS / 0 FAIL** (88 pre-existing + 18 new) |
+| `:app:lintDebug` | 0 errors / **86 warnings** (delta +2 vs 84 baseline; new `advanced_*`/`history_limit_*`/`retention_*`/`acceleration_*` keys landing in `UnusedResources`) |
+| `cargo check` (handy-core/) | green; 2 pre-existing `dead_code` warnings in `transcription/engine.rs` (StreamWorker/PeriodicWorker fields), unrelated to Sprint 25b |
+
+**Decision log (Phase C architecture)**
+
+- **Pure-function split**: `Retention.evictOlderThan` is JVM-testable; `RecordingRepository.evictByRetention` is the I/O wrapper taking `RetentionPeriod` directly (NOT SettingsStore) so the repository itself stays JVM-testable without Context. Mirrors the `CatalogSorter` / `HistoryPresentationLogic` precedent (Sprints 22 / 24).
+- **CustomWords parser** uses case-sensitive `distinct()` per Q7 verdict from the in-session thinker pass — distinguishes proper-noun casing so Whisper treats `iPhone` vs `iphone` as separate hot-prompt tokens.
+- **Acceleration gating**: CPU-only stable today; Vulkan+NNAPI behind `experimentalEnabled` Switch. The fields don't yet route into the Rust engine (the JVM-attached engine picks CPU at compile time); deferred to **Sprint 26+** when Vulkan/NNAPI backends ship (libvulkan.so bundling + Android 9+ NNAPI compendium).
+- **OnAudioFrames dispatcher**: `viewModelScope.launch(Dispatchers.IO) { pushFloatArrayFrames(samples) }` — wraps the suspend call correctly so the JNI consumer thread never blocks on the disk write (the consumer is `daemon: true` named `handy-recording-sink`).
+- **CancellationException**: per Sprint 24 rule — the structured-concurrency parent (`viewModelScope.launch`) propagates cancellation AFTER the `runCatching` block completes; we do NOT swallow it. Verified.
+
+**Phase D verification — AlertDialog swap audit**
+
+Codebase grep `androidx.compose.material3.AlertDialog` over `handy-android/app/src/main/**/*.kt`:
+
+| File | Status |
+|---|---|
+| `handy-android/app/src/main/java/com/handy/app/ui/components/HandyDialog.kt` | ✅ MD3-native wrapper (`HandyConfirmDialog` / `HandyInfoDialog` / `HandyDialog`). Acceptable. |
+| `handy-android/app/src/main/java/com/handy/app/ui/models/components/HeavyModelWarningDialog.kt` | ✅ acceptable exception per Pre-Sprint-26 Batch A closure — content shape (Row+Icon title, Checkbox consent, error-color confirm button) does not fit `HandyConfirmDialog`'s simple title/message/buttons contract. |
+
+**Zero direct `AlertDialog` usages remain.** Phase D PASSES.
+
+**What Sprint 26 does NOT have to absorb**
+
+| Item | Status |
+|---|---|
+| Retry JNI binding | ✅ Sprint 25b partial — `Java_com_handy_app_bridge_EngineBridge_nativeRetryHistoryEntry` ships |
+| Per-frame audio pipeline | ✅ Sprint 25b partial — `RecordingSink` OnceLock-sync-channel + Kotlin dispatcher |
+| Advanced Settings UI | ✅ Sprint 25b FULL — 4 enums + CustomWords parser + AccelerationBackend wired |
+| Pure JVM tests (Phase E) | ✅ Sprint 25b FULL — 18 tests pass |
+| CustomWords → recognizer hot-prompt | ⏸ Sprint 26+ — needs Whisper `hot_prompt.txt` setter on Rust side |
+| AccelerationBackend → Rust engine wiring | ⏸ Sprint 26+ — Vulkan + NNAPI backends not in scope for 25b |
+
+**On-device verification (post-push)**
+
+- `./gradlew :app:assembleDebug` → APK installed on A059 (~46MB).
+- Open Advanced Settings → confirm HistoryLimit dropdown shows 7 entries (Unlimited/5/10/25/50/100/250) with Unlimited default; RetentionPeriod dropdown shows 5 entries (Never/OneDay/OneWeek/OneMonth/OneYear) with Never default.
+- Set RetentionPeriod to OneWeek → start a recording → logcat `RecordingRepository` tag emits `evictByRetention: removed N files older than 7d`.
+- Toggle Experimental features Switch on → CustomWords multi-line field becomes editable; Acceleration SegmentedButton (CPU/Vulkan/NNAPI) becomes interactive.
+- Toggle off → both fields disable correctly.
+
+🟢 Sprint 25 FULL closed. Sprint 26 unblocked.

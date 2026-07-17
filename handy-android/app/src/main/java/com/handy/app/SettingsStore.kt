@@ -220,4 +220,71 @@ class SettingsStore(context: Context) {
             _recordingDualWriteFlow.value = value
             prefs.edit().putBoolean("recording_dual_write", value).apply()
         }
+
+    // ── Sprint 25b Phase C — Advanced Settings controls ─────────────
+    //
+    // Persistence-half only. The actual `AccelerationBackend` selection
+    // does NOT yet route into Rust — the JVM-attached engine still picks
+    // CPU by default. The choice is rendered + stored as a UI hint
+    // for the future Sprint 26+ backend wiring.
+
+    private val _customWordsRawFlow: MutableStateFlow<String> = MutableStateFlow(
+        prefs.getString("custom_words_raw", "") ?: "",
+    )
+    val customWordsRawFlow: StateFlow<String> = _customWordsRawFlow.asStateFlow()
+
+    var customWordsRaw: String
+        get() = _customWordsRawFlow.value
+        set(value) {
+            _customWordsRawFlow.value = value
+            prefs.edit().putString("custom_words_raw", value).apply()
+        }
+
+    private val _historyLimitFlow: MutableStateFlow<com.handy.app.settings.HistoryLimit> = MutableStateFlow(
+        runCatching {
+            com.handy.app.settings.HistoryLimit.valueOf(
+                prefs.getString("history_limit", "Unlimited") ?: "Unlimited"
+            )
+        }.getOrDefault(com.handy.app.settings.HistoryLimit.Unlimited),
+    )
+    val historyLimitFlow: StateFlow<com.handy.app.settings.HistoryLimit> = _historyLimitFlow.asStateFlow()
+
+    var historyLimit: com.handy.app.settings.HistoryLimit
+        get() = _historyLimitFlow.value
+        set(value) {
+            _historyLimitFlow.value = value
+            prefs.edit().putString("history_limit", value.name).apply()
+        }
+
+    private val _retentionPeriodFlow: MutableStateFlow<com.handy.app.settings.RetentionPeriod> = MutableStateFlow(
+        runCatching {
+            com.handy.app.settings.RetentionPeriod.valueOf(
+                prefs.getString("retention_period", "Never") ?: "Never"
+            )
+        }.getOrDefault(com.handy.app.settings.RetentionPeriod.Never),
+    )
+    val retentionPeriodFlow: StateFlow<com.handy.app.settings.RetentionPeriod> = _retentionPeriodFlow.asStateFlow()
+
+    var retentionPeriod: com.handy.app.settings.RetentionPeriod
+        get() = _retentionPeriodFlow.value
+        set(value) {
+            _retentionPeriodFlow.value = value
+            prefs.edit().putString("retention_period", value.name).apply()
+        }
+
+    private val _accelerationBackendFlow: MutableStateFlow<com.handy.app.settings.AccelerationBackend> = MutableStateFlow(
+        runCatching {
+            com.handy.app.settings.AccelerationBackend.valueOf(
+                prefs.getString("acceleration_backend", "CPU") ?: "CPU"
+            )
+        }.getOrDefault(com.handy.app.settings.AccelerationBackend.CPU),
+    )
+    val accelerationBackendFlow: StateFlow<com.handy.app.settings.AccelerationBackend> = _accelerationBackendFlow.asStateFlow()
+
+    var accelerationBackend: com.handy.app.settings.AccelerationBackend
+        get() = _accelerationBackendFlow.value
+        set(value) {
+            _accelerationBackendFlow.value = value
+            prefs.edit().putString("acceleration_backend", value.name).apply()
+        }
 }

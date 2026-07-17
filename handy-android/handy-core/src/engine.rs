@@ -1,11 +1,12 @@
 use crate::audio::pipeline::AudioPipeline;
+use crate::audio::recording_sink::RecordingSink;
 use crate::history::manager::HistoryManager;
 use crate::model::manager::ModelManager;
 use crate::transcription::engine::TranscriptionEngine;
 use jni::objects::GlobalRef;
 use jni::JavaVM;
 use log::warn;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 pub struct EngineState {
     pub model_dir: String,
@@ -22,6 +23,12 @@ pub struct EngineState {
     pub model_manager: ModelManager,
     pub history_manager: HistoryManager,
     pub idle_watcher: crate::idle_watcher::IdleWatcher,
+    /// Sprint 25b — per-frame audio sink that bridges Rust AAudio
+    /// pipeline → Kotlin `RecordingRepository.pushFloatArrayFrames`.
+    /// Constructed eagerly here, but kept inert until
+    /// [`RecordingSink::start`] is called from `nativeInit`. Identical
+    /// lifecycle to `idle_watcher`.
+    pub recording_sink: Arc<RecordingSink>,
 }
 
 impl EngineState {
@@ -47,6 +54,7 @@ impl EngineState {
             model_manager: ModelManager::new(&model_dir),
             history_manager,
             idle_watcher: crate::idle_watcher::IdleWatcher::new(),
+            recording_sink: Arc::new(RecordingSink::new()),
         }
     }
 

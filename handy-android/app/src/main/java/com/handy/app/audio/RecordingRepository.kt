@@ -8,6 +8,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import com.handy.app.settings.RetentionPeriod
 
 /**
  * Storage abstraction for [RecordingRepository]. Splitting I/O behind an
@@ -261,6 +262,36 @@ class RecordingRepository(
             if (storage.deleteFile(file.path)) {
                 remaining -= file.size
             }
+        }
+    }
+
+    /**
+     * Sprint 25b Phase C — time-based eviction. Removes WAV files
+     * whose `lastModified` (epoch millis) is older than the threshold
+     * computed from [period]. Called by `EngineViewModel.startRecording`
+     * so the sweep runs lazily without a background scheduler.
+     *
+     * The pure bounding math lives in [evictOlderThan] (Kotlin top-
+     * level) so the off-by-one semantics are JVM-testable.
+     *
+     * When [period] is [RetentionPeriod.Never] (`days == null`), the
+     * helper returns `emptyList()` and this function is effectively a
+     * no-op (the `if (period.days == null) return` short-circuit below
+     * avoids even the directory listing).
+     */
+    suspend fun evictByRetention(
+        nowMillis: Long,
+        period: RetentionPeriod,
+    ) {
+        if (period.days == null) return
+        val entries = storage.listWavFiles()
+        val toDelete = evictOlderThan(nowMillis, period, entries)
+        for (path in toDelete) {
+            runCatching { storage.deleteFile(path) }
+                .onFailure { Log.w(TAG, "evictByRetention: delete failed for $path", it) }
+        }
+        if (toDelete.isNotEmpty()) {
+            Log.d(TAG, "evictByRetention: removed ${toDelete.size} files older than ${period.days}d")
         }
     }
 

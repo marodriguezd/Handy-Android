@@ -55,18 +55,21 @@ class EngineViewModel(
     private val _lastErrorMessage = MutableStateFlow<String?>(null)
     val lastErrorMessage: StateFlow<String?> = _lastErrorMessage.asStateFlow()
 
-    // ── Audio persistence (Sprint 25a factory binding) ─────────────
+    // ── Audio persistence (Sprint 25a factory binding + Sprint 25b wire) ─────────
     //
-    // TODO(Sprint25b): wire `RecordingRepository.pushFloatArrayFrames`
-    // to a Kotlin-side audio consumer. Either (a) add a Kotlin
-    // `EngineCallback.onAudioFrames(FloatArray)` callback that drains a
-    // lock-free SPSC ring buffer on `Dispatchers.IO`, or (b) move WAV
-    // dual-write entirely into the Rust pipeline. Until then,
-    // start/stop/cancel still call
-    // `RecordingRepository.startRecording` and `stopRecording` so the
-    // 44-byte placeholder WAV exists on disk; the resulting path is
-    // captured as a local `val` in each launch closure (no instance
-    // state required while no Kotlin-side consumer reads it).
+    // Sprint 25a opened the factory binding: the Kotlin side now sees
+    // start/stop/cancel coroutines that prime + finalize the
+    // 44-byte WAV placeholder. Sprint 25b closes the loop by
+    // implementing [`onAudioFrames`] below — the Rust pipeline's
+    // per-frame Float32 buffer is now pumped into
+    // [com.handy.app.audio.RecordingRepository.pushFloatArrayFrames]
+    // on `Dispatchers.IO`. Real PCM bytes now end up on disk
+    // alongside the empty header, so `HistoryCard.audioPath` can be
+    // played back and Retry can re-transcribe from a real source.
+    //
+    // The breadcrumb below was the Sprint 25a leftover; it is
+    // intentionally deleted in Sprint 25b because the consumer
+    // contract is now bound.
 
     // ── Model Download Events ─────────────────────────────────
 
@@ -143,6 +146,20 @@ class EngineViewModel(
         _lastErrorMessage.value = null
         RecordingService.start(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
+            // Sprint 25b Phase C — lazy retention sweep. Runs at
+            // recording-start so the LRU is deterministic without a
+            // background scheduler. No-op when retentionPeriod is
+            // [com.handy.app.settings.RetentionPeriod.Never]. The
+            // wrap in runCatching is defensive — `evictByRetention`
+            // already swallows per-file delete failures, but a top-
+            // level try guards against the helper itself throwing.
+            runCatching {
+                recordingRepository.evictByRetention(
+                    nowMillis = System.currentTimeMillis(),
+                    period = SettingsStore(getApplication()).retentionPeriod,
+                )
+            }.onFailure { Log.w(TAG, "evictByRetention: sweep failed", it) }
+
             // Sprint 25a factory binding: prime the WAV file in lockstep
             // with AAudio capture start. The repository creates the
             // 44-byte placeholder header; `pushFloatArrayFrames` will
@@ -337,6 +354,30 @@ class EngineViewModel(
         )
         if (!emitted) {
             Log.w(TAG, "onDownloadProgress: event dropped for $modelId (buffer full)")
+        }
+    }
+
+    override fun onAudioFrames(samples: FloatArray) {
+        // Sprint 25b — receive a Float32 frame from the Rust pipeline
+        // consumer thread. We hop to `Dispatchers.IO` so the JNI-side
+        // consumer thread is never blocked on the disk write that
+        // RecordingRepository.pushFloatArrayFrames performs.
+        //
+        // Empty frames are silently dropped (the Rust side may emit
+        // one if a partial resampler input chunk happens during
+        // teardown). The repository's own guard short-circuits when
+        // there is no active recording, so we don't need to gate here.
+        //
+        // Implementation note: RecordingRepository.pushFloatArrayFrames
+        // is a suspend function (uses an internal Mutex on the write
+        // path). Code-reviewer #1 caught an earlier non-compiling
+        // variant that called a non-existent `pushFloatArrayFramesAsync`
+        // — the correct shape is to wrap the suspend call in
+        // viewModelScope.launch on Dispatchers.IO so the JNI consumer
+        // thread only sees a synchronous fire-and-forget hop.
+        if (samples.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            recordingRepository.pushFloatArrayFrames(samples)
         }
     }
 

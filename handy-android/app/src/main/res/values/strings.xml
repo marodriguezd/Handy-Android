@@ -246,4 +246,31 @@
     <string name="history_retry">Retry transcription</string>
     <string name="history_audio_play">Play</string>
     <string name="history_audio_pause">Pause</string>
+
+    <!-- Sprint 25b Phase C: Advanced Settings controls (MD3) -->
+    <string name="advanced_section_history_retention">HISTORY &amp; RETENTION</string>
+    <string name="advanced_section_experimental_features">EXPERIMENTAL FEATURES</string>
+    <string name="advanced_history_limit_title">History limit</string>
+    <string name="advanced_history_limit_subtitle">Cap on the number of past transcriptions shown.</string>
+    <string name="history_limit_unlimited">Unlimited</string>
+    <string name="history_limit_5">5 entries</string>
+    <string name="history_limit_10">10 entries</string>
+    <string name="history_limit_25">25 entries</string>
+    <string name="history_limit_50">50 entries</string>
+    <string name="history_limit_100">100 entries</string>
+    <string name="history_limit_250">250 entries</string>
+    <string name="advanced_retention_title">Recording retention</string>
+    <string name="advanced_retention_subtitle">Auto-delete audio files older than the selected period.</string>
+    <string name="retention_never">Never</string>
+    <string name="retention_one_day">1 day</string>
+    <string name="retention_one_week">1 week</string>
+    <string name="retention_one_month">1 month</string>
+    <string name="retention_one_year">1 year</string>
+    <string name="advanced_custom_words_title">Custom words (experimental)</string>
+    <string name="advanced_custom_words_subtitle">Comma or newline separated. Biases the recognizer toward proper nouns.</string>
+    <string name="advanced_acceleration_title">Inference backend</string>
+    <string name="advanced_acceleration_subtitle">Restart to apply. Vulkan/NNAPI require the experimental flag.</string>
+    <string name="acceleration_cpu">CPU</string>
+    <string name="acceleration_vulkan">Vulkan</string>
+    <string name="acceleration_nnapi">NNAPI</string>
 </resources>

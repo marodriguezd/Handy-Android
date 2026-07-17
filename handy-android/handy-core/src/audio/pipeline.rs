@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::audio::capture::{AudioCapture, CaptureError};
+use crate::audio::recording_sink::RecordingSink;
 use crate::audio::resampler::FrameResampler;
 use crate::audio::vad::{
     EnergyVad, SmoothedVad, VadFrame, VAD_FRAME_SAMPLES, VAD_ONSET_FRAMES,
@@ -24,6 +25,15 @@ struct PipelineInner {
     audio_buffer: Vec<f32>,
     on_vad_level: Option<Arc<dyn Fn(f32) + Send + Sync>>,
     on_audio_frame: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync>>,
+    /// Sprint 25b — optional per-frame audio sink that forwards each
+    /// resampled Float32 frame into Kotlin's
+    /// `RecordingRepository.pushFloatArrayFrames`. Set via
+    /// [`AudioPipeline::set_recording_sink`] from
+    /// `nativeStartRecording` so frames are pumped only while
+    /// recording. The underlying `RecordingSink::feed` is lock-free
+    /// (OnceLock-stored `mpsc::Sender` + `try_send`) so this
+    /// incurs no Mutex cost on the AAudio real-time callback thread.
+    recording_sink: Option<Arc<RecordingSink>>,
     /// The actual sample rate of the capture stream (device native rate).
     capture_sample_rate: u32,
     /// Running tally of raw input samples received (for diagnostic logging).
@@ -88,6 +98,16 @@ impl PipelineInner {
                 // ownership of the Vec, so we must clone from &[f32].
                 router.feed(frame.to_vec());
             }
+
+            // Sprint 25b — pump the same frame into the Kotlin-side
+            // RecordingRepository via the RecordingSink. Both paths
+            // share the same Float32 frame so the disk WAV and the
+            // on-the-fly transcription stay in sync. `feed()` is
+            // lock-free + non-blocking on backpressure (drops frames
+            // rather than blocking the AAudio real-time thread).
+            if let Some(ref sink) = self.recording_sink {
+                sink.feed(frame.to_vec());
+            }
         });
     }
 }
@@ -118,6 +138,7 @@ impl AudioPipeline {
                 audio_buffer: Vec::new(),
                 on_vad_level: None,
                 on_audio_frame: None,
+                recording_sink: None,
                 capture_sample_rate: 0,
                 total_raw_samples: 0,
                 gain_scratch: Vec::new(),
@@ -148,6 +169,17 @@ impl AudioPipeline {
         let mut guard = self.inner.lock().unwrap();
         guard.streaming_active = router.is_some();
         guard.stream_router = router;
+    }
+
+    /// Sprint 25b — bind the per-frame audio sink. Called from
+    /// `nativeStartRecording` to begin pumping frames during this
+    /// session. Pass `None` to detach (e.g. between sessions, or when
+    /// dual-write is disabled). Safe to call repeatedly — the
+    /// underlying `RecordingSink` is referenced via `Arc` and remains
+    /// alive while any reference exists.
+    pub fn set_recording_sink(&mut self, sink: Option<Arc<RecordingSink>>) {
+        let mut guard = self.inner.lock().unwrap();
+        guard.recording_sink = sink;
     }
 
     /// Drain accumulated audio buffer without stopping the pipeline.

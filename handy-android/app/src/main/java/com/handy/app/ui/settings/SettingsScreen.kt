@@ -40,7 +40,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import com.handy.app.BuildConfig
 import com.handy.app.HandyApplication
 import com.handy.app.R
+import com.handy.app.ui.components.HandyDropdown
 import com.handy.app.ui.components.HandyInfoDialog
+import com.handy.app.ui.components.HandySegmentedButton
 import com.handy.app.ui.components.SettingsGroup
 import com.handy.app.ui.components.SettingsRow
 import com.handy.app.ui.components.SettingsRowDivider
@@ -281,6 +283,8 @@ fun PostProcessContent(viewModel: SettingsViewModel) {
 @Composable
 fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val app = context.applicationContext as HandyApplication
     Column(modifier = Modifier.fillMaxSize()) {
         SettingsGroup(title = stringResource(R.string.settings_section_aplicacion)) {
             SettingsRow(
@@ -356,7 +360,80 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                 },
             )
         }
-        SettingsGroup(title = stringResource(R.string.settings_section_experimental)) {
+
+        // ── Sprint 25b Phase C: History & retention controls ─────────────
+        // Compose-side direct read of [SettingsStore] flows (mirrors the
+        // pattern already used in `GeneralSettingsContent` for the Audio
+        // group — keeps the diff small vs. the equivalent UiState
+        // round-trip).
+        val historyLimit by app.settingsStore.historyLimitFlow.collectAsState()
+        val retentionPeriod by app.settingsStore.retentionPeriodFlow.collectAsState()
+        SettingsGroup(title = stringResource(R.string.advanced_section_history_retention)) {
+            HandyDropdown(
+                label = stringResource(R.string.advanced_history_limit_title),
+                options = listOf(
+                    com.handy.app.settings.HistoryLimit.Unlimited to stringResource(R.string.history_limit_unlimited),
+                    com.handy.app.settings.HistoryLimit.Limited5 to stringResource(R.string.history_limit_5),
+                    com.handy.app.settings.HistoryLimit.Limited10 to stringResource(R.string.history_limit_10),
+                    com.handy.app.settings.HistoryLimit.Limited25 to stringResource(R.string.history_limit_25),
+                    com.handy.app.settings.HistoryLimit.Limited50 to stringResource(R.string.history_limit_50),
+                    com.handy.app.settings.HistoryLimit.Limited100 to stringResource(R.string.history_limit_100),
+                    com.handy.app.settings.HistoryLimit.Limited250 to stringResource(R.string.history_limit_250),
+                ),
+                selected = historyLimit,
+                onSelect = { app.settingsStore.historyLimit = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SettingsRowDivider()
+            HandyDropdown(
+                label = stringResource(R.string.advanced_retention_title),
+                options = listOf(
+                    com.handy.app.settings.RetentionPeriod.Never to stringResource(R.string.retention_never),
+                    com.handy.app.settings.RetentionPeriod.OneDay to stringResource(R.string.retention_one_day),
+                    com.handy.app.settings.RetentionPeriod.OneWeek to stringResource(R.string.retention_one_week),
+                    com.handy.app.settings.RetentionPeriod.OneMonth to stringResource(R.string.retention_one_month),
+                    com.handy.app.settings.RetentionPeriod.OneYear to stringResource(R.string.retention_one_year),
+                ),
+                selected = retentionPeriod,
+                onSelect = { app.settingsStore.retentionPeriod = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        // ── Sprint 25b Phase C: Experimental features (gated by switch)─
+        val customWordsRaw by app.settingsStore.customWordsRawFlow.collectAsState()
+        val accelerationBackend by app.settingsStore.accelerationBackendFlow.collectAsState()
+        SettingsGroup(title = stringResource(R.string.advanced_section_experimental_features)) {
+            SettingsRow(
+                title = stringResource(R.string.advanced_custom_words_title),
+                subtitle = stringResource(R.string.advanced_custom_words_subtitle),
+            )
+            OutlinedTextField(
+                value = customWordsRaw,
+                onValueChange = { app.settingsStore.customWordsRaw = it },
+                minLines = 3,
+                maxLines = 5,
+                enabled = uiState.experimentalEnabled,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Buffy, iPhone, Llama") },
+            )
+            SettingsRowDivider()
+            SettingsRow(
+                title = stringResource(R.string.advanced_acceleration_title),
+                subtitle = stringResource(R.string.advanced_acceleration_subtitle),
+            )
+            HandySegmentedButton(
+                options = listOf(
+                    com.handy.app.settings.AccelerationBackend.CPU to stringResource(R.string.acceleration_cpu),
+                    com.handy.app.settings.AccelerationBackend.Vulkan to stringResource(R.string.acceleration_vulkan),
+                    com.handy.app.settings.AccelerationBackend.NNAPI to stringResource(R.string.acceleration_nnapi),
+                ),
+                selected = accelerationBackend,
+                onSelect = { app.settingsStore.accelerationBackend = it },
+                enabled = uiState.experimentalEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SettingsRowDivider()
             SettingsRow(
                 title = stringResource(R.string.settings_post_processing),
                 subtitle = stringResource(R.string.settings_post_processing_desc),

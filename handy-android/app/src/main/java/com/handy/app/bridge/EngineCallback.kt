@@ -50,4 +50,18 @@ interface EngineCallback {
      * @param errorMsg null on success, error description on failure
      */
     fun onDownloadComplete(modelId: String, success: Boolean, errorMsg: String?)
+
+    /**
+     * Sprint 25b — per-frame audio callback from the Rust pipeline.
+     * Each frame is a 480-sample Float32 buffer at 16 kHz (post-
+     * resampling), emitted roughly every 30 ms while recording is
+     * active. Implementations should schedule onto a background
+     * dispatcher so the source consumer thread is not blocked on
+     * disk writes.
+     *
+     * @param samples Already-decoded Float32 PCM at 16 kHz mono.
+     * May be empty if the Rust pipeline passed zero frames (rare,
+     * e.g. during a brief device-native-rate glitch).
+     */
+    fun onAudioFrames(samples: FloatArray)
 }

@@ -161,4 +161,82 @@ impl HistoryManager {
             db: Mutex::new(Connection::open_in_memory().expect("Failed to create in-memory history database")),
         }
     }
+
+    // ── Sprint 25b: retry-entry support ────────────────────────────────
+    //
+    // `nativeRetryHistoryEntry` (jni_bridge.rs) needs three primitives:
+    //   * `get_entry_by_id(id)` — fetch a single row to inspect `wav_path`.
+    //   * `update_text_full(id, text, post_processed)` — write the new
+    //     transcription back, optionally nulling `post_processed`. We
+    //     keep the LLM-cleaned text as `Option<String>` so retries can
+    //     INVALIDATE a stale `post_processed` (Thinker Q2 verdict:
+    //     keeping stale post_processed against fresh raw text is
+    //     user-confusing — the two values would diverge).
+    //
+    // Both queries acquire `self.db` for the duration of the call, so
+    // existing readers (`get_entries`, etc.) briefly wait. This is fine
+    // because `update_text_full` is on the same critical path as
+    // `save_entry` (mutating writes serialize naturally under Mutex).
+
+    /// Look up a single history entry by primary key. Returns
+    /// [`HistoryError::EntryNotFound`] when the row is missing or has
+    /// been deleted (e.g. by a concurrent delete_entry call).
+    pub fn get_entry_by_id(&self, id: i64) -> Result<HistoryEntry, HistoryError> {
+        let db = self.db.lock().map_err(|e| {
+            HistoryError::DatabaseError(format!("db lock poisoned: {e}"))
+        })?;
+        let mut stmt = db
+            .prepare(
+                "SELECT id, text, post_processed, wav_path, timestamp, saved
+                 FROM history
+                 WHERE id = ?1",
+            )
+            .map_err(|e| HistoryError::DatabaseError(format!("prepare: {e}")))?;
+        let mut rows = stmt
+            .query_map(params![id], |row| {
+                let saved_int: i32 = row.get(5)?;
+                Ok(HistoryEntry {
+                    id: row.get(0)?,
+                    text: row.get(1)?,
+                    post_processed: row.get(2)?,
+                    wav_path: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    saved: saved_int != 0,
+                })
+            })
+            .map_err(|e| HistoryError::DatabaseError(format!("query_map: {e}")))?;
+        match rows.next() {
+            Some(Ok(entry)) => Ok(entry),
+            Some(Err(e)) => Err(HistoryError::DatabaseError(format!("row: {e}"))),
+            None => Err(HistoryError::EntryNotFound(id)),
+        }
+    }
+
+    /// Sprint 25b — write the re-transcribed `text` back into the row
+    /// and optionally clear the LLM-cleaned `post_processed` value.
+    /// Pass `None` for post_processed to invalidate it (the retry
+    /// path always passes `None` because the old LLM cleanup is stale
+    /// relative to the new raw text). Pass `Some(text)` to re-apply
+    /// the same cleaned text.
+    pub fn update_text_full(
+        &self,
+        id: i64,
+        text: &str,
+        post_processed: Option<&str>,
+    ) -> Result<(), HistoryError> {
+        let db = self.db.lock().map_err(|e| {
+            HistoryError::DatabaseError(format!("db lock poisoned: {e}"))
+        })?;
+        let affected = db
+            .execute(
+                "UPDATE history SET text = ?1, post_processed = ?2 WHERE id = ?3",
+                params![text, post_processed, id],
+            )
+            .map_err(|e| HistoryError::DatabaseError(format!("update: {e}")))?;
+        if affected == 0 {
+            return Err(HistoryError::EntryNotFound(id));
+        }
+        info!("Updated history entry {id} (post_processed={})", post_processed.is_some());
+        Ok(())
+    }
 }
