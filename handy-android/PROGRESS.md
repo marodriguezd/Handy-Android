@@ -1508,3 +1508,54 @@ The 2 passing tests DO exercise the full AnimatedContent-supplied `Constraints.I
 Sprint 28b-v14 carry-over CLOSED. Sprint 28c-#1 + 28c-#2 migrations now have a JVM regression guard. Remaining Sprint 29 polish: (b) predictive back, (c) foldable hinge, (d) motion audit, (e) `UnusedResources` sweep, (f) snapshot scripts refresh, (g) Definition-of-Done verification.
 
 Full detail: AGENTS.md `## 📌 Session 2026-07-17 — Sprint 28b-v14 carry-over CLOSED end-to-end ✅` section.
+
+### Sprint 28e closure (Julio 17, 2026) -- LOW + MID primary flipped back to NVIDIA Parakeet TDT 0.6B v3
+
+User rationale: parakeet-tdt-0-6b-v3-gguf is the "el bueno, bonito y barato" English-only STT at 0.6B scale, supersedes the canary-180m-flash-gguf multilingual alternative because canary "se queda corto" en calidad. Canary demoted to LOW.alternatives + MID.alternatives (multilingual fallback for es/de/en/otros users).
+
+**Files modified (2)**
+
+- `app/src/main/assets/mobile_recommended.json` -- LOW.primary + MID.primary canary -> parakeet. Canary moved to LOW.alternatives and MID.alternatives (was only in MID.alts under Sprint 28d+). HIGH / FLAGSHIP / TABLET unchanged. Total promoted slots: 19 (5 LOW + 4 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET).
+- `app/src/test/java/com/handy/app/capability/MobileRecommendationsTest.kt` -- fullFixture + 5 promotionBucket tests + the Sprint 28e regression test updated. Two Sprint 28d / 28d+ historical regression tests retained to lock the longitudinal contract.
+
+**Two code-reviewer corrections applied in-flight**
+
+1. Count miscount: description/KDoc/assertEquals claimed 20 but MID has 3 alts (not 4). MID slot count is 4, total = 19. Fixed in 3 locations.
+2. Backtick-identifier syntax: new test method name contained a `.` (in `0.6b-v3-gguf`). Kotlin grammar forbids `.` inside backtick identifiers. Renamed to `0-6b-v3-gguf`. Other paren/brackets in older test names remain valid (Kotlin's backtick grammar rejects only `.`, `:`, `?`, `<`, `>`, backtick, backslash, newline/CR).
+
+**Build state**: `:app:compileDebugKotlin` BUILD SUCCESSFUL (0 warnings). `:app:testDebugUnitTest --tests '*MobileRecommendationsTest*'` BUILD SUCCESSFUL. JSON validated via `jq .`. Lint trajectory stable (no new warnings introduced). Local commit `feat(sprint28e)` ready; user pushes from interactive shell per AGENTS.md Plan-D.
+
+**Carry-over**: Sprint 28e+ FLAGSHIP multilingual extension (optional, next session). Plus the full Sprint 29 polish queue (predictive back, foldable hinge, motion audit, snapshot scripts, Definition-of-Done).
+
+### Sprint 29spa recovery (Julio 17, 2026) -- Spanish residue sweep ATTEMPT 1 REVERTED
+
+Attempted to delete 14 unused Spanish-residue strings per PC_HANDY_REFERENCE.md §7 drift A1. Sprint 29(e) 3-step audit pipeline produced false-negatives: 14 strings ARE actually referenced in 4 source files. Compile failed; recovery via `git reset --hard HEAD~2`.
+
+#### 4 missed source files
+
+| File | Referenced key(s) |
+|---|---|
+| `DeviceTier.kt` lines 7-11 | `header_tier_low/_mid/_high/_flagship/_tablet` (5 enum map refs) |
+| `CompatibilityBadge.kt` line 24 | `badge_experimental` |
+| `DeviceCapabilityHeader.kt` | `capability_refresh` |
+| `SettingsScreen.kt` | `settings_section_aplicacion/_salida/_transcripcion` + `settings_post_processing[/_desc]` (5 refs) |
+
+#### Sprint 25b claim cross-check
+
+Sprint 25b's AGENTS.md claimed `advanced_section_history_retention + advanced_section_experimental_features` replaced the visible UI. **Incomplete.** SettingsScreen.kt LIVE path still references the OLD Spanish keys. The new keys COEXIST with old Spanish keys in live UI.
+
+#### Recovery action executed
+
+`git reset --hard HEAD~2` -- dropped 309f7bd (Spanish delete) + 8c377a7 (English delete). HEAD restored to Sprint 28e parakeet (unaffected). Sprint 28e closure doc appends preserved via `/tmp/agents.md.snapshot` + `/tmp/progress.md.snapshot` (1621 + 1528 lines).
+
+#### Next-session audit pipeline must extend
+
+Future string-key deletions MUST hit ALL 7 of: `R.string.X`, `getString(R.string.X)`, `stringResource(R.string.X)`, `resources.getIdentifier(...)`, AndroidManifest `android:resource="@string/X"`, layout `@string/X`, locale overrides `values-*/*/strings.xml`. Pass all 7 before deletion.
+
+#### Phase 2 of Spanish residue sweep (next session, separate commit)
+
+Translate VALUES (not delete) for ~18 used Spanish-residue strings per the table in the AgentSweep entry. Optionally mirror Spanish translations to `values-es/strings.xml` for the `es` locale.
+
+#### Phase 3 (future)
+
+Investigate why the original audit's shell-quoted pipe silently truncated matches. Possible cause: bash escaping of `\\|` alternation in a heredoc-nested command. Future audits should run each pattern as a discrete single-line grep to avoid quoting fragility.

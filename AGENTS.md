@@ -1601,3 +1601,113 @@ Picks up the long-deferred Sprint 28b-v14 carry-over note: *"write a Robolectric
 cd /home/marodriguezd/Github/Handy-Android
 git push origin main  # 1 commit ahead: e28a664
 ```
+
+## Quoted Session 2026-07-17 (resumed, seventeenth pass) -- Sprint 28e closure: LOW + MID primary flipped to NVIDIA Parakeet TDT 0.6B v3 (el bueno bonito y barato)
+
+User rationale (verbatim): parakeet-tdt-0-6b-v3-gguf is the "bueno, bonito y barato" English-only STT at 0.6B scale; canary-180m-flash-gguf "se queda corto" en calidad despite being multilingual. Reverted the LOW+MID primary from canary back to parakeet; kept canary as a multilingual fallback in BOTH LOW.alternatives and MID.alternatives.
+
+**Files modified (2)**
+
+- `handy-android/app/src/main/assets/mobile_recommended.json` -- LOW.primary and MID.primary flipped canary -> parakeet. Canary demoted to both alts (LOW + MID). HIGH / FLAGSHIP / TABLET unchanged. Total promoted slots: 19 (5+4+4+3+3). Description field updated to reflect Sprint 28e rationale.
+- `handy-android/app/src/test/java/com/handy/app/capability/MobileRecommendationsTest.kt` -- fullFixture + all 5 promotionBucket tests + the new Sprint 28e regression test updated. Two historical regression tests for Sprint 28d / 28d+ retained to lock the longitudinal contract.
+
+**Two code-reviewer fixes applied**
+
+1. Count miscount: description claimed "20 (5 LOW + 5 MID + ...)" but MID has only 3 alts, so MID slot count is 4. Total is 19, not 20. Description, class KDoc, and assertEquals(20) all corrected to 19.
+2. Backtick identifier: the new test method name `` `Sprint 28e parakeet-tdt-0.6b-v3-gguf ...` `` contained a literal `.` inside the backticks, which Kotlin grammar forbids. Renamed to `parakeet-tdt-0-6b-v3-gguf` (`.` -> `-`). Code-reviewer found that `(`, `)`, `[`, `]`, `+`, `-`, spaces, digits ARE allowed in backtick identifiers; only `.`, `:`, `?`, `<`, `>`, backtick, backslash, newline/CR are rejected.
+
+**Build state**: `./gradlew :app:compileDebugKotlin :app:testDebugUnitTest --tests '*MobileRecommendationsTest*' --rerun-tasks` BUILD SUCCESSFUL. JSON validity confirmed via `jq .`. Lint trajectory stable (no new warnings introduced by the 2-file change). Local commit ready; user runs `git push origin main` per AGENTS.md Plan-D.
+
+**Carry-over to Sprint 28e+**: optional FLAGSHIP multilingual extension (canary-qwen-2.5b-gguf already in FLAGSHIP.alternatives; user decision deferred, will pick up next). Total queue after 28e close: 28e+ (optional) -> Spanish residue sweep -> Sprint 29 polish (b-g).
+
+## Sprint 29spa recovery (Julio 17, 2026) -- Spanish residue sweep ATTEMPT 1 REVERTED
+
+Picks up the user-requested Spanish residue sweep from PC_HANDY_REFERENCE.md §7 drift A1. The original 3-step audit pipeline (Sprint 29(e) precedent) used pattern `grep -rnE 'R\.string\.X'` to confirm zero references. **That audit produced false-negatives** -- 4 source files DID reference the keys.
+
+### The 4 missed source files
+
+| File | Line | Referenced key(s) |
+|---|---|---|
+| `app/src/main/java/com/handy/app/capability/DeviceTier.kt` | 7-11 | `header_tier_low/_mid/_high/_flagship/_tablet` (5 refs in enum map) |
+| `app/src/main/java/com/handy/app/ui/models/components/CompatibilityBadge.kt` | 24 | `badge_experimental` |
+| `app/src/main/java/com/handy/app/ui/capability/DeviceCapabilityHeader.kt` | (likely Component lambda) | `capability_refresh` (refresh CTA) |
+| `app/src/main/java/com/handy/app/ui/settings/SettingsScreen.kt` | (Advanced tab lambdas) | `settings_section_aplicacion/_salida/_transcripcion` + `settings_post_processing[/_desc]` (5 refs) |
+
+### Audit pattern failure analysis
+
+The original pattern was the directory-scoped variant of:
+```
+grep -rnE 'R\\.string\\.(settings_section_|settings_post_processing|capability_refresh|header_tier_|badge_)' handy-android/app/src/main/ | head -100
+```
+
+This DID match `R.string.header_tier_low` literal call sites, but the basher summary incorrectly reported "0 matches" -- most likely a shell-quoting artifact in the multi-step pipe, or the summary truncated the relevant grep output. The follow-up diagnostic (per-key simple grep: `grep -rnE \"R\\.string\\.$key|getString\\(R\\.string\\.$key\"`) exposed all 5+ refs cleanly.
+
+### Extended audit pipeline (next-session minimum bar)
+
+Future sweeps MUST run all of these patterns before deleting a string key:
+
+```bash
+# 1. Direct R.string.X call sites
+grep -rnE 'R\\.string\\.<KEY>' handy-android/app/src/main/
+
+# 2. getString(R.string.X) variants
+grep -rnE 'getString\\(R\\.string\\.<KEY>\\)' handy-android/app/src/main/
+
+# 3. Compose stringResource(R.string.X) (separate from R.string.X direct)
+grep -rnE 'stringResource\\(R\\.string\\.<KEY>\\)' handy-android/app/src/main/
+
+# 4. Reflection-based dynamic lookup
+grep -rnE 'resources\\.getIdentifier\\(.*"<KEY>"' handy-android/app/src/main/
+
+# 5. AndroidManifest references
+grep -nE 'android:resource="@string/<KEY>"' handy-android/app/src/main/AndroidManifest.xml
+
+# 6. Locale overrides
+grep -rn 'name="<KEY>"' handy-android/app/src/main/res/values-*/*.xml
+
+# 7. XML layout references
+grep -rnE '@string/<KEY>' handy-android/app/src/main/res/layout/
+```
+
+Pass ALL 7 checks before deleting a key.
+
+### Recovery action executed
+
+`git reset --hard HEAD~2` -- dropped commits 309f7bd (Spanish residue delete) + 8c377a7 (English unused delete). Working tree restored to d05b917 (Sprint 28e parakeet -- unaffected). Sprint 28e AGENTS.md + PROGRESS.md closure appends were preserved in `/tmp/agents.md.snapshot` + `/tmp/progress.md.snapshot` (1621 lines, 1528 lines respectively).
+
+**Code-reviewer alternative**: `git revert HEAD HEAD~1` would have preserved the broken commits as pedagogically valuable history (showing the attempted sweep + the failure mode). I chose `reset --hard` because the 2 broken commits are broken-by-construction (single-file deletions + collapse compile) and the user is unlikely to benefit from retaining broken history. NEXT-session pattern: use `git revert` for cancellations and `git reset --hard` only for single-file deletions.
+
+### Sprint 25b claim cross-check
+
+Sprint 25b AGENTS.md entry: "replaced the visible UI with `advanced_section_history_retention` + `advanced_section_experimental_features`". **This claim was INCOMPLETE.** Diagnostic confirmed SettingsScreen.kt LIVE path still references the OLD Spanish keys (`settings_section_aplicacion`, etc.). The new `advanced_section_*` keys COEXIST with the old Spanish keys in the codebase.
+
+### Phase 2 of Spanish residue sweep (next session, separate commit)
+
+Translate VALUES (not delete) for ~15 used Spanish-residue strings. Concrete list:
+
+| Key | Spanish value (bad) | English value (good) |
+|---|---|---|
+| `settings_advanced` | "Avanzado" | "Advanced" |
+| `tab_models` | "Modelos" | "Models" |
+| `tab_post_process` | "Post Proceso" | "Post-Process" |
+| `settings_experimental_features` | "Funciones Experimentales" | "Experimental Features" |
+| `settings_experimental_features_desc` | "Activa funciones experimentales inestables" | "Enables unstable experimental features" |
+| `settings_auto_send` | "Envio automatico" | "Auto-submit" |
+| `settings_auto_send_disabled` | "Desactivado" | "Disabled" |
+| `settings_vad_desc` | "Deteccion de actividad de voz" | "Voice activity detection" |
+| `settings_add_final_space` | "Agregar Espacio Final" | "Add Final Space" |
+| `settings_add_final_space_desc` | "Anade un espacio al final de la transcripcion" | "Adds a space at end of transcription" |
+| `show_experimental_models` | "Mostrar modelos experimentales (sin verificar)" | "Show experimental models (unverified)" |
+| `capability_header_subtitle` | "Modelos optimizados hasta %1$d MB" | "Models optimized up to %1$d MB" |
+| `heavy_dialog_title` | "Modelo pesado seleccionado" | "Heavy model selected" |
+| `heavy_dialog_title_extreme` | "Modelo extremo -- verificacion obligatoria" | "Extreme model -- confirmation required" |
+| `heavy_dialog_body` | "El modelo «%1$s» pesa %2$s GB..." | "Model «%1$s» weighs %2$s GB..." |
+| `heavy_dialog_body_extreme` | "El modelo «%1$s» pesa %2$s GB..." | "Model «%1$s» weighs %2$s GB..." |
+| `heavy_dialog_consent` | "Entiendo los riesgos y quiero continuar" | "I understand the risks and want to continue" |
+| `model_unavailable_on_device` | "Este modelo excede la capacidad de tu dispositivo" | "This model exceeds your device's capacity" |
+
+Optionally mirror Spanish translations to `values-es/strings.xml` (creates an `es` locale override; English default). This is the canonical Material/i18n pattern.
+
+### Carry-over to Phase 2 sprint
+
+Estimated scope: 1 commit, ~20 line edits in a single file (`values/strings.xml`). Optionally also create `values-es/strings.xml` as the locale override file (mirrors the current Spanish values for `es` users). 
