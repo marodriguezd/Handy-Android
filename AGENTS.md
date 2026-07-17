@@ -1499,3 +1499,40 @@ Local commits `4ac3d45` and `e7ac8e9` on `main`. Per AGENTS.md Plan-D ladder, **
 3. **IconLauncherShape (5) + IconDuplicates (5)** — adaptive icon polish; Sprint 27b closed the 14 unique icon warnings, the remaining 5 are launcher-shape adherence.
 4. **Sprint 28e** (optional from previous carry-over): FLAGSHIP tier multilingual extension via canary-qwen-2.5b → canary-1b-v2 swap. User decision TBD.
 5. **Spanish residue** (per `PC_HANDY_REFERENCE.md §7 drift A1`): `settings_section_aplicacion` / `settings_section_salida` / `settings_section_transcripcion` etc. still in strings.xml — replaced visually by `advanced_section_*` Sprint 25b. Out-of-scope for Sprint 29(e); revisit in Sprint 29(g) Definition-of-Done.
+
+## 📌 Session 2026-07-17 — Sprint 28c-#2 AboutContent LazyColumn migration CLOSED ✅
+
+Picks up the deferred Sprint 28c carry-over (item #2): migrate `AboutContent.kt` from `Column(modifier.fillMaxWidth())` to `LazyColumn` for parity with `HistoryScreen` / `ModelCatalogScreen` / `PostProcessScreen`, AND drop the latent-risk wrapper in `MainActivity.aboutContent` lambda.
+
+### What landed (1 commit, 2 files, +151/-132)
+
+**Commit `3015f31`** — Sprint 28c-#2 AboutContent LazyColumn migration:
+
+`app/src/main/java/com/handy/app/ui/about/AboutContent.kt`:
+- **Imports added**: `androidx.compose.foundation.layout.Arrangement`, `PaddingValues`, `fillMaxSize`, plus `androidx.compose.foundation.lazy.LazyColumn` (per Kotlin alphabetical convention).
+- **KDoc updated**: existing KDoc paragraph rewritten — "3 vertical sections, all inside a `VerticalScroll`" → "3 sections, each wrapped in a `LazyColumn` `item`". New `**Sprint 28c-#2 migration**` paragraph added explaining the `AnimatedContent` → `Infinity` → runtime check chain + cross-references to Sprint 28b-v15 (DebugScreen) and Sprint 28c-#1 (PostProcessScreen) fixes that motivated the migration.
+- **Body migration**: outer `Column(modifier = modifier.fillMaxWidth()) { ... }` → `LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.lg)) { ... }`. Each of the 3 `SettingsGroup(...) { ... }` calls wrapped in `item { ... }` (APPEARANCE / LANGUAGE / ABOUT) with one extra indentation level (contents unchanged semantically).
+- **`HandyInfoDialog` placement preserved**: `if (showLicenseDialog) { HandyInfoDialog(...) }` stays at root level (sibling to LazyColumn, NOT inside an `item`). Matches the PromptEditor-in-PostProcessScreen pattern — modal/bottom-sheet dialogs render independently of the scroll container.
+- **State vars preserved**: `themeMode`, `dynamicColor`, `appLanguage` (collectAsState) + `showLicenseDialog` (remember + mutableStateOf) stay at the top, before LazyColumn, so they survive recomposition without crossing the item boundary.
+
+`app/src/main/java/com/handy/app/MainActivity.kt`:
+- **aboutContent lambda wrapper removed**: was `Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { AboutContent() }`. Now `AboutContent()` directly. The 9-line Sprint 28b-v15 latent-risk breadcrumb is replaced with a 5-line `// Sprint 28c-#2` comment explaining the migration.
+- **Other lambdas untouched**: `generalTabContent` (line ~116), `advancedTabContent` (line ~125), `postProcessContent` (line ~136, already fixed in Sprint 28c-#1), `debugContent` (line ~184, already fixed in Sprint 28b-v15) all keep their existing wrappers.
+
+### Why LazyColumn works where Column.verticalScroll didn't
+
+`LazyColumn` measures only the visible items in the viewport — never intrinsic content height — so it accepts `Constraints.Infinity` bounds gracefully. `Column.verticalScroll` measures all children up-front to compute the scrollable extent, which is incompatible with the `Infinity` maxHeight that `AnimatedContent`'s measure-pass feeds the destination body. The Sprint 28b-v15 / 28c-#1 / 28c-#2 chain closes the Compose layout regression that first surfaced as `IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints`.
+
+### Build state at closure
+
+| Metric | Value |
+|---|---|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL (0 warnings) |
+| `:app:testDebugUnitTest` | **148 PASS / 0 FAIL / 1 SKIP** (no regression; ThemeContrastTest design-debt @Ignore preserved) |
+| `:app:lintDebug` | 0 errors (no UnusedResources regression; this sprint doesn't change resource files) |
+| Code-reviewer-minimax-m3 | APPROVED (no NEEDS-FIX) |
+| Commits | 1 local (`3015f31`); user pushes from interactive shell per Plan-D |
+
+### Carry-over updated
+- **Sprint 28c-#2** is now closed. The latent-risk breadcrumb in `MainActivity.aboutContent` is removed. All 4 `MainActivity` destination lambdas (`generalTabContent`, `advancedTabContent`, `postProcessContent`, `debugContent`, `aboutContent`) are now in their post-fix state.
+- Remaining Sprint 29 polish sub-features: (b) predictive back, (c) foldable hinge, (d) motion audit, (f) snapshot scripts refresh, (g) Definition-of-Done verification.

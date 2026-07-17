@@ -1425,3 +1425,37 @@ Local commits `4ac3d45` + `e7ac8e9`. User runs `git push origin main` from inter
 3. IconLauncherShape (5) + IconDuplicates (5): adaptive icon polish
 4. Spanish residue drift (PC_HANDY_REFERENCE.md §7 A1): settings_section_aplicacion / salida / transcripcion still in strings.xml; out of scope here, revisit in Sprint 29(g)
 5. Optional Sprint 28e (deferred from Sprint 28d+): FLAGSHIP tier multilingual extension via canary-qwen-2.5b → canary-1b-v2
+
+## Sprint 28c-#2 — AboutContent LazyColumn migration (17 julio 2026)
+
+Picks up the deferred Sprint 28c carry-over item #2: migrate `AboutContent.kt` from `Column(modifier.fillMaxWidth())` to `LazyColumn` for parity with `HistoryScreen` / `ModelCatalogScreen` / `PostProcessScreen`, AND drop the latent-risk wrapper in `MainActivity.aboutContent` lambda.
+
+### What shipped (1 commit, 2 files, +151/-132)
+
+**Commit `3015f31`** — Sprint 28c-#2 AboutContent LazyColumn migration:
+
+`app/src/main/java/com/handy/app/ui/about/AboutContent.kt`:
+- Imports added: `Arrangement`, `PaddingValues`, `fillMaxSize`, `LazyColumn`.
+- KDoc updated with `**Sprint 28c-#2 migration**` paragraph documenting the AnimatedContent → Infinity → runtime check chain + cross-references to Sprint 28b-v15 / Sprint 28c-#1.
+- Body: `Column(modifier.fillMaxWidth())` → `LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.lg))`.
+- Each of 3 `SettingsGroup(...)` calls wrapped in `item { ... }`.
+- `HandyInfoDialog` preserved at root (sibling to LazyColumn, NOT inside item).
+- State vars preserved at top.
+
+`app/src/main/java/com/handy/app/MainActivity.kt`:
+- aboutContent lambda's redundant `Column(modifier.fillMaxSize().verticalScroll(...))` wrapper removed.
+- 9-line Sprint 28b-v15 latent-risk breadcrumb replaced with 5-line `// Sprint 28c-#2` comment.
+
+### Why LazyColumn works
+LazyColumn measures only visible items, accepts `Infinity` bounds. Column.verticalScroll measures all children up-front — incompatible with `Infinity` maxHeight from `AnimatedContent`. This closes the Compose layout regression that first surfaced as `IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints`.
+
+### Build state at closure
+| Metric | Value |
+|---|---|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL (0 warnings) |
+| `:app:testDebugUnitTest` | 148 PASS / 0 FAIL / 1 SKIP |
+| `:app:lintDebug` | 0 errors (no UnusedResources regression) |
+| code-reviewer-minimax-m3 | APPROVED |
+
+### Carry-over
+All 4 `MainActivity` destination lambdas (`generalTabContent`, `advancedTabContent`, `postProcessContent`, `debugContent`, `aboutContent`) are now in their post-fix state. Sprint 28c-#2 closed. Remaining Sprint 29 polish: (b)–(g) per PC_HANDY_REFERENCE.md §11.
