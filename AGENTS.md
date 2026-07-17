@@ -1072,9 +1072,11 @@ The on-device verification of Sprint 28b-v11 dev-UX wiring discovered a real Com
 
 **Catch-22 carried forward to a future sprint**: the "Developer tools enabled" Snackbar is unreachable in-app because DebugModeToggle lives INSIDE the gated DebugScreen. When `debug_mode=false`, Debug is not in nav; when `debug_mode=true`, the toggle starts at `true`, so any tap fires the "disabled" Snackbar + popBackStack. No `false→true` UI path exists today (DeveloperToolsDisabled placeholder is non-interactive). Fix requires adding a DebugModeToggle row inside DeveloperToolsDisabled so symmetric ON/OFF UX becomes testable end-to-end. Carrying this forward to Sprint 28b-v13.
 
-**Push status**: 0 commits in this turn; working tree has 6 modified + 1 new test (from Sprint 28b-v11) + the 1-line + 12-line KDoc fix in DebugContent.kt (from this Sprint 28b-v12). Per AGENTS.md auth notes, user runs `git add ... && git commit ... && git push origin main` from interactive shell (Plan-D).
+**Push status** (superseded by Sprint 28b-v13 + 28b-v14 chain): 0 commits in this turn; working tree had 6 modified + 1 new test (from Sprint 28b-v11) + the 1-line + 12-line KDoc fix in DebugContent.kt (from this Sprint 28b-v12). Per AGENTS.md auth notes, user runs `git add ... && git commit ... && git push origin main` from interactive shell (Plan-D).
 
-**Next session**: pick up Sprint 28b-v13 (developer-toggle-outside-DebugScreen path for the "enabled" Snackbar + ON Snackbar UX symmetry) OR pick up Sprint 29 polish per `handy-android/PC_HANDY_REFERENCE.md §11`.
+**Closure status (final, post-Sprint 28b-v14)**: **🟡 PARTIAL**. The v12 `Modifier.fillMaxSize()` Scaffold fix did NOT resolve the on-device `IllegalStateException`. Sprint 28b-v13 (Box-based) + Sprint 28b-v14 (LazyColumn-based) also PARTIAL — same upstream crashes in `AnimatedContent`'s measure-pass. All three fix attempts are captured in local commit `20001f3` (`feat(sprint28b-v11..v14): DebugModeToggle dev-UX + three on-device layout-fix attempts`). Push pending from user interactive shell. PRIMARY fix (`sizeTransform = { null }` per-destination override in `AppNavigation.kt`) is the carry-over — see Sprint 28b-v14 block below for diagnosis + recovery plan.
+
+**Next session**: pick up Sprint 28b-v13 (developer-toggle-outside-DebugScreen path for the "enabled" Snackbar + ON Snackbar UX symmetry) OR pick up Sprint 29 polish per `handy-android/PC_HANDY_REFERENCE.md §11`. *(Both deferred in favor of PRIMARY `sizeTransform = { null }` fix — see Sprint 28b-v14 carry-over.)*
 
 ## 📌 Session 2026-07-17 (resumed) — Sprint 29 sub-feature (a) closure: WCAG AA contrast audit
 
@@ -1276,3 +1278,58 @@ After user runs the 2 commits + push, the next session should:
 ### Auth/keyring/SSH env note (read before any `gh` ops from inside an agent subprocess)
 
 Subprocesses do NOT inherit OS keyring access. `gh auth status` returns `Failed to log in to github.com account $USER (keyring)` inside agent subprocesses even when `~/.config/gh/hosts.yml` holds a valid token. The user's interactive terminal is the canonical auth context for `gh` operations in this environment. For `git push`, use `git push origin main` from the user's terminal — NOT from an agent subprocess. If 503s hit `/releases/*` endpoints, fall back to web UI (Plan D in AGENTS.md release-body-update ladder).
+## 📌 Session 2026-07-17 (carry-on) — Sprint 28b-v14 Closure: Three-Attempt Layout Fix PARTIAL
+
+> **🟡 SPRINT 28b-v11..v14 PARTIAL ONLY — Compose Scaffold + AnimatedContent layout bug NOT YET CLOSED**. Three Compose-shape fixes for the post-Sprint-28b DebugScreen on-device crash (`Vertically scrollable component was measured with an infinity maximum height constraints`) ALL FAIL with the same `IllegalStateException` on `adb input tap 998 2242` reaching the Debug bottom-nav tile on Android 16.
+
+### Build state at Sprint 28b-v14 closure
+
+- `:app:compileDebugKotlin`: ✅ BUILD SUCCESSFUL, 0 warnings
+- `:app:testDebugUnitTest`: ✅ **147 PASS / 0 FAIL / 1 SKIP** (was 145 baseline + `DebugLayoutRegressionTest` after Robolectric LazyColumn semantics quirk fix)
+- `:app:lintDebug`: ✅ 0 errors / **93 warnings** (≈ +7 vs Sprint 27b-icon baseline of 86; new `debug_screen_*` / `debug_*` keys + debug-screen strings + LocaleResource carry-over)
+- `DebugLayoutRegressionTest.kt` (`lazyColumnInsideBoxWithFillMaxSize_composesWithoutCrash`): ✅ PASS in 4.376s on Robolectric 4.14.1 + SDK 35. **CAVEAT**: Robolectric `createComposeRule()` boots a headless `ComponentActivity` WITHOUT the outer `MainActivity.Scaffold + NavHost + AnimatedContent` chain, so it does NOT detect the on-device `AnimatedContent`-supplied Infinity. On-device integration test is the real ground-truth.
+- `cargo check` (handy-core/): green; 2 pre-existing `dead_code` warnings unrelated.
+
+### On-device verification — A059 (Nothing Phone 3a, Android 16, SDK 36)
+
+- Wireless debugging port **rotated from 40241 → 36711** (per `adb devices -l`). The 3 latest on-device tests were run against `192.168.1.36:36711`.
+- Three reinstalls + three fresh rebuilds with different Compose shapes inside `composable(DEBUG_ROUTE).body`:
+
+| Sprint | Shape inside `composable(DEBUG_ROUTE).body` | SHA on disk | FATAL? |
+|--------|----------------------------------------------|-------------|--------|
+| 28b-v12 | `Scaffold(fillMaxSize, snackbarHost){ innerPadding -> Column(fillMaxSize+verticalScroll.padding(innerPadding)) }` | `77e6a198...ffb53b4` | ✅ FATAL |
+| 28b-v13 | `Box(fillMaxSize){ Column(fillMaxSize+verticalScroll.padding) + SnackbarHost(align=BottomCenter) }` | `17fcc3e43c...293c` | ✅ FATAL — stack frame `Box.kt:173` IS in binary (proving the fix was applied) |
+| 28b-v14 | `Box(fillMaxSize){ LazyColumn(fillMaxSize.padding){ item{...} } + SnackbarHost(align=BottomCenter) }` | (committed in this turn) | ✅ FATAL — same `AnimatedContentKt$AnimatedContent$6$1$1$1.invoke-3p2s80s` mid-stack |
+
+All three shapes hit `IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints` at `AnimatedEnterExitMeasurePolicy` → `AnimatedContentKt$AnimatedContent`. The 3-attempt failure pattern confirms the upstream culprit is `AnimatedContent`'s measure-pass (which supplies `Constraints.Infinity` regardless of `enterTransition = None` / `ExitTransition.None` / outer `Modifier.fillMaxSize()`).
+
+### TODO before next session — USER ACTION REQUIRED
+
+If interactive shell available, run from `/home/marodriguezd/Github/Handy-Android`:
+
+```
+git push origin main
+```
+
+This pushes commit(s) from local to origin/main then completes the Sprint 28b-v14 round-trip.
+
+### Recommended next fix (per Gemini thinker verdict at 17:53:55 UTC)
+
+**PRIMARY** — `sizeTransform = { null }` per-destination override on `composable(DEBUG_ROUTE, enterTransition = { EnterTransition.None }, exitTransition = { ExitTransition.None }, sizeTransform = { null })` in `AppNavigation.kt`. This kills `AnimatedContent`'s measure-pass that supplies the Infinity constraint. Disabling visual transitions alone does NOT skip measure-pass.
+
+**FALLBACK** — `BoxWithConstraints` wrapper inside `DebugContent.kt` with `Modifier.heightIn(max = maxHeight)` on inner scrollable. Defensive (destination-scope only).
+
+**NOT recommended** — `Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp)` because of the **off-screen gotcha** in multi-window / split-screen / heavy-system-bar-inset scenarios.
+
+### Carry-over to follow-up Sprint (tentative: 28b-v14b or 28c)
+
+1. Apply PRIMARY `sizeTransform = { null }` fix in `AppNavigation.kt`.
+2. `adb install -r` on A059, cold-launch with `debug_mode=true`, tap Debug tile (998, 2242), verify NO FATAL.
+3. Verify Snackbar 'enabled'/'disabled' feedback + SharedPreferences `debug_mode` flip + popBackStack guard end-to-end.
+4. Amend AGENTS.md Sprint 28b-v12 + 28b-v13 + 28b-v14 entries: all three marked PARTIAL until PRIMARY fix closes.
+5. Optional: write a Robolectric JVM Compose UI test that includes the **full NavHost harness** (NOT just `DebugContent` in isolation) — exercises `key(debugEnabled) + composable(DEBUG_ROUTE)` so AnimatedContent-supplied Infinity is detectable on JVM. Provides an integration ground-truth that doesn't require an Android 16 device.
+
+### Auth / Plan-D ladder reminder
+
+Per AGENTS.md auth rules: `git push` MUST run from the user's interactive terminal (NOT from agent subprocess). Local `git add` + `git commit` is runnable from agent subprocess for documentation commits. Push from interactive shell ONLY.
+

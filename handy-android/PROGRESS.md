@@ -1179,3 +1179,40 @@ Sprint 29 polish per `handy-android/PC_HANDY_REFERENCE.md §11` Definition of Do
 ## 📌 Session 2026-07-17 — SAVE STATE pointer
 
 Comprehensive session-end snapshot lives at the end of `AGENTS.md` (last section: “SAVE STATE (pre-session-end snapshot, end-of-day)”). Contains: HEAD, 10-file staged set with sprint breakdown, build state, device state, code-reviewer verdicts, full 2-commit + push script, next-session starting point, and carry-overs. Next session MUST read that section first to resume.
+
+## 📌 Session 2026-07-17 (carry-on) — Sprint 28b-v14 Closure: 3-attempt layout fix PARTIAL
+
+Three Compose-shape fixes attempted in succession for the post-Sprint 28b DebugScreen on-device crash:
+
+1. **Sprint 28b-v12** (Scaffold + Modifier.fillMaxSize) — recompiled APK `77e6a198...ffb53b4`. FATAL persisted on tap-Debug on A059.
+2. **Sprint 28b-v13** (Box + SnackbarHost BottomCenter) — recompiled APK `17fcc3e43c...293c`. Stack trace confirms `Box.kt:173` IS in binary. FATAL persisted.
+3. **Sprint 28b-v14** (LazyColumn inside Box) — recompiled APK. FATAL PERSISTED — same exception text, same `AnimatedContentKt$AnimatedContent$6$1$1$1.invoke-3p2s80s(AnimatedContent.kt:781)` mid-stack.
+
+The 3-attempt failure pattern confirms upstream culprit is `AnimatedContent`'s measure-pass (which supplies `Constraints.Infinity` regardless of `enterTransition = None`). Robolectric JVM test passes because `createComposeRule()` boots headless `ComponentActivity` WITHOUT the outer `MainActivity.Scaffold + NavHost + AnimatedContent` chain.
+
+### Recommended next fix per Gemini thinker verdict (17:53:55 UTC)
+
+**PRIMARY**: `sizeTransform = { null }` per-destination override on `composable(DEBUG_ROUTE, ...)` in `AppNavigation.kt` — kills `AnimatedContent`'s measure-pass that supplies Infinity.
+**FALLBACK**: `BoxWithConstraints` wrapper inside `DebugContent.kt` with `Modifier.heightIn(max = maxHeight)`.
+**NOT recommended**: `heightIn(max = screenHeightDp.dp)` because of the off-screen gotcha in multi-window scenarios.
+
+### Files committed this save-state session
+
+```
+M  handy-android/app/build.gradle.kts                  (+15: Robolectric 4.14.1 + Compose UI test infra)
+M  handy-android/app/src/main/java/com/handy/app/ui/debug/DebugContent.kt   (~140: Scaffold->Box->LazyColumn attempt arc)
+M  handy-android/gradle/libs.versions.toml              (+30: robolectric 4.14.1, androidx-test-ext 1.2.1, androidx-test-core 1.6.1, compose-ui-test-junit4, compose-ui-test-manifest)
+?? handy-android/app/src/test/java/com/handy/app/ui/debug/DebugLayoutRegressionTest.kt   (new, 113 lines)
+```
+
+5 code-reviewer-minimax-m3 passes APPROVED-WITH-NITS completed across these files. Tests 147 PASS / 0 FAIL. Lint 93 warnings.
+
+### Next steps (resume from interactive shell)
+
+1. `git push origin main` (per AGENTS.md Plan-D auth ladder).
+2. Apply PRIMARY fix: `sizeTransform = { null }` per-destination in `AppNavigation.kt`.
+3. Rebuild + install + tap-Debug to verify NO FATAL.
+4. Verify Snackbar + SharedPreferences + popBackStack on-device.
+5. Amend three AGENTS.md Sprint 28b-v12/v13/v14 entries marked "PARTIAL" once PRIMARY closes.
+6. Optional: write Robolectric JVM test that reproduces AnimatedContent-supplied Infinity on JVM (NavHost harness inclusion).
+
