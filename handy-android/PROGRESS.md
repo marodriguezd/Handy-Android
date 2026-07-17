@@ -1020,3 +1020,45 @@ Plus: settings UI toggle for `debugMode` (with the Sprint 28b TODO-breadcrumb Op
 - `WhatsNewPreview` Modal wiring from Debug panel (currently a placeholder row mentions Sprint 28c).
 - `RecordingBuffer` slider steps UX polish (currently continuous; key-stopped UX would benefit).
 - `LiveLogViewer` could grow a "filter by logLevel" predicate honoring `app.settingsStore.logLevel` (currently the viewer shows all lines regardless of selected level).
+
+### Sprint 28b diagnostic — Debug nav not rendering despite correct flag (Julio 17, 2026)
+
+**Question**: why does the Debug nav item NOT appear in the BottomNav after `SET_DEBUG_MODE --ez enabled true` broadcast?
+
+**Diagnostic added** (Sprint 28b v8): 4 `Log.i("HandyMain", ...)` breadcrumbs in `MainActivity.onCreate()`:
+1. `onCreate enter: debugModeFlow.value=X, debug(prefs)=Y` — captures state before any onCreate-side writes.
+2. `skip_onboarding=true` (only when intent extra is true).
+3. `start_dictation=true` (only when intent extra is true).
+4. `BEFORE setContent: debugModeFlow.value=X, debug(prefs)=Y` — captures state right before setContent.
+
+**Diagnostic result** (after rebuild + reinstall + force-stop + correct-syntax broadcast `-a com.handy.app.action.SET_DEBUG_MODE -p com.handy.app.debug --ez enabled true` + launch with `--ez skip_onboarding true`):
+```
+07-17 17:36:28.145 HandyMain: onCreate enter: debugModeFlow.value=true, debug(prefs)=true
+07-17 17:36:28.150 HandyMain: skip_onboarding=true
+07-17 17:36:28.150 HandyMain: BEFORE setContent: debugModeFlow.value=true, debug(prefs)=true
+```
+
+**Verdict**: The flag propagates **correctly through the entire chain**:
+- Broadcast (correct syntax) -> manifest receiver -> `app.settingsStore.debugMode = enabled` (writes both `_debugModeFlow.value` AND `prefs.edit().putBoolean(..., apply())`)) -> at next force-stop+launch, MainActivity's first composition reads `_debugModeFlow.value = true`.
+
+**But** Bottom NavigationBar still renders 5 items, not 6 (no Debug icon). The bug is therefore in **Compose Navigation re-render**, not in flag propagation.
+
+**Hypothesis** (Sprint 28b v9 follow-up):
+- `AppNavigation`'s `navScreens = remember(debugEnabled) { if (debugEnabled) DefaultScreens + Screen.Debug else DefaultScreens }` rebuilds correctly when `debugEnabled` flips.
+- The flip PROPAGATION works (confirmed via Log breadcrumbs).
+- BUT: the `NavHost` graph was built at the FIRST composition with `navScreens = 5 items` (because debugModeFlow.value's read inside `debugEnabled = debugModeState.value` may have been BEFORE the broadcast — composition caching on first run regardless of subsequent reads).
+- The fix is one of:
+  - Use `debugEnabled = app.settingsStore.debugMode` (read pref directly) instead of collectAsState(value).
+  - Force NavHost rebuild on every debugEnabled flip via a `key(debugEnabled) { ... }` block inside the NavHost.
+  - Pass `debugEnabled` as a `MutableState<Boolean>` and let Compose scheduler schedule the rebuild.
+
+**On-device evidence captured**:
+- `/tmp/handy_shots/sprint28b/04_after_fix.png` — 1080×2392 — first post-fix state.
+- Logcat breadcrumbs at `HandyMain` filter — propagation is correct.
+- Bottom-nav UI dump shows 5 clickables at y in [2148, 2336] (suspected General/Models/History/PostProcess/About — clicking → reveal destination).
+- APK at `app/build/outputs/apk/debug/app-debug.apk` was rebuilt with the corrected Sprint 28b RingBufferLog.kt (the v6 KDoc-rewrite had introduced duplicate `open fun append` and `open fun clear` lines that broke compileDebugKotlin — fixed).
+
+**Carry-over / Sprint 28b v9**:
+- Remove the 4 `Log.i("HandyMain", ...)` breadcrumbs (one-shot diagnostic).
+- Fix the navScreens key so debugEnabled actually triggers recompose + NavHost route registration.
+- Rebuild + reinstall + broadcast + screencap to visually confirm Debug screen renders.

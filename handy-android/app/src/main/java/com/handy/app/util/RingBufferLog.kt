@@ -13,13 +13,17 @@ package com.handy.app.util
  * then `addLast`) could transiently expose a half-evicted state to a
  * reader that called [snapshot]/[tail] between those two operations.
  *
- * Mitigation: a single private [lock] is acquired around the entire
+ * Mitigation: a single shared [lock] is acquired around the entire
  * [append] mutation. [snapshot], [tail], [clear], and [size] each
  * grab the same lock so observers see either the pre-append or
  * post-append state — never the in-between. The compose-side
  * [ReactiveRingBufferLog] wrapper adds a higher-level StateFlow tick
- * for LiveLogViewer observers; the JVM tests below verify the base
- * class invariants.
+ * for LiveLogViewer observers; the JVM tests verify the base class
+ * invariants.
+ *
+ * [lock] is `protected` so the documented subclass contract can use
+ * `synchronized(lock)` to extend the critical section across both
+ * the base ArrayDeque mutation AND any subclass-side publish.
  *
  * @param maxLines maximum number of retained lines. Must be > 0.
  */
@@ -49,7 +53,6 @@ open class RingBufferLog(private val maxLines: Int = MAX_LINES_DEFAULT) {
      *   field) — declaring a private `Any()` and synchronizing on it
      *   silently defeats the contract.
      */
-    open fun append(line: String) {
     open fun append(line: String) {
         synchronized(lock) {
             if (buf.size >= maxLines) buf.removeFirst()
@@ -87,7 +90,6 @@ open class RingBufferLog(private val maxLines: Int = MAX_LINES_DEFAULT) {
      * `protected` lock MUST be reused; do NOT declare a private `Any()`
      * and synchronize on that, or the contract is silently defeated.
      */
-    open fun clear() {
     open fun clear() {
         synchronized(lock) { buf.clear() }
     }
