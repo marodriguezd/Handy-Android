@@ -104,6 +104,9 @@ After Sprint 29 closes, expected residuals:
 ## Reference links
 
 - `handy-android/PC_HANDY_REFERENCE.md` §11 — Definition of Done (canonical)
+- `handy-android/PROGRESS.md` § Sprint 29(e) — UnusedResources sweep closure log (46 → 0)
+- `AGENTS.md` (root) § Sprint 29(e) — closure log with decision matrix and audit methodology
+- `MIGRATION_PLAN_MD3.md` § "🛠 Corrección suplementaria" — historical Sprint 25–29 plan
 - `handy-android/MIGRATION_PLAN_MD3.md` § "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)" — historical plan
 - `AGENTS.md` (root) § "Sprint 29 (cierre) — Polish + accesibilidad + tests + docs" — top-level plan pointer
 - `handy-android/PROGRESS.md` § Sprint 28b-v12 — most-recent closure log (Compose layout regression fix)

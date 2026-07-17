@@ -1383,3 +1383,45 @@ User request (verbatim from follow-up): "Optional Sprint 28d+ extension: also fl
 **Onboarding runtime ground-truth**: requires user finger-tap-through to step 3 (model download) to confirm `OnboardingVM: Selected target: handy-computer/canary-180m-flash-gguf (size=139MB, promotion=tier-primary, ...)` for both LOW and MID device tiers.
 
 **Push status**: Local commit + `git push origin main` from basher subprocess. Working tree clean post-push.
+
+## Sprint 29(e) — UnusedResources sweep (17 julio 2026, sprint post-28d+)
+
+Closes the `UnusedResources` lint cluster end-to-end. Sprint 29 polish plan from `handy-android/PC_HANDY_REFERENCE.md §11` decremented by one (sub-feature (a) WCAG AA was Sprint 29a; sub-feature (e) closed in this pass).
+
+### What shipped (2 commits, 8 files, 116 deletions)
+
+**Commit 1 (`4ac3d45`, asset sweep)** — 7 files / 77 deletions, closes 12 UnusedResources:
+- `app/src/main/res/values/colors.xml` (10 brand-palette colors; Compose Color.kt is SoT)
+- `app/src/main/res/drawable/ic_launcher_foreground.xml` (orphaned after Sprint 27b removed mipmap-anydpi-v26)
+- `app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_round.png` × 5 (manifest uses @mipmap/ic_launcher for both icon and roundIcon)
+
+**Commit 2 (`e7ac8e9`, string sweep)** — 1 file / 39 deletions, closes remaining 34 UnusedResources:
+- 34 strings deleted from strings.xml (290 → 256)
+- 2 orphan section comments cleaned up: `<!-- Dictation Screen -->` + `<!-- Mobile Recommendation Badges (curated subset per DeviceTier) -->`
+
+### Audit methodology
+3-step grep pipeline:
+1. Kotlin R-class refs: 286 hits
+2. XML @-refs: 4 hits
+3. Dynamic reflection: zero `resources.getIdentifier(...)` / `R.string.format` / R-string-concat patterns
+
+All 46 lint-flagged UnusedResources confirmed truly unused (zero matches across all three ground-truth sources). thinker-with-files-gemini approved in 2 passes; code-reviewer-minimax-m3 approved in 3 passes (Commit 1 + Commit 2 + micro-comment cleanup).
+
+### Build state at closure
+
+| Metric | Before | After |
+|---|---|---|
+| UnusedResources | 46 | **0** |
+| Total lint warnings | 99 | 43 |
+| Tests (JVM pure) | 126 PASS / 0 FAIL / 1 SKIP | **148 PASS / 0 FAIL / 1 SKIP** |
+| strings.xml total | 290 | 256 |
+
+### Push status
+Local commits `4ac3d45` + `e7ac8e9`. User runs `git push origin main` from interactive shell per AGENTS.md Plan-D (subprocess `gh release edit` keyring isolation).
+
+### Carry-over to next session
+1. Sprint 29(b)–(g) per PC_HANDY_REFERENCE.md §11: predictive back, foldable hinge, motion audit, snapshot scripts refresh, §11 verification
+2. GradleDependency (33) + AndroidGradlePluginVersion (3): AGP 9.x + Kotlin 2.0 paired migration closes 21 of these
+3. IconLauncherShape (5) + IconDuplicates (5): adaptive icon polish
+4. Spanish residue drift (PC_HANDY_REFERENCE.md §7 A1): settings_section_aplicacion / salida / transcripcion still in strings.xml; out of scope here, revisit in Sprint 29(g)
+5. Optional Sprint 28e (deferred from Sprint 28d+): FLAGSHIP tier multilingual extension via canary-qwen-2.5b → canary-1b-v2

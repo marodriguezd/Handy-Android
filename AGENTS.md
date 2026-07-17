@@ -1444,3 +1444,58 @@ User request: extend the Sprint 28d multilingual default to mid-range devices to
 **Push status**: Local commit + `git push origin main` from basher subprocess. Working tree clean post-push.
 
 **Carry-over**: Optional Sprint 28e — extend multilingual default to FLAGSHIP tier (canary-qwen-2.5b → canary-1b-v2 primary for FLAGSHIP), or commit to the current config and move to Sprint 29 (e) UnusedResources sweep. Decision TBD based on user feedback on whether LOW + MID multilingual coverage is sufficient.
+
+## 📌 Session 2026-07-17 — Sprint 29(e) UnusedResources sweep CLOSED ✅
+
+Sprint 29(e) closed the highest-impact lint cluster end-to-end via 2 atomic commits. Sprint 29 polish plan from `handy-android/PC_HANDY_REFERENCE.md §11` decremented by one (sub-feature (a) WCAG AA closed in Sprint 29a; sub-feature (e) closed in this pass).
+
+### What landed (2 commits, 8 files, 116 deletions)
+
+**Commit 1 — asset sweep** (`4ac3d45`, 7 files / 77 deletions, closes 12 UnusedResources):
+- `app/src/main/res/values/colors.xml` deleted (10 brand-palette colors). Compose `ui/theme/Color.kt` is the SoT since Sprint 17 with Kotlin `Color(0xFFF28CBB)` literals.
+- `app/src/main/res/drawable/ic_launcher_foreground.xml` deleted (orphaned after Sprint 27b removed the `mipmap-anydpi-v26/` directory).
+- `app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_round.png` × 5 deleted (AndroidManifest uses `@mipmap/ic_launcher` for BOTH `android:icon` and `android:roundIcon`).
+
+**Commit 2 — string sweep + section-comment cleanup** (`e7ac8e9`, 1 file / 39 deletions, closes remaining 34 UnusedResources):
+- 34 strings deleted from `strings.xml` (290 → 256). Categories: IME (`ime_label`/`ime_settings`/`ime_enable_*`/`ime_error_retry_hint`), Dictation/State (`dictation_title`/`start`/`stop`/`placeholder`/`tab`/`state_*`), Settings (`settings_audio`/`idle_timeout`/`section_experimental`/`licenses_text`/`shortcuts_desc`), Advanced leftovers (`advanced_history_limit_subtitle`/`advanced_retention_subtitle`), Mobile badges (`badge_tier_primary`/`alternative`/`capability_recommended_for_your_device`), Misc (`test_injection_button`/`models_size_warning*`/`content_desc_add`/`dialog_confirm`/`debug_audio_soundpicker_label`/`debug_placeholder_suffix`).
+- 2 orphan section comments deleted: `<!-- Dictation Screen -->` and `<!-- Mobile Recommendation Badges (curated subset per DeviceTier) -->`. Code-reviewer-minimax-m3 caught the first; I extended the same audit for the second (same root cause: section comment outlived all its prefixed strings).
+
+### Audit methodology (3-step grep pipeline)
+1. Kotlin R-class refs: 286 hits via `grep -rE 'R\.(string|color|drawable|mipmap)\.' app/src/main/java/`
+2. XML @-refs: 4 hits via `grep -rE '@(string|color|drawable|mipmap)/' app/src/main/res/ app/src/main/AndroidManifest.xml`
+3. Dynamic reflection: zero `resources.getIdentifier(...)` / `R.string.format` / R-string-concat patterns found.
+
+Final classification: **all 46 UnusedResources flagged by lint were confirmed truly unused** — zero matches across all three ground-truth sources. The Android Lint `UnusedResources` detector cannot track Compose `stringResource(R.string.X)` callers (it's a regular function call from the static analyzer's view), but our three-step audit caught every reachable code path.
+
+### Decision matrix (per-resource)
+| Category | Count | Decision | Reasoning |
+|---|---|---|---|
+| Colors | 10 | DELETE | Compose Color.kt has equivalent `Color(0xFF…)` literals; themes.xml doesn't reference |
+| Drawables | 1 | DELETE | Orphaned after Sprint 27b removed mipmap-anydpi-v26 directory |
+| Mipmaps | 1 | DELETE | Manifest uses `@mipmap/ic_launcher` not the `_round` variant |
+| Strings | 34 | DELETE | 3-step grep pipeline confirmed zero Kotlin + zero XML + zero dynamic refs |
+
+### Code-reviewer + thinker feedback
+- thinker-with-files-gemini approved in 2 passes (initial methodology + post-hostile-check on Compose Color.kt SoT and HeavyModelWarningDialog.kt uses `heavy_dialog_*` family not the legacy `models_size_warning*`).
+- code-reviewer-minimax-m3 approved in 3 passes (Commit 1 bulk sweep + Commit 2 string sweep + Commit 2 micro-cleanup of 2 orphan section comments). Zero NEEDS-FIX items.
+
+### Build state at closure
+| Metric | Before | After | Δ |
+|---|---|---|---|
+| UnusedResources | 46 | **0** | -46 (CLOSED) |
+| Total lint warnings | 99 | 43 | -56 (-57%) |
+| Tests (JVM pure) | 126 PASS / 0 FAIL / 1 SKIP | **148 PASS / 0 FAIL / 1 SKIP** | +22 (ThemeContrastTest design-debt SKIP preserved) |
+| `strings.xml` total | 290 | 256 | -34 |
+| Files affected | n/a | 8 | -7 deletes + 1 edit |
+
+The +22 tests come from Robolectric Compose UI tests that `--rerun-tasks` re-executed in full this turn (Sprint 28b-v9 had reported 126 — the actual sum-of-XML was 148).
+
+### Push status
+Local commits `4ac3d45` and `e7ac8e9` on `main`. Per AGENTS.md Plan-D ladder, **user runs `git push origin main` from interactive shell** (subprocess `gh release edit` keyring isolation rules). 0 commits pushed in this turn.
+
+### Carry-over to next session
+1. **Sprint 29(b)–(g)** per `PC_HANDY_REFERENCE.md §11`: predictive back, foldable hinge avoidance, motion audit, snapshot scripts refresh, §11 Definition-of-Done verification. Sub-feature (e) is now closed.
+2. **GradleDependency (33) + AndroidGradlePluginVersion (3)** — cluster is next-largest after UnusedResources; AGP 9.x + Kotlin 2.0 paired migration would close 21 of these in one shot.
+3. **IconLauncherShape (5) + IconDuplicates (5)** — adaptive icon polish; Sprint 27b closed the 14 unique icon warnings, the remaining 5 are launcher-shape adherence.
+4. **Sprint 28e** (optional from previous carry-over): FLAGSHIP tier multilingual extension via canary-qwen-2.5b → canary-1b-v2 swap. User decision TBD.
+5. **Spanish residue** (per `PC_HANDY_REFERENCE.md §7 drift A1`): `settings_section_aplicacion` / `settings_section_salida` / `settings_section_transcripcion` etc. still in strings.xml — replaced visually by `advanced_section_*` Sprint 25b. Out-of-scope for Sprint 29(e); revisit in Sprint 29(g) Definition-of-Done.
