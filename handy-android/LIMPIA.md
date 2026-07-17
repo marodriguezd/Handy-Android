@@ -48,9 +48,20 @@ cd handy-android
 
 ```bash
 adb devices -l
+./scripts/check_device.sh    # idempotente, también imprimer diagnóstico si falta
 ```
 
-El dispositivo de prueba habitual es un **A059** con serial `adb-00143154F001971-AbAnvz._adb-tls-connect._tcp`.
+El dispositivo de prueba habitual es un **A059** con serial histórico `adb-00143154F001971-AbAnvz._adb-tls-connect._tcp` y, vía mDNS o pairing persistente, suele aparecer también como `192.168.1.36:<puerto>`.
+
+> **Sesión activa verificada (17 julio 2026)**: emparejamiento vía Wi-Fi en `192.168.1.36:40293`. El usuario tenía Wireless debugging desactivado accidentalmente; tras reactivarlo en Developer options y volver a emparejar, ese es el puerto actual. **El puerto cambia en cada emparejamiento** — lee el que muestra la pantalla Wireless debugging del A059 antes de hacer `adb connect`.
+
+> **Si no aparece nada en `adb devices`**, abre **Settings → System → Developer options → Wireless debugging** en el A059, copia el IP:port que aparece, y ejecuta:
+>
+> ```bash
+> adb connect <teléfono_ip>:<teléfono_port>
+> ```
+>
+> Path completo, USB→TCP fallback, troubleshooting de `Connection refused` / `Unauthorized` / `offline` en [`scripts/RECONNECT_DEVICE.md`](scripts/RECONNECT_DEVICE.md).
 
 ---
 

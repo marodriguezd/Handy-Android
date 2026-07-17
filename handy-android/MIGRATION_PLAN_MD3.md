@@ -2,7 +2,7 @@
 
 > **Objetivo**: convertir Handy Android en una app 100 % Material Design 3 (expressive-ready), usando **exactamente** la misma paleta de colores de Handy PC, replicando y elevando a primitivas nativas de Compose Material3 todas las funcionalidades del PC.
 
-**Fecha**: 16 de julio de 2026 · **Autor**: sesión orquestada desde `AGENTS.md` · **Estado actual**: cierre de Sprint 16.
+**Fecha**: 17 de julio de 2026 (post-replan; supersedes 16-jul-2026 original) · **Autor**: sesión orquestada desde `AGENTS.md` · **Estado actual**: cierre de Sprint 24 (MD3 backbone completo backbone + lint sweep). **Sprint 25-29 replan entregado** — ver sección "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17" al final del archivo.
 
 ---
 
@@ -660,3 +660,143 @@ Cuando lo confirmes, empezamos **Sprint 18** (componentes shared) y a continuaci
 8. **`AppCompatDelegate.setApplicationLocales`** recrea la activity → edge case documentado en Sprint 22.
 9. **AudioPlayer**: usar MD3 `Slider` para seek bar y `CircularProgressIndicator` para buffering.
 10. **Foldable hinge avoidance** agregado al Sprint 28 con `WindowInfoTracker`.
+
+---
+
+## 🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)
+
+> Esta sección es el **plan canónico ejecutable para Sprints 25 → 29**. Las correcciones 1-10 arriba siguen vigentes, pero ahora se aplican con el contexto completo del Sprint 24 cerrado.
+>
+> Las inconsistencias detectadas entre el plan original (arriba) y la realidad se cierran aquí:
+>
+> - El plan original usa dos enumeraciones distintas para los sprints post-21: la sección "Plan por sprints" lista 25 = Advanced, 26 = Onboarding, 26 = Post-processing (numeración duplicada), 27 = Debug, 28 = Polish; mientras que la "Reordenación del plan (Sprint 21.x)" los renumera a 25 = Advanced, 26 = Post-processing, 27 = Onboarding, 28 = Debug, 29 = Polish. **La reordenación es la autoridad**.
+> - El plan lista `HandyListItem.kt` en Sprint 18 pero la auditoría del 17-jul-2026 revela que el fichero no existe — `SettingsRow` y `SettingsRowDivider` viven en `SettingsGroup.kt` como primitivos locales. Sprint 25 lo extrae a su propio archivo.
+> - El plan dejaba `EngineBridge.nativeRetryHistoryEntry` + `RecordingRepositoryProvider` como carry-over "sprints posteriores" indefinidos. Sprint 25 los absorbe explícitamente porque es la única manera de que el botón Retry del History (shipped en Sprint 24) deje de ser stub.
+
+### Sprint 25 — Advanced Settings refinement + Retry backend
+
+**Goal**: Polish Advance Settings sobre primitivos MD3 shared + implementar `EngineBridge.nativeRetryHistoryEntry` + `RecordingRepositoryProvider` (binding dos carry-overs de Sprint 24).
+
+**Work items (en orden de dependencia)**:
+1. **Limpieza estructural**: extraer `HandyListItem.kt` (estaba declarado en Sprint 18 pero faltaba en repo). Borrar `ui/shared/` (carpeta vacía carry-over).
+2. **`RecordingRepositoryProvider`** (`app/data/RecordingRepositoryProvider.kt`, nuevo) — ring-buffer que persiste audio recordings. Backea inicialmente a `Context.getExternalFilesDir("recordings")` + manifest JSON (`recording_index.json`). Thread-safe (`Mutex`). API: `list()`, `get(id)`, `store(bytes)`, `delete(id)`, `cap()`.
+3. **AudioRecorder.persist() integration** — `RecordingService` ahora llama `repository.store(bytes, timestamp)` en cada `nativeStopRecording`. Primero dual-write (legacy `transcription_log.db` + repository) flag-gated por `SettingsStore.recordingRepositoryShouldDualWrite = true` durante las primeras 2 semanas de transición.
+4. **`EngineBridge.nativeRetryHistoryEntry(entryId: Long): Boolean`** — nuevo JNI. `history.rs` busca el entry en el manifest index, lee el .wav del repository, regenera el `HistoryEntry` con texto nuevo, actualiza la `HistoryTable`. Kotlin: substituye `delay(RETRY_SIMULATED_DELAY_MS)` por `EngineBridge.nativeRetryHistoryEntry(entryId)` en `HistoryViewModel.retry(...)`. Preservation del state-flag + structured-concurrency pattern.
+5. **`AdvancedSettingsContent` refactor** (`SettingsScreen.kt`):
+   - **App**: `HandySwitch` (experimentalEnabled).
+   - **Output** (= Text injection): `HandyDropdown` con Shizuku / IME / Clipboard (default Shizuku > IME > Clipboard, alineado con PC).
+   - **Transcription**: `HandySwitch` (vad) + `HandySwitch` (addFinalSpace) + **NEW** `CustomWords` (`OutlinedTextField` + chip group via `HandyChipGroup`).
+   - **History**: `HandyDropdown` (HistoryLimit: 50/100/250/500/∞), `HandyDropdown` (RecordingRetentionPeriod: 1day/1week/1month/forever).
+   - **Experimental** (gated): `HandyDropdown` (AccelerationSelector: CPU/Vulkan/NNAPI).
+6. **`GeneralSettingsContent` polish** — mover filas a `HandyListItem` (de `SettingsGroup.kt`).
+7. **Tests nuevos (JVM puro)**:
+   - `CustomWordsParserTest` (5) — separadores `,` / newline, trim, blank handling.
+   - `AccelerationSelectorTest` (4) — CPU fallback cuando Vulkan/NNAPI no disponibles.
+   - `RecordingRepositoryProviderTest` (8) — store/list/get/delete idempotencia, size cap.
+   - **Target**: 37 + 17 = **54 PASS** total.
+8. **Lint trajectory**: estable en 84. AGP bump se difiere a Sprint 26 para evitar scope creep.
+9. **Éxito on-device**: el botón Retry de History reproduce texto usando el audio persistido (logcat `HistoryVM: Retry completed for id=...`); Advanced toggle cambios persisten y se ven reflejados en el picker.
+
+**Esfuerzo realista**: 2.5 días (revisado tras code-reviewer feedback). Si los carry-overs de Sprint 24 atrasan, Split en **Sprint 25a** (Settings refinement + structural cleanup, 1d) + **Sprint 25b** (RecordingRepositoryProvider + native JNI binding, 1.5d) preserva shippability independiente.
+
+> **IMPORTANTE — listar siempre como objetivos**: Si `EngineBridge.nativeRetryHistoryEntry` o `RecordingRepositoryProvider` quedan sin cerrar al final del sprint, Sprint 26 NO puede iniciar (sigue bloqueado por el Retry stub de Sprint 24). El Retry stub es inviable de mantener post-release.
+
+### Sprint 26 — Post-processing MD3 + AGP bump
+
+**Goal**: Replicar PC `PostProcessingSettingsApi` + prompts custom; bump AGP/Gradle para cerrar las 18 `GradleDependency` + 3 `AndroidGradlePluginVersion` warnings.
+
+**Work items**:
+1. **AGP 8.x → 9.x bump** — actualizar `gradle-wrapper.properties` + scripts. Target: 9.7+ estable.
+2. **Folder `ui/postprocess/`**:
+   - `ProviderSelect.kt` — `HandyDropdown` con OpenAI / Anthropic / Ollama / Custom. Default Ollama si `prefill_endpoint = http://10.0.2.2:11434`.
+   - `BaseUrlField.kt` + `ApiKeyField.kt` — `OutlinedTextField` con visibility toggle para ApiKey.
+   - `ModelSelectField.kt` — Input + refresh `IconButton` que dispare `EngineBridge.nativeFetchModels(provider, endpoint, apiKey)`. Si provider=Custom → input manual.
+   - `PromptList.kt` + `PromptEditor.kt` — `LazyColumn` de cards via `HandyTonalBlock` + editor en `HandyModalBottomSheet` (NO `BasicAlertDialog` — ver corrección #9).
+3. **`PostProcessContent.kt`** (`ui/postprocess/`) — composition root con 3 SettingsGroups: PROVIDER / CONNECTION / PROMPTS. **Move out de `SettingsScreen.kt`** → Post-processing es destination propia en nav rail (alignment PC).
+4. **Network security** — `network_security_config.xml` con `<domain-config cleartextTrafficPermitted="true">` para `10.0.2.2` y `localhost` (Ollama default).
+5. **`PostProcessFormValidator.kt`** (puro) + `PostProcessFormValidatorTest` (8 tests) — validate endpoint URL, non-empty api key, model fetchable, prompts list non-empty.
+6. **Tests**: 8 nuevos. Target: **62 PASS**.
+7. **Lint trajectory**: 84 → ~63 (delta -21 del AGP bump: 18 + 3 resolved).
+
+**Esfuerzo realista**: 2 días (revisado — AGP bump solo consume 0.5d, pero el provider migration + nuevas components + network security + 8 tests require el resto). Si AGP bump se complica (BuildConfig / Kotlin compiler / Compose compatibility), split en **26a** (AGP + network security) + **26b** (provider migration).
+
+### Sprint 27 — Onboarding MD3 refinado
+
+**Goal**: Onboarding completamente en primitivos M3 natives; cierre de 14 launcher/icon warnings.
+
+**Work items**:
+1. **Layout overhaul** (`OnboardingScreen.kt`) — `AnimatedContent(tween(500, PopEasing))` entre pages. `EmptyPulsingDot` reuso de Sprint 21 pill.
+2. **StepIndicator** — `Surface(shape=RoundedCornerShape(percent=50), tonalElevation=3.dp)` + `Box.size(48.dp)` con step number.
+3. **Icon container** — `Box(size=120, color=surfaceContainerHigh, shape=MaterialTheme.shapes.large)` con `Icon(tint=primary, size=64)`.
+4. **Action trio** — `Button` (Primary filled) + `OutlinedButton` + `TextButton`. Min 48dp touch targets.
+5. **Progress** — `LinearProgressIndicator` con label visible. Solver el percentage via state-derived.
+6. **Launcher icon cleanup** — `IconDuplicates` + `IconLauncherShape` + `IconDipSize` + `MonochromeLauncherIcon` (~14 warnings). Regenerar `mipmap-anydpi-v26` con MD3 adaptive icon proper.
+
+**Tests**: no strictly required (layout binding). Coverage ya OK.
+
+**Lint trajectory**: ~63 → ~49 (delta -14).
+
+**Esfuerzo realista**: 1.5 días (revisado — adaptive launcher icons requieren un foreground vector + background color/vector design asset, que no existe aún en el repo. Sin un design asset, +0.5d para crearlo o split en **27a** (onboarding composables, 1d) + **27b** (icon ship post-design, 0.5d)).
+
+### Sprint 28 — Debug panel gated
+
+**Goal**: Vista de developer tools gated por `Settings.debugMode = true` + Shizuku API probe.
+
+**Work items**:
+1. **Routing** (`AppNavigation.kt`) — nueva nav rail/bar item solo si `Settings.debugMode = true`. Default `false`. Setting nuevo en `SettingsStore`.
+2. **`ui/debug/DebugContent.kt`**:
+   - `LogLevelSelector` (HandyDropdown: VERBOSE/DEBUG/INFO/WARN/ERROR).
+   - `WhatsNewPreview` (botón → `WhatsNewModal` ya existente).
+   - `UpdateChecksToggle` (HandySwitch).
+   - `SoundPicker` (reuse de Sprint 19).
+   - `LiveLogViewer` — ring buffer circular (500 lines) hooking `android.util.Log` via wrapper. UI: `LazyColumn` reverse-order.
+3. **`RingBufferLog.kt`** (puro) + `RingBufferLogTest` (5 tests) — JVM-testable ring buffer.
+4. **`DebugViewModel.kt`** — captura logs via logger interface + tail a UI via `StateFlow` debounced (200ms sliding).
+5. **Shizuku API probe** — investigar `PrivateApi` (3 warnings) — afecta Android 16 compat. Si `checkSelfPermission` + `requestPermission` (API pública) cubren lo que hacemos, replace las reflection-based hidden API calls. Documentar todo en AGENTS.md.
+
+**Lint trajectory**: estable o -3 si Shizuku probe resuelve. Expect ~46 warnings.
+
+**Auth/genre risk**: log spam stall UI thread. Mitigated via 200ms debounce.
+
+**Esfuerzo**: 1 día.
+
+### Sprint 29 — Polish + accesibilidad + tests + docs (cierre)
+
+**Goal**: WCAG AA audit + predictive back + foldable hinge + final lint sweep.
+
+**Work items**:
+1. **Motion token audit** — todo `tween()` / `spring()` referencia via `MotionTokens`. Pickups: HistoryScreen, AppNavigation, Settings.
+2. **`UnusedResources` sweep** — 36 warnings. Grep `strings.xml`/`drawables/`/`mipmap/`. Eliminar solo las referencias completamente inexistentes (cuidado con `stringResource()` indirecto en lambda capture).
+3. **`mipmap-anydpi-v26` folder cleanup** — resolución final.
+4. **Predictive back** (Android 14+) — verificar `OnBackPressedDispatcher` unwind state correctamente. `OnBackPressedCallback(true) { ... }` para IME + Navigation root.
+5. **Foldable hinge avoidance** — `WindowInfoTracker.getOrCreate(activity).windowLayoutInfo(...)` en IME service. Puro logic test via reflection si posible.
+6. **`ThemeContrastTest.kt`** (jvm pure) — itera todos los pares (background × onSurface, surfaceContainer × onSurface, primary × onPrimary, etc.), compute luminance, asserts ≥ 4.5:1 (texto) y ≥ 3:1 (UI components). Pin the Handy palette + light scheme.
+7. **`BACKENDS.md` update** — Vulkan re-enable test report + QNN/Hexagon eval (o nota "deferred indefinitely" si no llegamos).
+8. **`capture_ime.sh` + `capture_onboarding.sh`** snapshots refresh.
+9. **`IMEStateMachineTest`** (puro) — state transitions over tipos (IDLE → LOADING, etc.) para codificar el contrato del pill.
+
+**Tests**: `ThemeContrastTest` (12-16 assertions) + `IMEStateMachineTest` (6) + (`RingBufferLogTest` consolidado de Sprint 28).
+
+**Lint trajectory**: 46 → **~9 residuals** (revisado tras code-reviewer feedback — strict "0 warnings" no es realista dado el scope). Las 9 residuals esperadas son: 1 `mipmap-anydpi-v26` carry-over (estructural), 3 `PrivateApi` si Shizuku probe no encuentra alternative public API, 5 misc documentation/spec lint categories documenting choices deliberados. **Cada residual se documenta explícitamente en este bloque con causa + decisión arquitectónica**. |
+
+**Pre-MD3 leak cleanup (encubierto por code-reviewer)**: Antes del polish, swap `AlertDialog` uso en `AboutContent.kt` (Licenses flow) por `HandyDialog` (primitivo Sprint 18). Type-changes en `SettingsScreen.kt` (ShizukuStatusDialog también) heredan el mismo primitive. **Esta cleanup se hace en Sprint 25**, no Sprint 29 — es una pre-MD3 residue del Sprint 23, no parte del polish.
+
+**Esfuerzo**: 1.5 días.
+
+### 🏁 Definition of "MD3 Native Complete"
+
+Para cerrar oficialmente la migración, **todos** los siguientes deben ser verdaderos el 17 de julio de 2026 ± un sprint:
+
+- [ ] **0 imports Compose Material 1.x** (`grep -r 'import androidx.compose.material\\.' handy-android/app/src/main/java/com/handy/app/ui | grep -v '.material3.'` → empty).
+- [ ] **0 `Color(0x...)` hardcoded fuera de `Color.kt`** — grep verifiable.
+- [ ] `ui/components/` cubre los 17 primitivos Shared declarados en Sprint 18: SettingsGroup, Slider, Switch, ChipGroup, SearchBar, SegmentedButton, Badge, Snackbar, Dialog, Fab, ListItem, Dropdown, TonalBlock, ModalBottomSheet, MotionTokens, StatusDot, SpringTokens.
+- [ ] `ui/shared/` (carpeta vacía carry-over) eliminado.
+- [ ] 6 nav destinations: General / Models / History / About + Debug (gated) + Post-process dedicado (post-Sprint 26).
+- [ ] IME Pill: 6-state machine, 48dp touch targets, top/bottom placement, spring motion, post-Sprint 29 fix `confirming-cursor` blink.
+- [ ] **All touch targets ≥ 48dp** — grep `: Modifier.size(N.dp)` donde `N < 48` debería retornar 0 en code paths visibles (excluyendo internal animations + spacers).
+- [ ] Post-processing + Debug screens completamente en primitivos Shared.
+- [ ] `compileDebugKotlin` + `testDebugUnitTest` + `lintDebug` todos verdes: **0 errors + ≤ 10 lint warnings residuals documentados explícitamente en el Sprint 29 Definition of Done table**. No aspirar a 0 strict — el alcance de migration deja residuals estructurales (1 mipmap-anydpi-v26 carry-over, up-to 3 PrivateApi si Shizuku probe falla, ~5 documentation/spec categories).
+- [ ] `ThemeContrastTest` en CI asegura WCAG AA compliance going forward.
+- [ ] `BACKENDS.md` + `LIMPIA.md` actualizados con estado final + decisiones deferred.
+- [ ] Snapshots MD3 generadas para: IME (6 estados), Models, Settings (General + Advanced), Onboarding (post-Sprint 27), History (con audio transcript).
+- [ ] Release v2.0.0-alpha con `RecordingRepositoryProvider` + native retry operativo.

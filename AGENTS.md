@@ -27,9 +27,9 @@
 
 ---
 
-## 🗓️ Current State — Pre-Sprint 24 hygiene closed + v0.2.0-preview release shipped (Julio 17, 2026)
+## 🗓️ Current State — Sprint 24 closed (History con audio + retry) (Julio 17, 2026)
 
-### ✅ Completed — Sprints 16 → 23 (full MD3 backbone + lint sweep)
+### ✅ Completed — Sprints 16 → 24 (full MD3 backbone + lint sweep + History MD3)
 
 #### Sprint 16 — Material Design 3 Redesign + ADB Test Hooks
 - **Settings** — `SettingsRow` replaced with Material 3 `ListItem`.
@@ -199,6 +199,80 @@ Post-cierre de Sprint 22, auditoría de las 86 warnings reveló un cluster viabl
 - `PrivateApi`/`DiscouragedPrivateApi` (3): investigar HandyUserService + ShizukuInjector — afecta Android 16 compat (API hidden lists rotating).
 - `mipmap-anydpi-v26` ObsoleteSdkInt (1): structural folder cleanup, no código.
 
+#### Sprint 24 (feature) — History con audio + retry MD3 ⬆️ **feature complete (Julio 17, 2026)**
+
+Sprint 24 cerró la última pantalla secundaria del plan MD3 antes de la ronda de polish (Sprint 29). El refactor cubrió: lógica de presentación pura y testeable JVM, AudioPlayerBar stateless, MD3 tone-on-tone para las 4 acciones por entry, `HandyConfirmDialog` swap para delete, retry stub forward-compatible con JNI futuro (`EngineBridge.nativeRetryHistoryEntry`), copy vía `ClipboardManager`, y el guard estruct-concurrency para `CancellationException`. Toda la feature cerró sin regresiones y el tooling on-device (`capture_history.sh`) quedó birch-bach (awk walker fixes incluidos en la pasada anterior).
+
+**Files added (3)**
+
+| Path | Role |
+|------|------|
+| `app/src/main/java/com/handy/app/ui/history/HistoryPresentationLogic.kt` | 3 pure functions: `formatPlaybackTimeMs`, `safeSliderRange`, `HistoryEntry.canRetry` (extension). KDoc contracts para locale-safety (no `String.format(Locale.getDefault(), "%02d:%02d")` → dígitos arabic-indic), Float→Long roundtrip bound (2^24 = ~4.6h). |
+| `app/src/test/java/com/handy/app/ui/history/HistoryPresentationLogicTest.kt` | 14 tests JVM puros (5 formatPlaybackTimeMs + 4 safeSliderRange + 4 canRetry + 1 Float roundtrip). Mismo patrón JUnit4 mirror-of-`CatalogSorterTest`. |
+| `app/src/main/java/com/handy/app/ui/history/components/AudioPlayerBar.kt` | Stateless. Props: `progressMs`, `durationMs`, `isPlaying`, `isBuffering`, `onPlayPauseClick`, `onSeek`, `modifier`. Sin `remember`/`LaunchedEffect`. Buffering = `CircularProgressIndicator` overlay INSIDE Play/Pause `FilledTonalIconButton` (no en Slider thumb). |
+
+**Files modified (5)**
+
+| Path | Role |
+|------|------|
+| `app/src/main/java/com/handy/app/ui/history/HistoryScreen.kt` | MD3 refactor completo. 32dp `IconButton` → 48dp `FilledTonalIconButton` tone-on-tone. Save = `IconButton` YellowStar (IntelliJ-style); Retry = `primaryContainer`; Copy = `secondaryContainer`; Delete = `errorContainer`. `LazyColumn` keyed por `entry.id`. `AlertDialog` inline reemplazada por `HandyConfirmDialog`. Mount del `AudioPlayerBar` conditional (`if (entry.audioPath != null)`). |
+| `app/src/main/java/com/handy/app/viewmodel/HistoryViewModel.kt` | Migrated a `AndroidViewModel` (necesita `Context` para `ClipboardManager.getSystemService`). Añadido `retry(entry)` con try/finally + `CancellationException` re-throw guard y `copyText(context, entry)`. UI state flag `_uiState.retryingId: Long?` añadido. KDoc cross-referenced con `HistoryCard.retryButton` site. |
+| `app/src/main/java/com/handy/app/di/ViewModelFactory.kt` | Wire patch: `HistoryViewModel::class.java -> HistoryViewModel(app)` (1 línea, ahora se inyecta `Application`). |
+| `app/src/main/res/values/strings.xml` | 4 nuevas keys: `history_retry`, `history_copy`, `audio_play`, `audio_pause`, `history_buffering`. Sin duplicar nombres — se mantuvieron aliases existentes de `delete_*` y `save_*`. |
+| (lockstep nuevo patrón) | `AndroidViewModel` ONLY cuando VM necesita `Context` (Clipboard/MediaStore/etc.); mantenga plain `ViewModel` cuando no. |
+
+**New refoundational patterns (Sprint 24)**
+
+1. **Pure presentation logic split** — `HistoryPresentationLogic.kt` establishes un JVM-testable surface para Playback/Retry/Seek logic. Mirrors `capability/CatalogSorter.kt` precedent (Sprint 22) — mismo patrón "extracta los puros, JVM-testalos, deja el lado Compose con sólo `collectionAsState()` + props" replicará en Sprint 25+ para Settings 等.
+2. **AndroidViewModel migration** — patrón para futuros VMs que necesiten `Context`. `ViewModelFactory` patches son 1-line. Mantener plain `ViewModel` cuando NO se necesita Context.
+3. **Stateless AudioPlayerBar** — host (`HistoryCard`) decide visibility. Composability permite collapsed/expanded variants o logoscope-scrubber re-use sin re-committing state architecture.
+4. **CancellationException re-throw guard** — patrón obligatorio para todo future `viewModelScope.launch { try { ... } catch (t: Throwable) { ... } }` block:
+
+   ```kotlin
+   try {
+       delay(...)
+   } catch (t: Throwable) {
+       if (t is CancellationException) throw t   // ← siempre ANTES de Log.e
+       Log.e(TAG, "...", t)
+   } finally {
+       _uiState.update { ... }
+   }
+   ```
+
+   Sin el re-throw, structured-concurrency cancellation is silently swallowed: caller no se entera, otras coroutines en el mismo scope siguen ejecutándose. Re-throw garantiza comportamiento estándar de Kotlin coroutines.
+
+**MD3 4-tone-on-tone action matrix** (referencia compact)
+
+| Acción | Componente | Tonal target | Hidden when |
+|--------|------------|--------------|-------------|
+| Save (YellowStar tint) | `IconButton` ghost | — | always visible |
+| Retry | `FilledTonalIconButton` | `primaryContainer` | `!entry.canRetry()` |
+| Copy | `FilledTonalIconButton` | `secondaryContainer` | always visible |
+| Delete | `FilledTonalIconButton` | `errorContainer` | always visible |
+| Play/Pause | `FilledTonalIconButton` 48dp | `primary` (en `AudioPlayerBar`) | `entry.audioPath == null` |
+
+Touch targets 48dp universales. `LazyColumn(key = entry.id)` para evitar recomposiciones al hacer scroll.
+
+**Retry stub forward-compat**
+
+- Constante `RETRY_SIMULATED_DELAY_MS = 2000L` indica explícitamente que es stub.
+- Cuando `EngineBridge.nativeRetryHistoryEntry(entryId: Long)` entre (Sprint 25/26 con `RecordingRepositoryProvider`), el `delay()` se reemplaza por JNI call y el contrato (state flag + log + cancel-safe error path + `finally` cleanup) se preserva end-to-end.
+
+**Verification**
+
+| Metric | Resultado |
+|--------|-----------|
+| `:app:compileDebugKotlin` | **BUILD SUCCESSFUL**, 0 warnings |
+| `:app:testDebugUnitTest` | **37 PASS / 0 FAIL** = 10 Sprint 16 + 13 Sprint 22 + 14 Sprint 24 |
+| `:app:assembleDebug` | APK green (46MB) instalado en A059 (`192.168.1.36:40293`) |
+| `capture_history.sh` | Constructor de awk sin `exit 1` huérfano; walker resuelve las bounds del `<View>` padre del `text="History"` TextView; output PNG válido 1080×2392 saved en `/tmp/handy_shots/history/01_default.png` |
+| Lint | 0 errors; scaffolding estable en 84 (sin incremento del fondo) |
+| Code-reviewer | APPROVED en 2 pasadas (closure mid-severity CancellationException-swallowing concern catcheado en la última pasada y addressed) |
+
+**Heads-up visual diff** — el snapshot actual de `HistoryScreen` post-refactor muestra sólo el empty state porque instalar fresco deja `nativeGetHistory()` con array vacío. El MD3 refactor de las cards (48dp targets, tone-on-tone 4 acciones, `HandyConfirmDialog`, `AudioPlayerBar` mounted) se visualiza correctamente sólo cuando la app tenga entries. Para el visual diff efectivo, poblar primero (vía recording + transcribe, o via TestCommandReceiver SET_HISTORY seed action — futuros sprints).
+
+**No tocado** — native `EngineBridge.nativeRetryHistoryEntry` JNI implementation; ring-buffer `RecordingRepositoryProvider` via MediaStore/getExternalFilesDir. Ambos pospuestos a sprints posteriores.
+
 ---
 
 ## 🏗️ Architecture at a Glance
@@ -359,41 +433,51 @@ adb -s "$DEVICE" shell am broadcast -a com.handy.app.action.SET_ACTIVE_MODEL -n 
 
 ## 📝 Open Items / Next Steps
 
-> **🚨 Priority 0 — Original user request, still unaddressed (Session 2026-07-17 interruption):**
-> Before being sidetracked by the Wispr Flow rename + release-body hygiene, the user asked for a *comprehensive Material Design 3 migration plan* for Handy-Android, full-source-aware + PC Handy reference as the design baseline, **using the same palette that is currently in use**. The plan was neither designed nor presented this session. **Next session must deliver this plan first thing**, before resuming any post-Sprint 23 sprint work below. See `## 📌 Session 2026-07-17` further down for the auth/CLI environmental context that informs the plan execution.
+> **🚀 Sprint 25 canónico (post-replan 17-jul-2026)**: Este bloque es la **fuente única de verdad** para los sprints restantes. Los detalles concretos (carry-overs de Sprint 24, target de tests, lint trajectory, criterios on-device) viven en la sección "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)" al final de `handy-android/MIGRATION_PLAN_MD3.md`. Cualquier decisión que cree conflicto entre este bloque y ese bloque gana el bloque del plan ejecutable.
 
-> **Sprint 22 → 29 ordering authority:** see `handy-android/PROGRESS.md` (Sprint 21 section, immediately below the file-inventory table). The `MIGRATION_PLAN_MD3.md` plan itself contains two conflicting enumerations of post-Sprint 21 work; the "Reordenación del plan (Sprint 21.x)" block is the authoritative correction (Models=22, About=23, History=24, Advanced-refinement=25, Post-processing=26, Onboarding=27, Debug=28, Polish=29).
+> **Sprint 16-24 ya cerrados** (Models=22, About=23, History=24). Lo que queda (25-29) es el polish + el catch-up de los carry-overs dejados por Sprint 24.
 
-### Remaining MD3 Migration Sprints (23 → 29)
+### Remaining MD3 Migration Sprints (25 → 29)
 
-(Sequence, after Sprint 23 (feature) closure.)
+(Sequence, after Sprint 24 (Feature) closure. **Next up**: Sprint 25 — Advanced Settings refinement + Retry backend binding.)
 
-1. **Sprint 24 — History con audio + retry** [next up] (renumbered — Sprint 23 closed)
-   - `AudioPlayer` per history entry using MD3 `Slider` for seek + `CircularProgressIndicator(24.dp)` for buffering.
-   - Copiar, star, retry (FilledIconButton primary), delete (FilledIconButton error container).
-   - `HistoryViewModel.retry(entry)` action.
-   - Ring-buffer `RecordingRepositoryProvider` via `MediaStore`/`getExternalFilesDir(…)`.
-
-3. **Sprint 25 — Advanced settings + Experimental gated** (refinement)
-   - Polish the post-Sprint 20 advanced tab.
+1. **Sprint 25 — Advanced Settings refinement + Retry backend** [next up, 2.5 days]
+   - Polish the post-Sprint 20 advanced tab to use MD3 shared primitives (currently uses local `SettingsRow`).
+   - **Carry-overs de Sprint 24 (binding, MANDATORY)**: implement `EngineBridge.nativeRetryHistoryEntry(entryId: Long)` JNI; ship `RecordingRepositoryProvider` ring-buffer via MediaStore/`getExternalFilesDir` so retry actually retranscribes from the persisted audio file (the UI contract is already in place since Sprint 24). Without this binding the Retry button on HistoryScreen stays a stub.
+   - **Pre-MD3 leak** (code-reviewer escalation): swap `AlertDialog` usage in `AboutContent.kt` Licenses-flow to `HandyDialog` (Sprint 18 primitive). Was deferred at Sprint 23.
+   - **Structural cleanup**: `HandyListItem.kt` (Sprint 18 declared but missing); remove empty `ui/shared/` directory.
    - CustomWords input chips, HistoryLimit number input, RecordingRetentionPeriod dropdown, AccelerationSelector (CPU/Vulkan/NNAPI) — gated by `experimentalEnabled`.
+   - Tests: `CustomWordsParserTest` (5), `AccelerationSelectorTest` (4), `RecordingRepositoryProviderTest` (8) → target **54 PASS**.
+   - **Split fallback**: if carry-overs slip, split into Sprint 25a (UI refinement + structural cleanup, 1d) + Sprint 25b (RecordingRepositoryProvider + native JNI, 1.5d). Sprint 26 cannot start if either binding is open.
 
-4. **Sprint 26 — Post-processing MD3 con providers y prompts**
-   - Folder `ui/postprocess/` with `ProviderSelect.kt`, `BaseUrlField.kt`, `ApiKeyField.kt`, `ModelSelectField.kt`, `PromptList.kt`, `PromptEditor.kt` (using `HandyModalBottomSheet`, NOT `BasicAlertDialog`).
+2. **Sprint 26 — Post-processing MD3 + AGP bump** [2 days revised — up from 1]
+   - New folder `ui/postprocess/` con `ProviderSelect.kt`, `BaseUrlField.kt`, `ApiKeyField.kt`, `ModelSelectField.kt`, `PromptList.kt`, `PromptEditor.kt` (using `HandyModalBottomSheet`, NOT `BasicAlertDialog`).
+   - **Post-process como destination propia en nav rail** (move out of SettingsScreen.kt → Post-Process is its own route aligned with PC).
+   - AGP `8.x → 9.x` bump — closes 21 lint warnings (`GradleDependency` × 18 + `AndroidGradlePluginVersion` × 3).
+   - `network_security_config.xml`: cleartext for `10.0.2.2` + `localhost` (Ollama default).
+   - Tests: `PostProcessFormValidatorTest` (8) → target **62 PASS**.
+   - **Lint trajectory post-Sprint 26**: 84 → **~63** (delta -21).
+   - **Split fallback**: if AGP bump complications (BuildConfig / Kotlin compiler / Compose), split into 26a (AGP bump + network security) + 26b (provider migration).
 
-5. **Sprint 27 — Onboarding MD3 refinado**
-   - `StepIndicator` (Surface + CircularProgress), Icon container, Button/OutlinedButton/TextButton trio, `LinearProgressIndicator`, `AnimatedContent` with `tween(500, PopEasing)`.
+3. **Sprint 27 — Onboarding MD3 refinado** [1.5 days revised — adaptive icons require design assets]
+   - `StepIndicator` (Surface tone-elevation 3.dp + 48dp), Icon container (120dp surfaceContainerHigh + Icon primary 64dp), Button/OutlinedButton/TextButton trio, `LinearProgressIndicator` con label, `AnimatedContent tween(500, PopEasing)`.
+   - **14 launcher/icon warnings cleanup** (`IconDuplicates`, `IconLauncherShape`, `IconDipSize`, `MonochromeLauncherIcon`) + regenerate `mipmap-anydpi-v26` adaptive.
+   - **Design asset dependency**: adaptive launcher icons require foreground vector + background color/vector. Sin design asset existente en el repo, +0.5d para creation (Photoshop / Android Studio Asset Studio) o split en **27a** (composables, 1d) + **27b** (icon ship, 0.5d).
 
-6. **Sprint 28 — Debug panel gated (DebugMode toggle)**
-   - Route only visible if `Settings.debugMode == true` (default false in release).
-   - LogLevelSelector, WhatsNewPreview, UpdateChecksToggle, SoundPicker, PasteDelay, RecordingBuffer, AlwaysOnMicrophone, LiveLogViewer (ring buffer of `android.util.Log`).
+4. **Sprint 28 — Debug panel gated (DebugMode toggle)**
+   - New destination visible only if `Settings.debugMode == true` (default false in release).
+   - LogLevelSelector, WhatsNewPreview, UpdateChecksToggle, SoundPicker (reuse), PasteDelay slider, RecordingBuffer slider, AlwaysOnMicrophone switch, LiveLogViewer (ring buffer of `android.util.Log`).
+   - Shizuku API probe — investigate `PrivateApi` (3 warnings); replace reflection-based hidden API calls where Android 16 public API suffices.
+   - Tests: `RingBufferLogTest` (5) → target **67 PASS**.
 
-7. **Sprint 29 (cierre) — Polish + accesibilidad + tests + docs**
-   - Predictive back (Android 14+), foldable hinge avoidance (`WindowInfoTracker`).
-   - WCAG AA contrast on every token pair.
-   - Motion audit, touch targets ≥ 48dp.
-   - Tests: `ThemeTest`, `SettingsGroupTest`, `IMEStateMachineTest`, `PostProcessFormTest`, `AudioPlayerTest`.
+5. **Sprint 29 (cierre) — Polish + accesibilidad + tests + docs** 🎯
+   - Predictive back (Android 14+), WCAG AA contrast audit, foldable hinge avoidance (`WindowInfoTracker`).
+   - Motion audit: every `tween()`/`spring()` consumes `MotionTokens`.
+   - Tests: `ThemeContrastTest` (12-16 assertions), `IMEStateMachineTest` (6), consolidate ring buffer → target **~80 PASS**.
+   - `UnusedResources` sweep final: 36 warnings → 0.
    - Snapshot scripts (`capture_ime.sh`, `capture_onboarding.sh`) refreshed.
+   - **Final lint target**: **~9 residuals** (revisado tras code-reviewer feedback — strict "0" is unrealistic): 1 `mipmap-anydpi-v26` (carpeta sin representación MD3 adaptive), up to 3 `PrivateApi` (Shizuku Android 16 reflection), 5 misc documentation/spec categories. Each residual logged in this sprint as part of the `Definition of Done` table.
+   - Definition of "MD3 Native Complete" checklist (ver MIGRATION_PLAN_MD3.md § "Corrección suplementaria").
 
 ### Carry-over from earlier sessions
 
@@ -403,6 +487,18 @@ adb -s "$DEVICE" shell am broadcast -a com.handy.app.action.SET_ACTIVE_MODEL -n 
 4. **IME Visual Verification** — screenshots in all 6 states on A059 Android 16 (now greatly simplified: pill is uniform `PillShape`, IconButton targets are 48dp).
 5. **Onboarding Visual Verification** — screenshots each step post-clean-install (post-Sprint 27).
 6. **TestCommandReceiver Hardening** — reassess after Sprint 28 close.
+
+---
+
+## 📌 Session 2026-07-17 (later, resumed) — Sprint 24 implementation + closure
+
+This sub-session continued after the docs/release hygiene pass below. Sprint 24 was implemented end-to-end with on-device verification, toolchain fixes at the awk level, and the formal closure with code-reviewer concurrence.
+
+- **Sprint 24 implemented** — History con audio + retry MD3 (see "Sprint 24 (feature)" section above).
+- **Toolchain fixes** — `handy-android/scripts/capture_history.sh` awk walker had top-level `exit 1` outside any pattern block. Removed it; walker resolves parent View bounds of `text="History"` TextView and exits cleanly via EOF. `bash -n` + runtime verification pasaron sin defects conocidos.
+- **Tests** — **37 PASS / 0 FAIL** (10 Sprint 16 + 13 Sprint 22 + 14 Sprint 24). Lint verde (0 errors / 84 warnings, sin incremento del fondo). Build clean con 0 compile warnings.
+- **On-device** — A059 reconectado en `192.168.1.36:40293` tras usuario reactivar Wireless debugging en Developer options. `capture_history.sh` ejecuta limpio; snapshot válido guardado en `/tmp/handy_shots/history/01_default.png` (1080×2392).
+- **Code-reviewer** — APPROVED en 2 pasadas (closure mid-severity `CancellationException`-swallowing concern catcheado en la pasada final y addressed con re-throw guard).
 
 ---
 
