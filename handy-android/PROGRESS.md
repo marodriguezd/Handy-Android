@@ -1348,3 +1348,38 @@ Pre-Sprint 28d:
 **Push status**: Local commit + `git push origin main` from basher subprocess. Working tree clean post-push.
 
 **Carry-over**: Optional Sprint 28d+ extension — also flip `MID.primary` to canary-180m-flash-gguf (override nemotron-0.6b) for users who explicitly want multilingual mid-tier. Deferred until user feedback on whether the LOW-tier swap alone meets the multilingual-default need.
+
+### Sprint 28d+ closure — MID.primary flip nemotron → canary-180m-flash (Julio 17, 2026, sixteenth pass)
+
+User request (verbatim from follow-up): "Optional Sprint 28d+ extension: also flip `MID.primary` in `mobile_recommended.json` from `handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf` to `handy-computer/canary-180m-flash-gguf` for users who explicitly want multilingual mid-tier. Replaces nemotron with canary in the MID primary slot; canary stays as MID.alternative or is removed (decision TBD). Test fixtures + assertions in `MobileRecommendationsTest.kt` would need a second swap."
+
+**Decision on dual-listing**: REMOVED canary from MID.alternatives. Single canonical slot per tier avoids the catalog screen rendering the same model with two promotion badges (tier-primary + tier-alternative), which would confuse the UX. If MID.primary fails fitsAndSafe (unlikely since canary 180M is small + safe), the picker falls through to MID.alternatives (parakeet-tdt-0.6b-v3, whisper-medium, whisper-small) — all three are sensible English/multilingual fallbacks.
+
+**Files changed (2)**:
+
+1. `handy-android/app/src/main/assets/mobile_recommended.json` — `MID.primary` swapped from `handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf` (English-only, 600 MB) to `handy-computer/canary-180m-flash-gguf` (multilingual, 139 MB). Canary REMOVED from MID.alternatives. `description` updated: total promoted slot count went 19 → 18 (4 LOW + 4 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET). LOW unchanged (canary stays as LOW.primary from Sprint 28d). HIGH/FLAGSHIP/TABLET unchanged. Canary now occupies 1 promotion slot (LOW.primary) instead of 2 (was LOW.primary + MID.alternative after Sprint 28d).
+
+2. `handy-android/app/src/test/java/com/handy/app/capability/MobileRecommendationsTest.kt` — fullFixture MID.primary + MID.alternatives updated. Existing tests updated:
+   - `parseJson successfully loads all 5 tiers and alternatives from valid JSON` — added MID.primary + MID.alternatives count assertions.
+   - `promotionBucket returns 0 (tier-primary)` MID row: nemotron → canary-180m-flash.
+   - `promotionBucket returns 1 (tier-alternative)` MID row: canary → parakeet-tdt-0.6b-v3.
+   - `promotionBucket returns 2 (not promoted)` cross-tier matrix LOW row: parakeet (now MID alternative → bucket=1 in LOW) → canary-1b-v2-gguf (HIGH alternative, NOT in LOW → bucket=2 in LOW).
+   - `Sprint 28d canary-180m-flash-gguf is the LOW primary` — removed stale "canary stays in MID.alternatives" assertion (now wrong post-Sprint 28d+).
+
+   NEW regression test `Sprint 28d+ canary-180m-flash-gguf is the MID primary` locks the contract: MID.primary = canary, canary NOT in MID.alts (avoid double-list), nemotron NOT primary in any tier, LOW.primary still = canary (Sprint 28d invariant), total promoted slots = 18 (4+4+4+3+3).
+
+**Build state at closure**:
+
+| Metric | Value |
+|--------|-------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:testDebugUnitTest` | 28 PASS / 0 FAIL / 1 SKIP (was 27 before; +1 Sprint 28d+ regression test) |
+| `:app:lintDebug` | 0 errors / 75 warnings (baseline stable; net 0) |
+| JSON sanity | `python3 -c 'import json; json.load(...)'` — OK; LOW.primary = canary, MID.primary = canary, canary NOT in MID.alts |
+| Code-reviewer-minimax-m3 | APPROVED |
+
+**On-device verify path**: rebuild APK from HEAD + `adb install -r` on A059 + `unzip -p app-debug.apk assets/mobile_recommended.json` to confirm embedded JSON has MID.primary = canary-180m-flash-gguf. Done in this turn; see on-device verify section.
+
+**Onboarding runtime ground-truth**: requires user finger-tap-through to step 3 (model download) to confirm `OnboardingVM: Selected target: handy-computer/canary-180m-flash-gguf (size=139MB, promotion=tier-primary, ...)` for both LOW and MID device tiers.
+
+**Push status**: Local commit + `git push origin main` from basher subprocess. Working tree clean post-push.

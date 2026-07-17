@@ -1426,3 +1426,21 @@ User request: change the default base/recommended model of the app to Canary 180
 **Push status**: Local commit + `git push origin main` from basher subprocess. Working tree clean post-push.
 
 **Carry-over**: Optional Sprint 28d+ extension — flip `MID.primary` to canary-180m-flash-gguf (override nemotron-0.6b) for users who explicitly want multilingual mid-tier. Deferred until user feedback on whether the LOW-tier swap alone meets the multilingual-default need.
+
+## 📌 Session 2026-07-17 (sixteenth pass) — Sprint 28d+ closure: MID.primary flip nemotron → Canary 180M
+
+User request: extend the Sprint 28d multilingual default to mid-range devices too. Flip MID.primary from nemotron-3.5-asr-streaming-0.6b-gguf (English-only, 600 MB) to canary-180m-flash-gguf (multilingual, 139 MB).
+
+**Decision: REMOVE canary from MID.alternatives when promoting to MID.primary.** Single canonical slot per tier avoids the catalog screen rendering the same model with two promotion badges (tier-primary + tier-alternative), which would confuse UX. If MID.primary fails fitsAndSafe, picker falls through to MID.alts (parakeet-tdt-0.6b-v3, whisper-medium, whisper-small) — sensible English/multilingual fallbacks.
+
+**Fix (minimal swap)**:
+- `mobile_recommended.json`: MID.primary nemotron → canary; canary removed from MID.alts; description updated (19 → 18 total slots, 4 LOW + 4 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET); LOW unchanged (canary still LOW.primary from Sprint 28d); HIGH/FLAGSHIP/TABLET unchanged.
+- `MobileRecommendationsTest.kt`: fullFixture + assertions updated; new regression test `Sprint 28d+ canary-180m-flash-gguf is the MID primary` locks the contract (MID.primary = canary, canary NOT in MID.alts, nemotron NOT primary in any tier, total slots = 18, LOW.primary invariant).
+
+**Build state**: compile + 28 tests PASS / 0 FAIL / 1 SKIP + 0 lint errors / 75 warnings baseline stable. Code-reviewer APPROVED.
+
+**On-device verify (Layer 1 + Layer 2)**: rebuilt APK from current HEAD, reinstalled on A059, extracted `assets/mobile_recommended.json` from the installed APK: `LOW.primary = canary-180m-flash-gguf`, `MID.primary = canary-180m-flash-gguf`, `canary` removed from MID.alts. Layer 2 (Rust catalog accepts canary download) was already verified in Sprint 28d closure — unchanged here.
+
+**Push status**: Local commit + `git push origin main` from basher subprocess. Working tree clean post-push.
+
+**Carry-over**: Optional Sprint 28e — extend multilingual default to FLAGSHIP tier (canary-qwen-2.5b → canary-1b-v2 primary for FLAGSHIP), or commit to the current config and move to Sprint 29 (e) UnusedResources sweep. Decision TBD based on user feedback on whether LOW + MID multilingual coverage is sufficient.

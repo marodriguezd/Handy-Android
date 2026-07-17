@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generated_at": "2026-07-17",
-  "description": "Subset móvil definitivo de modelos STT recomendados organizados por DeviceTier. Un primary por tier + alternativas (1-4) como backups o casos especiales. Sprint 28d: LOW.primary canary-180m-flash-gguf (multilingual es/de/en/otros, 139 MB, rápido) sustituye a whisper-base-gguf (inglés-only, 140 MB) como modelo por defecto para dispositivos Android de primer install. Canary permanece también en MID.alternatives para dispositivos mid-range que prefieran multilingüe sobre el nemotron-0.6b primario. Total modelos promovidos: 19 (4 LOW + 5 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET). Co-localizado con el catálogo para reflejar la propensión móvil: la lista NO incluye los heavyGateIds (Voxtral*) ni los experimentalIds (Moonshine Base monolingües).",
+  "description": "Subset móvil definitivo de modelos STT recomendados organizados por DeviceTier. Un primary por tier + alternativas (1-3) como backups o casos especiales. Sprint 28d: LOW.primary canary-180m-flash-gguf (multilingual es/de/en/otros, 139 MB, rápido) sustituye a whisper-base-gguf (inglés-only, 140 MB) como modelo por defecto para dispositivos Android de primer install. Sprint 28d+: MID.primary también flipped a canary-180m-flash-gguf (sustituyendo nemotron-3.5-asr-streaming-0.6b-gguf, inglés-only, ~600 MB) para que mid-range Android phones también defaulten a multilingüe; canary se elimina de MID.alternatives para evitar doble listado en el mismo tier. LOW permanece con canary como primary; MID ahora también. HIGH/FLAGSHIP/TABLET sin cambios (esos tiers pueden afford modelos más grandes). Total modelos promovidos: 18 (4 LOW + 4 MID + 4 HIGH + 3 FLAGSHIP + 3 TABLET). Co-localizado con el catálogo para reflejar la propensión móvil: la lista NO incluye los heavyGateIds (Voxtral*) ni los experimentalIds (Moonshine Base monolingües).",
   "tiers": {
     "LOW": {
       "primary": "handy-computer/canary-180m-flash-gguf",
@@ -12,9 +12,8 @@
       ]
     },
     "MID": {
-      "primary": "handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf",
+      "primary": "handy-computer/canary-180m-flash-gguf",
       "alternatives": [
-        "handy-computer/canary-180m-flash-gguf",
         "handy-computer/parakeet-tdt-0.6b-v3-gguf",
         "handy-computer/whisper-medium-gguf",
         "handy-computer/whisper-small-gguf"
