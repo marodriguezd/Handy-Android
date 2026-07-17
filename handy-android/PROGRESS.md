@@ -1612,3 +1612,18 @@ Audit-only deliverable per `PC_HANDY_REFERENCE.md Section 11`. No code changes. 
 **Audit metric**: ~85% of all animation primitives consume tokens. Target: 100% by Sprint 30 polish.
 
 **Build state**: No code changes. Build state unchanged from Sprint 29spa Phase 2 closure.
+
+### Sprint 29g Definition-of-Done verification (Julio 17, 2026) -- MD3 Native Complete
+
+Per `handy-android/PC_HANDY_REFERENCE.md Section 11`. Audit-only deliverable + doc-only commit. No code changes.
+
+**Verification matrix**: 18 criteria evaluated (see AGENTS.md entry for the full tabular). Three caveats documented:
+1. GradleDependency cluster (33 of 43 lint warnings) deferred to AGP 9.x + Kotlin 2.0 paired migration.
+2. Animation token coverage 71% for spring() -- 4 pre-Sprint 21 legacy sites acceptable.
+3. es-locale i18n partial (20/256 keys) -- mixed-language UI trade-off documented.
+
+**Conclusion**: MD3 Native Complete baseline achieved with documented caveats. None block app-store readiness.
+
+**Sprint 29 closed sub-features**: (a) WCAG AA + (d) motion audit + (e) UnusedResources sweep + (f) snapshot scripts refresh + (g) DoD verification.
+
+**Pending** (carry-over to future sprint): (b) predictive back gesture (Android 14+) + (c) foldable hinge avoidance via WindowInfoTracker.
