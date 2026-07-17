@@ -927,3 +927,50 @@ The bg + fg + monochrome-share-same-vector pattern is the canonical MD3 / Androi
 **Push status**: One local commit pending (parent root + `handy-android` submodule, per the cross-submodule commit pairing pattern established in Sprint 27a). User runs `git push origin main` from interactive shell per AGENTS.md auth notes (Plan-D of the release-body-update ladder is the only reliable push workflow in this environment).
 
 **Carry-over to Sprint 28**: Debug panel gated by `Settings.debugMode == true` (LogLevelSelector, WhatsNewPreview, UpdateChecksToggle, PasteDelay slider, AlwaysOnMicrophone switch, LiveLogViewer ring buffer of `Log.X`). Plus Shizuku Android 16 reflection probe for the 3 `PrivateApi` warnings (replace reflection-based hidden API calls where public API suffices). Target 122+ tests with new `RingBufferLogTest`. Lint trajectory expected: 76 → ~73 (close the 3 `PrivateApi` if reflection-alternatives succeed).
+
+### Sprint 28 — Debug panel gated (MVP) + RingBufferLog (Julio 17, 2026)
+
+**Decision**: Sprint 28 picks up the canonical `Debug panel gated` runtime in the post-Sprint-24 MIGRATION_PLAN_MD3.md plan. Shipped as MVP that closes the **gating architecture** + the **JVM-pure utility**; the 7 MD3 component implementations (LogLevelSelector, UpdateChecksToggle, SoundPicker reuse, PasteDelaySlider, RecordingBufferSlider, AlwaysOnMicrophoneSwitch, LiveLogViewer) are deferred to **Sprint 28b** as placeholder rows in `DebugContent.kt`. Sprint 28a/b split mirrors the Sprint 27a/b pattern: structural MVP with placeholder scaffolding first, real components in the followup sprint.
+
+**What landed (Sprint 28 MVP, 4 new + 4 modified = 8 files)**
+
+| Path | Role |
+|------|------|
+| `app/src/main/java/com/handy/app/util/RingBufferLog.kt` | **NEW** — pure JVM ring buffer (ArrayDeque<String>) with FIFO eviction at `maxLines`. Every surface op is `@Synchronized`. Used by DebugContent's future LiveLogViewer (placeholder row in Sprint 28 MVP). |
+| `app/src/test/java/com/handy/app/util/RingBufferLogTest.kt` | **NEW** — 5 JVM tests: append+order, eviction, tail bounds (3, 99), tail n≤0 edge, clear+reset. |
+| `app/src/main/java/com/handy/app/ui/debug/DebugScreen.kt` | **NEW** — minimal wrapper that renders `DebugContent()`. The future `DebugViewModel` integration point. |
+| `app/src/main/java/com/handy/app/ui/debug/DebugContent.kt` | **NEW** — 3 MD3 SettingsGroups (Logging, Updates, Audio) with 7 placeholder rows + footer gated-hint. Each placeholder reads `R.string.debug_placeholder_suffix` as the row suffix (closes HardcodedText lint). |
+| `app/src/main/java/com/handy/app/SettingsStore.kt` | **MOD** — added `_debugModeFlow: MutableStateFlow<Boolean>` (key `debug_mode`, default `false`), `debugModeFlow: StateFlow<Boolean>`, `var debugMode: Boolean` getter/setter. Mirrors `recordingDualWriteMode` pattern from Sprint 25b. |
+| `app/src/main/java/com/handy/app/navigation/AppNavigation.kt` | **MOD** — added `Screen.Debug("debug", R.string.debug_screen_title, Icons.Default.Code)` enum entry; converted top-level `NavScreens` to `DefaultScreens`; inside `AppNavigation`, the `navScreens` list is built `if (debugEnabled) DefaultScreens + Screen.Debug else DefaultScreens` and `remember(debugEnabled)`-cached; `HandyBottomNavigation` + `HandyNavigationRail` now take `screens: List<Screen>` parameter; added `TODO(Sprint28b)` toggle-flip crash breadcrumb with Option A (unconditional registration) + Option B (popBackStack before persist) guidance. |
+| `app/src/main/java/com/handy/app/MainActivity.kt` | **MOD** — added `debugEnabled = app.settingsStore.debugMode` + `debugContent = { DebugScreen() }` to the `AppNavigation(...)` call. MVP reads at composition time; comment explicitly flags `collectAsState` as the Sprint 28b upgrade for live reactive toggle. |
+| `app/src/main/res/values/strings.xml` | **MOD** — 14 new entries: `debug_screen_title` + 3 section headers (`debug_section_logging`, `debug_section_updates`, `debug_section_audio`) + 7 placeholder labels + `debug_panel_gated_hint` + `debug_placeholder_suffix`. Em-dash UTF-8 bytes (E2 80 94). Apostrophe via canonical `\'` escape. |
+
+**Verification (force-rerun, latency 20s)**
+
+| Metric | Result |
+|---|---|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL |
+| `:app:lintDebug --rerun-tasks` | 0 errors / **76 warnings** (unchanged from Sprint 27b baseline) |
+| `:app:testDebugUnitTest --rerun-tasks` | **122 PASS / 0 FAIL** = 117 prior + 5 new `RingBufferLogTest` |
+| Code-reviewer-minimax-m3 (3 passes) | APPROVED after the em-dash/`&apos;` AAPT2 repair, the HardcodedText → `debug_placeholder_suffix` resource extraction, and the TODO(Sprint28b) toggle-flip-crash breadcrumb. |
+
+**Build gotcha fixed in this sprint**
+
+AAPT2 rejected `debug_whatsnew_label` (`Preview What's New modal`) on the first attempt because the XML entity `&apos;` inside `<string>` content body triggered "Invalid unicode escape sequence in string". Switched to the canonical Android backslash-escape `What\'s`. **Lesson:** AAPT2 doesn't reliably recognize XML named char refs (`&apos;`) inside `<string>` body; always use `\'` for apostrophes. Also fixed a downstream strings.xml repair: the initial heredoc appended debug_* keys AFTER `</resources>`, breaking the file; a Python repair moved them inside the resources block before the close tag.
+
+**Lint trajectory**: 76 (Sprint 27b baseline) → 76 (Sprint 28 MVP). Net 0. The 7 placeholder rows use stringResource() not literals (zero HardcodedText). The new `Screen.Debug` enum entry does not collide with existing routes; `material-icons-extended` is already in dependencies. `MonochromeLauncherIcon` / `IconDuplicates` / `IconDipSize` / `IconLauncherShape` / `ModifierParameter` all remain at 0 from Sprint 27b closure.
+
+**Push status**: 1 local commit pending (submodule feat + parent docs, paired per the Sprint 27a/27b pattern). User runs `git push origin main` from interactive shell per AGENTS.md auth notes.
+
+**Carry-over to Sprint 28b**
+
+The 7 MD3 component implementations are a coherent unit:
+1. `LogLevelSelector` — HandyDropdown wiring to a new MutableStateFlow<LogLevel> on a per-app logger stream.
+2. `UpdateChecksToggle` — HandySwitch delegating to a `MockCheckForUpdate` action in Sprint 28b; real UpdateChecker refactor lands in Sprint 29.
+3. `SoundPicker` — reuse from `ui.settings.components.SoundPicker.kt` (already MD3-styled).
+4. `PasteDelaySlider` — HandySlider 0..1000 ms, key `paste_delay_ms`.
+5. `RecordingBufferSlider` — HandySlider 0..600 s, key `recording_buffer_seconds` (wired to `engineViewModel.state` stream via existing `idleTimeout` analogue).
+6. `AlwaysOnMicrophoneSwitch` — HandySwitch gated behind Android 12 API (already-available `AudioManager.startBluetoothSco` fallback).
+7. `LiveLogViewer` — LazyColumn + `RingBufferLog.tail(50)`. The `debugMode` flag + the `RingBufferLog` infrastructure now both exist; the wiring is mechanical.
+
+Plus: settings UI toggle for `debugMode` (with the Sprint 28b TODO-breadcrumb Option B popBackStack hardening) + Shizuku Android 16 reflection probe for the 3 `PrivateApi` warnings from `injection/HandyUserService.kt:21-22` and `injection/ShizukuInjector.kt:130`. Target: **127 PASS** (Sprint 28b ~ +1 `LogLevelSelector` snapshot-test + 1 `UpdateChecksToggle` snapshot-test + ~3 toggle/behaviour tests on the reactive subsystem). Lint trajectory expected: 76 → ~73 (close the 3 `PrivateApi` if reflection-alternatives succeed).
