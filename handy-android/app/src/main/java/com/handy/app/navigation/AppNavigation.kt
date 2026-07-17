@@ -31,9 +31,11 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -48,6 +50,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.handy.app.R
+import com.handy.app.ui.debug.DEBUG_ROUTE
+import com.handy.app.ui.debug.shouldPopBackStackFromDebug
 
 private const val ONBOARDING_ROUTE = "onboarding"
 
@@ -154,6 +158,41 @@ fun AppNavigation(
             }
 
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                // Sprint 28b-v11 — popBackStack guard. If the user is
+                // currently on the Debug destination when the gate
+                // flips ON→OFF, auto-navigate them to Screen.General
+                // so they don't get stranded at the
+                // [com.handy.app.ui.debug.DeveloperToolsDisabled]
+                // placeholder with no Debug tile in the bottom-nav.
+                //
+                // CRITICAL ORDERING: both `prevDebugEnabled` and the
+                // `LaunchedEffect(debugEnabled)` MUST live OUTSIDE the
+                // `key(debugEnabled) { ... }` block. If they're inside,
+                // Compose recreates the `remember` slot with the new
+                // debugEnabled as initial value, hiding the TRUE→FALSE
+                // transition the guard needs to detect. By placing them
+                // above the key block, the MutableState survives the
+                // key-invalidation and the LaunchedEffect correctly
+                // observes the previous debugEnabled for one cycle
+                // before being re-keyed into the new launch.
+                val prevDebugEnabled = remember { mutableStateOf(debugEnabled) }
+                LaunchedEffect(debugEnabled) {
+                    val wasPrev = prevDebugEnabled.value
+                    prevDebugEnabled.value = debugEnabled
+                    if (shouldPopBackStackFromDebug(
+                            currentRoute = currentDestination?.route,
+                            debugEnabledNow = debugEnabled,
+                            debugEnabledPrev = wasPrev,
+                        )
+                    ) {
+                        navController.navigate(Screen.General.route) {
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                        }
+                    }
+                }
                 // Sprint 28b-v9 fix — Compose Navigation's NavHost
                 // builder lambda is evaluated only once during initial
                 // graph construction; the `composable(Screen.Debug.route)`
@@ -194,7 +233,7 @@ fun AppNavigation(
                         // instead of the real panel — guaranteeing the
                         // NavHost graph never tears (no IllegalStateException
                         // when the user is currently on the Debug route).
-                        composable(Screen.Debug.route) {
+                        composable(DEBUG_ROUTE) {
                             if (debugEnabled) debugContent()
                             else com.handy.app.ui.debug.DeveloperToolsDisabled()
                         }

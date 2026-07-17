@@ -339,4 +339,8 @@
     <string name="debug_log_liveviewer_empty">No log lines yet. Start a recording to populate.</string>
     <string name="debug_updates_check_subtitle">When off, the launch-time updater check is short-circuited.</string>
     <string name="debug_audio_alwaysonmicrophone_subtitle">Keep the AAudio capture hot between dictations.</string>
+
+    <!-- Sprint 28b-v11: Toggle flip feedback (Snackbar) -->
+    <string name="debug_toggle_enabled_feedback">Developer tools enabled. The Debug panel is now in the navigation rail.</string>
+    <string name="debug_toggle_disabled_feedback">Developer tools disabled. The Debug panel is hidden from the navigation rail.</string>
 </resources>
