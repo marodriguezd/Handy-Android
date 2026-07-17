@@ -1,5 +1,6 @@
 package com.handy.app.navigation
 
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,7 @@ import androidx.navigation.compose.rememberNavController
 import com.handy.app.R
 import com.handy.app.ui.debug.DEBUG_ROUTE
 import com.handy.app.ui.debug.shouldPopBackStackFromDebug
+import kotlinx.coroutines.CancellationException
 
 private const val ONBOARDING_ROUTE = "onboarding"
 
@@ -115,6 +117,63 @@ fun AppNavigation(
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val isCompact = screenWidthDp < 600
+
+    /**
+     * Sprint 29b — predictive back gesture support (Android 14+).
+     *
+     * Single root-level [PredictiveBackHandler] in AppNavigation directly
+     * covers all 6 destinations in the NavHost (`Settings`, `Models`,
+     * `History`, `PostProcess`, `About`, `Debug`). One handler — not
+     * per-`composable(...)` — because:
+     *
+     *  1. The handler operates on the NavController, not on each
+     *     destination's body. NavController is a single object scoped
+     *     to this @Composable; one handler per destination would
+     *     duplicate the [kotlinx.coroutines.flow.Flow] subscription
+     *     and risk concurrent `popBackStack()` invocations.
+     *  2. The `enabled` predicate gates the handler off when we're on
+     *     the graph's start destination (no back stack to pop; back-
+     *     press should close the app as usual). The predicate is
+     *     factored out into [PredictiveBackPresentation.shouldHandlePredictiveBack]
+     *     for JVM-testability without Robolectric — see its test class
+     *     `PredictiveBackPresentationLogicTest`.
+     *
+     * The handler collects the gesture's `Flow<BackEventCompat>`
+     * progress events to keep the predictive-back framework engaged
+     * (returning early without collecting cancels the gesture
+     * automatically). On `progress.collect` completion, we pop the
+     * back stack via [NavHostController.popBackStack] so the user's
+     * back-press produces standard nav-stack behavior. If the user
+     * aborts the gesture mid-drag, the `progress.collect` call
+     * throws [CancellationException] which we **re-throw** to honor
+     * Kotlin structured-concurrency semantics (mandatory per the
+     * pattern documented in the Sprint 24 closure).
+     *
+     * Visual feedback (scale-down animation during the gesture) is
+     * provided by the system's predictive-back framework on Android
+     * 14+ devices because the manifest's `enableOnBackInvokedCallback`
+     * flag is set at `<application>`. We do *not* drive a custom
+     * animation — doing so would require wrap-around per-destination
+     * `Box+Modifier.scale(progress)` wrappers that re-introduce the
+     * "defensive layout wrapper around each destination body" pattern
+     * Sprint 28b-v8..v15 explicitly closed.
+     */
+    PredictiveBackHandler(
+        enabled = PredictiveBackPresentation.shouldHandlePredictiveBack(
+            currentRoute = currentDestination?.route,
+            startRoute = startDestination,
+        ),
+    ) { progress ->
+        try {
+            progress.collect { /* system drives scale-down animation natively */ }
+            navController.popBackStack()
+        } catch (e: CancellationException) {
+            // User aborted gesture mid-drag — structured-concurrency
+            // requires re-throwing CancellationException to honor the
+            // suspending coroutine's cancellation contract.
+            throw e
+        }
+    }
 
     Scaffold(
         topBar = {

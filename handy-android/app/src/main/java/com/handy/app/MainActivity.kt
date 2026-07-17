@@ -68,6 +68,31 @@ class MainActivity : ComponentActivity() {
             android.util.Log.i("HandyMain", "BEFORE setContent: debugModeFlow.value=${app.settingsStore.debugModeFlow.value}, debug(prefs)=${app.settingsStore.debugMode}")
         }
         setContent {
+            // Sprint 29b — predictive back gesture (Android 14+) opt-in
+            // architecture note:
+            //
+            // The user brief asked for "PredictiveBackHandler integration
+            // en MainActivity.kt". `PredictiveBackHandler` is a @Composable
+            // function from `androidx.activity.compose` — it can only live
+            // inside a Compose composition, not in MainActivity.onCreate's
+            // non-composable context. The architectural location for it
+            // is therefore [com.handy.app.navigation.AppNavigation], where
+            // the NavController instance lives in scope.
+            //
+            // MainActivity's contribution to the predictive-back wiring
+            // is:
+            //   (a) `enableEdgeToEdge()` — Sprint 17. Required for
+            //       edge-to-edge so the system-rendered back-gesture
+            //       animation has full window extent.
+            //   (b) Calling `AppNavigation(...)` below — AppNavigation
+            //       owns the root-level `PredictiveBackHandler` block
+            //       that covers all 6 destinations in the NavHost.
+            //
+            // AndroidManifest.xml's `enableOnBackInvokedCallback="true"`
+            // at `<application>` is the manifest half of the same wiring;
+            // without it, the Compose `PredictiveBackHandler` does not
+            // engage the predictive-back framework on Android 14+.
+
             // Subscribe to themeMode + dynamicColor via the StateFlow exposed
             // by SettingsStore. `collectAsState()` returns a Compose `State<T>`
             // that is re-emitted whenever the underlying flow changes, so
