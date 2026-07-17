@@ -71,8 +71,14 @@ android {
     // Suppress known-false-positive `ObsoleteSdkInt` warnings for
     // `mipmap-anydpi-v26` (the conventional location for <adaptive-icon>
     // XMLs on API 26+ devices). Context documented in `lint.xml`.
+    // Sprint 29spa Phase 2: MissingTranslation is disabled because values-es/ exists
+    // as a partial Spanish locale override (only 20 keys of 256 are mirrored).
+    // Full i18n coverage for es-locale users is deferred to a future sprint. Until
+    // then, es-locale users see the English default locale values for all keys
+    // except the 20 translated in Phase 2.
     lint {
         disable += "ObsoleteSdkInt"
+        disable += "MissingTranslation"
     }
 
     // Pre-Sprint-26 Batch C: RecordingRepository's hot path and the
