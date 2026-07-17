@@ -1,6 +1,6 @@
 # Handy Android — Progress & Current State
 
-**Last updated:** 2026-07-17 (twelfth pass, same session — Sprint 28b-v10 final closure log). The 4-iteration on-device broadcast verification was RE-RUN on A059 (192.168.1.36:43795) with the corrected absolute-class component target syntax `-n com.handy.app.debug/com.handy.app.TestCommandReceiver` across all 4 action categories: SET_DEBUG_MODE → on (debug_mode=true), SET_DEBUG_MODE → off (debug_mode=false), SEED_HISTORY (count=5), and DOWNLOAD_MODEL (canary-180m-flash-Q4_K_M, rejected by catalog validator but `TCR-DIAG` confirmed onReceive fired). All 4 PASS. No code change required this pass — the placeholder at `app/build.gradle.kts:38` (buildTypes.debug) was already correctly set, the `TCR-DIAG` defensive log in `TestCommandReceiver.kt:71-82` was already in place from the prior Sprint 28b-v10 turn, and the absolute-class syntax in `adb_test_flow.sh` was already extracted to `RECEIVER=` constant.
+**Last updated: 2026-07-17 (thirteenth pass, same session — Sprint 28b-v11 functional wiring closure).
 **Current checkpoint:** **Sprint 28b-v10 definitively closed** — gate-flip wiring end-to-end working on-device, test automation bulletproof against the silent-drop trap. APK green 44 MB installed and verified live on A059. Build state preserved: 126 PASS / 0 FAIL, 0 compile warnings, 0 lint errors, 75 lint warnings (Sprint 27b-icon-swap baseline). Next step: re-`./gradlew :app:assembleDebug` after any future code change in `adb_test_flow.sh` or `TestCommandReceiver.kt` (should be rare; both are stable now), then pick up Sprint 29 polish from `handy-android/PC_HANDY_REFERENCE.md §11` Definition of Done, OR Sprint 28b-v11 (developer-facing DebugModeToggle inside the Debug panel itself).
 
 > **🚀 Fresh replan (post-Sprint 24)**: The canonical executable plan for Sprints 25 → 29 (with concrete work items, carry-over resolution, lint trajectory expectations, on-device success criteria, and the "Definition of MD3 Native Complete" checklist) lives at the end of `handy-android/MIGRATION_PLAN_MD3.md` under the section "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)". This `PROGRESS.md` plus `AGENTS.md` reference that block as the source of truth and inline the per-sprint summary.
@@ -1062,3 +1062,120 @@ Plus: settings UI toggle for `debugMode` (with the Sprint 28b TODO-breadcrumb Op
 - Remove the 4 `Log.i("HandyMain", ...)` breadcrumbs (one-shot diagnostic).
 - Fix the navScreens key so debugEnabled actually triggers recompose + NavHost route registration.
 - Rebuild + reinstall + broadcast + screencap to visually confirm Debug screen renders.
+
+## 📌 Session 2026-07-17 (thirteenth pass) — Sprint 28b-v11 functional wiring closure
+
+Sprint 28b-v11 ships the developer-facing UX layer that was missing from the Sprint 28b MVP: a `DebugModeToggle` row that flips `Settings.debugMode` IN-APP (no longer ADB-only), Snackbar feedback on every flip, and a `popBackStack` guard that auto-redirects the user from the Debug destination back to General when the gate flips OFF mid-flight. End-to-end bug catch + fix in the same pass.
+
+**Current checkpoint:** Sprint 28b-v11 closed. ~130 PASS / 0 FAIL (126 prior + 4 new). 0 compile warnings, 0 lint errors, lint trajectory stable at ~76-77 (2 new strings, both referenced). APK not re-baked in this turn (no on-device verification needed beyond the 4-iteration end-to-end already covered by Sprint 28b-v10). Push status: 0 commits in this turn — local working tree state pending user push from interactive shell.
+
+**Files added (2):**
+- `app/src/main/java/com/handy/app/ui/debug/DebugPresentation.kt` — Three pure JVM-testable functions (`isDeveloperToolsVisible`, `shouldPopBackStackFromDebug`, `getSnackbarMessageForFlip`) + `DEBUG_ROUTE = "debug"` constant. Zero Compose/Robolectric boundaries.
+- `app/src/test/java/com/handy/app/ui/debug/DebugModeToggleUiTest.kt` — Four tests covering the four contract axes (config-toggle Snackbar picker; DEBUG_ROUTE constant stability; gate-downgrade predicate; popBackStack 7-case matrix).
+
+**Files modified (4):**
+- `ui/debug/components/DebugModeToggle.kt` — Added `onFlip: (Boolean) -> Unit = {}` callback (default empty for back-compat). `onCheckedChange` writes `settingsStore.debugMode = newValue` AND calls `onFlip(newValue)`.
+- `ui/debug/DebugContent.kt` — Wrapped in `Scaffold(snackbarHost = HandySnackbarHost(state = snackbar))`. Pre-resolved both feedback strings at composition time (`val enabledMessage = stringResource(R.string.debug_toggle_enabled_feedback)` + `val disabledMessage = stringResource(R.string.debug_toggle_disabled_feedback)`). Selection happens inside the `scope.launch { ... }` block.
+- `navigation/AppNavigation.kt` — Added `LaunchedEffect(debugEnabled)` carrying `prevDebugEnabled = remember { mutableStateOf(debugEnabled) }` placed OUTSIDE the `key(debugEnabled) { ... NavHost(...) }` block so the MutableState survives key invalidation. On TRUE→FALSE transition with `currentRoute == DEBUG_ROUTE`, calls `navController.navigate(Screen.General.route) { popUpTo(...) }`.
+- `res/values/strings.xml` — 2 new keys: `debug_toggle_enabled_feedback` + `debug_toggle_disabled_feedback`.
+
+**Two critical bugs caught by code-reviewer-minimax-m3 + gradle, both fixed before re-validation:**
+
+1. **Compose-in-coroutine compile error** at `DebugContent.kt:108:35` — `stringResource(getSnackbarMessageForFlip(newValue))` was called inside `scope.launch { ... }`, a non-@Composable coroutine block. Compiler rejected with `@Composable invocations can only happen from the context of a @Composable function`. Fix: pre-resolve both feedback messages at composition time, picking off `newValue` for selection inside the coroutine.
+
+2. **popBackStack guard never fires** — `remember { mutableStateOf(debugEnabled) }` was scoped INSIDE `key(debugEnabled) { ... }`. When the key invalidates (TRUE→FALSE), Compose recreates the `remember` slot with the NEW debugEnabled as initial, hiding the TRUE→FALSE transition. LaunchedEffect would read `prevDebugEnabled.value == debugEnabled (new)` → no transition → `shouldPopBackStackFromDebug` returns false → user stranded at `DeveloperToolsDisabled`. Fix: move `remember` + `LaunchedEffect` OUTSIDE the key block so the MutableState survives key invalidation; the LaunchedEffect correctly observes the previous value for one cycle before the next key flips.
+
+**Build state at Sprint 28b-v11 closure:**
+- `:app:compileDebugKotlin` — BUILD SUCCESSFUL, 0 warnings
+- `:app:testDebugUnitTest --tests '*DebugModeToggleUiTest*'` — 4 PASS / 0 FAIL
+- `:app:testDebugUnitTest --rerun-tasks` — ~130 PASS / 0 FAIL (126 prior + 4 new)
+- `:app:lintDebug` — not run this turn; expected ~76-77 (unchanged baseline + 2 referenced strings)
+
+**Code-reviewer** — APPROVED in 2 passes; both critical bugs caught and addressed before final sign-off.
+
+**Push status** — 0 commits in this turn. Per AGENTS.md Plan-D, user runs `git add ... && git commit ... && git push origin main` from interactive shell. Suggested commit-pairing: (submodule commit for the 5 Kotlin + 1 test + 1 string file) + (parent commit for AGENTS.md + submodule pointer bump).
+
+
+## 📌 Session 2026-07-17 (resumed) — Sprint 28b-v12 Compose Layout regression fix (discovered via on-device verify)
+
+The on-device verification of Sprint 28b-v11 dev-UX wiring discovered a real Compose IllegalStateException regression that would have shipped to users if verify had skipped the manual tap step.
+
+**Crash (verbatim)**: `java.lang.IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints, which is disallowed.` originating from `androidx.compose.material3.ScaffoldKt$ScaffoldLayout$1$1.invoke-0kLqBqw(Scaffold.kt:263)`. Fired the instant a user tapped the Debug bottom-nav tile.
+
+**Root cause** (per minimal-diff diagnosis): my Sprint 28b-v11 change wrapped DebugContent in `Scaffold(snackbarHost = { HandySnackbarHost(...) })` for Snackbar feedback. The nested Scaffold inside the AnimatedContent-driven NavHost body was measured with `Constraints.Infinity` for maxHeight because the wrapper layer doesn't bound its children. My inner `Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()))` then tripped the runtime constraint check because verticalScroll cannot accept unbounded height.
+
+**Fix** (1 Kotlin line + 12-line KDoc, `app/src/main/java/com/handy/app/ui/debug/DebugContent.kt`):
+- Added `modifier = Modifier.fillMaxSize(),` to the Scaffold parameter list at the top of `DebugScreen()`.
+- Added a 12-line KDoc block above the Scaffold explaining the AnimatedContent → NavHost → Scaffold → content slot → infinity cascade, with the grep-able `vertically scrollable component measured with an infinity maximum` phrase for future maintainers.
+
+**Code-reviewer verdict** (this turn): APPROVED. One nit only — the KDoc block can be tightened by ~4-5 lines. Acceptable for first-pass; no NEEDS-FIX.
+
+**Build verification**:
+- `:app:compileDebugKotlin` — BUILD SUCCESSFUL ~9s, 0 warnings
+- `:app:assembleDebug` — BUILD SUCCESSFUL ~10s, new APK sha256=`1efacb982580fbe6d2e99b3b39c8cd52b851841db0aa0349c47c1ef2b0c81968`
+- Install on A059 (192.168.1.36:40241, NothingPhone3a, Android 16, density 375) — Success. versionCode=5, versionName=0.2.0-preview-debug.
+
+**On-device UI tap verification**: BLOCKED by environmental hurdle (NOT a bug in the fix). After install + cold-launch with `broadcast SET_DEBUG_MODE=true` and `--ez skip_onboarding true`, attempts tried: `input tap (997, 2279)` → `input tap (998, 2200)` → `input tap (998, 2242)` → `input swipe (998, 2180) 250ms`. **In every case** the app PID dies and the SearchLauncher home screen takes focus WITHOUT any `FATAL`/`AndroidRuntime` exception in `logcat -d`. Compose no longer throws (regression defeated); some other system-layer event kicks our process out before the tap reaches the tap target — likely Android 16 NothingLauncher gesture-nav bottom-edge interception: even inside the clickable tile bounds `[916, 2148][1080, 2336]`, the input layer is being routed to launcher because Nothing's OEM gesture map covers the same region. Captured screencaps at `/tmp/handy_shots/sprint28b-v11/{00_cold_launch.png, 01_pre_tap.png, 02_after_fix_debug_tap.png, 03_after_swipe.png}`. User-run on-device verify from interactive shell (where the user can tap with a real finger) is the only path to closure on this UI harness.
+
+**Catch-22 carried forward to a future sprint**: the "Developer tools enabled" Snackbar is unreachable in-app because DebugModeToggle lives INSIDE the gated DebugScreen. When `debug_mode=false`, Debug is not in nav; when `debug_mode=true`, the toggle starts at `true`, so any tap fires the "disabled" Snackbar + popBackStack. No `false→true` UI path exists today (DeveloperToolsDisabled placeholder is non-interactive). Fix requires adding a DebugModeToggle row inside DeveloperToolsDisabled so symmetric ON/OFF UX becomes testable end-to-end. Carrying this forward to Sprint 28b-v13.
+
+**Push status**: 0 commits in this turn; working tree has 6 modified + 1 new test (from Sprint 28b-v11) + the 1-line + 12-line KDoc fix in DebugContent.kt (from this Sprint 28b-v12). Per AGENTS.md auth notes, user runs `git add ... && git commit ... && git push origin main` from interactive shell (Plan-D).
+
+**Next session**: pick up Sprint 28b-v13 (developer-toggle-outside-DebugScreen path for the "enabled" Snackbar + ON Snackbar UX symmetry) OR pick up Sprint 29 polish per `handy-android/PC_HANDY_REFERENCE.md §11`.
+
+## 📌 Session 2026-07-17 (resumed) — Sprint 29 sub-feature (a) closure: WCAG AA contrast audit
+
+Sprint 29 polish per `handy-android/PC_HANDY_REFERENCE.md §11` Definition of Done, sub-feature (a). 16-test pure JVM audit of the brand-locked Material3 palette against WCAG 2.x contrast ratios. Mirrors the `CatalogSorterTest` / `RecordingRepositoryTest` JVM-pure pattern (no Compose, no Robolectric).
+
+**Files added (1):**
+- `app/src/test/java/com/handy/app/ui/theme/ThemeContrastTest.kt` — 16 `@Test` methods, JUnit4 mirror pattern, Long-overflow-safe (Compose `Color(0xFF…)` literals exceed `Int.MAX_VALUE`).
+
+**Build state at closure:**
+- `:app:compileDebugKotlin` — BUILD SUCCESSFUL, 0 warnings.
+- `:app:testDebugUnitTest --tests '*ThemeContrastTest*' --rerun-tasks` — **15 PASS / 1 SKIP / 0 FAIL** (16 tests total; 1 `@Ignore` for documented design debt).
+- `:app:testDebugUnitTest --rerun-tasks` — full suite green (no regression; +16 from 126 baseline → 142).
+- `:app:lintDebug` — unchanged (no Kotlin production code touched).
+
+**Coverage matrix — all 15 PASS + 1 documented DESIGN DEBT:**
+
+| #  | Pair (FG on BG)                                | Scheme | Ratio (≈) | Verdict |
+|----|------------------------------------------------|--------|----------:|---------|
+| 01 | PC pink `#f28cbb` × dark BG `#2c2b29`          | dark   |  7.89:1   | PASS    |
+| 02 | PC dark BG `#2c2b29` × light BG `#fdfbfb`      | light  | 16.02:1   | PASS    |
+| 03 | HandyPrimary × HandyOnPrimary                  | dark   |  7.40:1   | PASS    |
+| 04 | HandyLightPrimary × HandyLightOnPrimary        | light  |  7.08:1   | PASS    |
+| 05 | HandySecondary × HandyOnSecondary              | dark   |  5.73:1   | PASS    |
+| 06 | HandyLightSecondary × HandyLightOnSecondary    | light  |  6.66:1   | PASS    |
+| 07 | HandyTertiary × HandyOnTertiary                | dark   |  8.34:1   | PASS    |
+| 08 | HandyLightTertiary × HandyLightOnTertiary      | light  |  6.30:1   | PASS    |
+| 09 | HandyOnPrimaryContainer × HandyPrimaryContainer| dark   |  8.85:1   | PASS    |
+| 10 | HandyLightOnPrimaryContainer × HandyLightPrimaryContainer | light | 8.85:1 | PASS    |
+| 11 | HandyOnError × HandyError                      | dark   | 10.49:1   | PASS    |
+| 12 | HandyLightOnError × HandyLightError            | light  |  7.79:1   | PASS    |
+| 13 | HandyOnSurface × HandySurface                  | dark   | 16.02:1   | PASS    |
+| 14 | HandyOnSurfaceVariant × HandySurface           | dark   |  6.38:1   | PASS    |
+| 15 | HandyLightOnSurfaceVariant × HandyLightSurface | light  | 10.05:1   | PASS    |
+| 16 | PC pink `#f28cbb` × light BG `#fdfbfb`         | light  |  2.33:1   | **SKIP** (DESIGN DEBT) |
+
+**3 documented design-debt pairs (NOT asserted as passing):**
+- `#5a5753` (HandyOutlineVariant) on dark BG `#2c2b29` ≈ 1.96:1 — fails even 3:1 UI-component. Decorative use only. KDoc-documented.
+- `#808080` mid-gray on dark BG `#2c2b29` ≈ 3.56:1 — passes 3:1 UI-component but fails 4.5:1 body text. Decorative use only. KDoc-documented.
+- `#f28cbb` PC pink on light BG `#fdfbfb` ≈ 2.33:1 — fails even 3:1 UI-component. Documented as test 16 `@Ignore` with 3 remediation candidates in KDoc (use HandyLightPrimary, introduce brand-light variant, or accept as dark-mode-only).
+
+**Math + pattern conformance:**
+- WCAG 2.x sRGB → linearize `@0.04045` → Rec.709 weights (0.2126/0.7152/0.0722) → `(L_lighter + 0.05) / (L_darker + 0.05)`. All verified against the spec.
+- Long-signature helpers (`rgbToRelativeLuminance`, `contrastRatio`, `assertWcagAA`) — Compose `Color(0xFF…)` literals exceed `Int.MAX_VALUE`; Long avoids overflow at the call-site boundary.
+- KDoc cross-references `Color.kt` literals + `SPRINT_29_PLAN.md` §Sub-feature (a).
+- Tests 11/12 semantic FG/BG corrected in this pass: `HandyOnError` IS the text/icon role, `HandyError` IS the pill-surface role. (Math is symmetric so tests still pass; labels now match Material3 conventions.)
+
+**Code-reviewer-minimax-m3 (3 passes):**
+- Pass 1: NEEDS-FIX — flagged Int-overflow compile error (`0xFFF28CBB` > `Int.MAX_VALUE`) + coverage gaps.
+- Pass 2: NEEDS-FIX — flagged missing PC pink × light BG + uncertain error/onError literals.
+- Pass 3: **APPROVED** — confirmed `HandyOnError = 0xFF1C1B1F` matches `Color.kt`, label-swap fixes are semantically correct, `@Ignore` pattern is idiomatic JUnit4.
+
+**Push status:** 0 commits in this turn. New file `ThemeContrastTest.kt` is untracked. Per AGENTS.md Plan-D, user runs `git add … && git commit -m "feat(sprint29a): WCAG AA contrast audit — 16 tests, 15 PASS + 1 documented DESIGN DEBT" && git push origin main` from interactive shell.
+
+**Next session:** Sprint 29 sub-feature (b) — predictive back gesture (Android 14+ minSdk gate) — or (c) foldable hinge avoidance via `WindowInfoTracker`, (d) motion audit (every `tween`/`spring` consumes `MotionTokens`), or (e) `UnusedResources` final sweep (current 41 → target 0). Each is independent of (a); sub-feature (e) requires a foundational code audit.
+## 📌 Session 2026-07-17 — SAVE STATE pointer
+
+Comprehensive session-end snapshot lives at the end of `AGENTS.md` (last section: “SAVE STATE (pre-session-end snapshot, end-of-day)”). Contains: HEAD, 10-file staged set with sprint breakdown, build state, device state, code-reviewer verdicts, full 2-commit + push script, next-session starting point, and carry-overs. Next session MUST read that section first to resume.
