@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Sprint 29spa Phase 2: Spanish locale overrides for Sprint 25/Sprint 23/Settings translated strings. -->
+    <!-- These mirror the originally-Spanish content of keys whose values have been translated to English in the default locale file (values/strings.xml). -->
+
+    <string name="settings_advanced">Avanzado</string>
+    <string name="tab_models">Modelos</string>
+    <string name="tab_post_process">Post Proceso</string>
+    <string name="settings_experimental_features">Funciones Experimentales</string>
+    <string name="settings_experimental_features_desc">Activa funciones experimentales inestables</string>
+    <string name="settings_auto_send">Envío automático</string>
+    <string name="settings_auto_send_ime">Auto (IME)</string>
+    <string name="settings_auto_send_disabled">Desactivado</string>
+    <string name="settings_vad">Voice Activity Detection</string>
+    <string name="settings_vad_desc">Detección de actividad de voz</string>
+    <string name="settings_add_final_space">Agregar Espacio Final</string>
+    <string name="settings_add_final_space_desc">Añade un espacio al final de la transcripción</string>
+    <string name="show_experimental_models">Mostrar modelos experimentales (sin verificar)</string>
+    <string name="capability_header_subtitle">Modelos optimizados hasta %1$d MB</string>
+    <string name="heavy_dialog_title">Modelo pesado seleccionado</string>
+    <string name="heavy_dialog_title_extreme">Modelo extremo — verificación obligatoria</string>
+    <string name="heavy_dialog_body">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.
+
+El modelo funcionará pero tardará más en descargar, podría congelar la app o cerrarla.</string>
+    <string name="heavy_dialog_body_extreme">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.
+
+Este modelo requiere al menos 12 GB de RAM y largeHeap=true en el manifest para ejecutarse de manera estable. En un dispositivo con menos recursos:
+• Descargará %2$s GB extra de storage.
+• Probablemente la app se cerrará durante la carga.
+• El dispositivo puede quedar inutilizable mientras corre.
+
+¿Continuar bajo tu responsabilidad?</string>
+    <string name="heavy_dialog_consent">Entiendo los riesgos y quiero continuar</string>
+    <string name="model_unavailable_on_device">Este modelo excede la capacidad de tu dispositivo</string>
+</resources>
