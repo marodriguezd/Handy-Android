@@ -152,21 +152,14 @@ class MainActivity : ComponentActivity() {
                         )
                         HistoryScreen(viewModel = vm)
                     },
-                    aboutContent = {
-                        // Sprint 28b-v15 latent risk: AboutContent.kt has
-                        // only `Column(modifier.fillMaxWidth())` with no
-                        // internal scroll; this outer wrapper is REQUIRED
-                        // for content overflow. If A059 crashes here,
-                        // migrate AboutContent to LazyColumn instead of
-                        // removing this wrapper. see AGENTS.md closure.
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            AboutContent()
-                        }
-                    },
+        aboutContent = {
+            // Sprint 28c-#2: AboutContent.kt migrated to LazyColumn
+            // (Column.fillMaxWidth() → LazyColumn.fillMaxSize()) for
+            // parity with HistoryScreen/ModelCatalogScreen/PostProcessScreen.
+            // AnimatedContent-supplied Infinity is now safely consumed
+            // (LazyColumn measures only visible items, not intrinsic).
+            AboutContent()
+        },
                     // Sprint 28b — Debug destination reachability controlled
                     // by Settings.debugMode, reactively sourced via
                     // debugModeFlow.collectAsState(). Option A in
