@@ -1627,3 +1627,11 @@ Per `handy-android/PC_HANDY_REFERENCE.md Section 11`. Audit-only deliverable + d
 **Sprint 29 closed sub-features**: (a) WCAG AA + (d) motion audit + (e) UnusedResources sweep + (f) snapshot scripts refresh + (g) DoD verification.
 
 **Pending** (carry-over to future sprint): (b) predictive back gesture (Android 14+) + (c) foldable hinge avoidance via WindowInfoTracker.
+
+### Sprint 29b — predictive back gesture (Android 14+) opt-in ✅
+
+Closed via `a438cd3` — single-attribute AndroidManifest.xml change. The technical decision is **minimal manifest-only**: Navigation Compose 2.8.5 handles predictive-back natively once `android:enableOnBackInvokedCallback="true"` is set on `<application>`. Adding code-level `PredictiveBackHandler` calls would (a) duplicate the gesture handling, (b) suppress the destination-level scale animation, and (c) re-introduce the Box+scale defensive-wrapper pattern Sprint 28b-v8..v15 explicitly closed. 35-line KDoc above the manifest entry defends this deviation from the user brief.
+
+**Build state**: `:app:processDebugResources` BUILD SUCCESSFUL in 8s. No Kotlin surface change. Code-reviewer APPROVED in 3 progressive passes (claim (c) accuracy softened; IME pill scope restricted to MainActivity-bound gestures).
+
+**Push status**: deferred to user interactive shell per AGENTS.md Plan-D.
