@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -94,8 +95,10 @@ fun AppNavigation(
     val startDestination = if (onboardingCompleted) Screen.General.route else ONBOARDING_ROUTE
 
     // Sprint 28 — when debugEnabled is true, Screen.Debug is appended after
-    // the About entry. remember(debugEnabled) keys the cache so the list is
-    // rebuilt only on a flag flip, not on every recomposition.
+    // the About entry. The list is recomputed every composition; the key
+    // blocks below (key(debugEnabled)) are the canonical drivers of NavGraph
+    // re-registration, so `remember` here only saves the lambda's allocation
+    // cost on stable states.
     val navScreens = remember(debugEnabled) {
         if (debugEnabled) DefaultScreens + Screen.Debug else DefaultScreens
     }
@@ -122,57 +125,79 @@ fun AppNavigation(
         },
         bottomBar = {
             if (isCompact && currentDestination?.route != ONBOARDING_ROUTE) {
-                HandyBottomNavigation(
-                    navController = navController,
-                    screens = navScreens,
-                )
+                // Sprint 28b-v9 fix — wrap in key(debugEnabled) so the
+                // NavigationBar disposes + recreates when the gate flips.
+                // Without this, Compose may re-use the previous slot when
+                // only the `screens` parameter's identity changes, leaving
+                // the bottom-nav stuck at 5 items even when `navScreens`
+                // is a 6-item list.
+                key(debugEnabled) {
+                    HandyBottomNavigation(
+                        navController = navController,
+                        screens = navScreens,
+                    )
+                }
             }
         },
     ) { innerPadding ->
         Row(modifier = Modifier.fillMaxSize()) {
             if (!isCompact && currentDestination?.route != ONBOARDING_ROUTE) {
-                HandyNavigationRail(
-                    navController = navController,
-                    screens = navScreens,
-                    modifier = Modifier.fillMaxHeight(),
-                )
+                // Sprint 28b-v9 fix — key(debugEnabled) on the navigation
+                // rail mirrors the bottom-nav fix above.
+                key(debugEnabled) {
+                    HandyNavigationRail(
+                        navController = navController,
+                        screens = navScreens,
+                        modifier = Modifier.fillMaxHeight(),
+                    )
+                }
             }
 
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                NavHost(
-                    navController = navController,
-                    startDestination = startDestination,
-                    modifier = Modifier.fillMaxSize(),
-                    enterTransition = { EnterTransition.None },
-                    exitTransition = { ExitTransition.None },
-                ) {
-                    composable(ONBOARDING_ROUTE) {
-                        onboardingContent {
-                            navController.navigate(Screen.General.route) {
-                                popUpTo(ONBOARDING_ROUTE) { inclusive = true }
+                // Sprint 28b-v9 fix — Compose Navigation's NavHost
+                // builder lambda is evaluated only once during initial
+                // graph construction; the `composable(Screen.Debug.route)`
+                // body captures `debugEnabled` by value at first call,
+                // so re-keying the NavHost is the canonical way to force
+                // the graph (and the captured closures) to re-register
+                // when the gate flips. Back stack is preserved because
+                // `navController` is allocated OUTSIDE this key block.
+                key(debugEnabled) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = startDestination,
+                        modifier = Modifier.fillMaxSize(),
+                        enterTransition = { EnterTransition.None },
+                        exitTransition = { ExitTransition.None },
+                    ) {
+                        composable(ONBOARDING_ROUTE) {
+                            onboardingContent {
+                                navController.navigate(Screen.General.route) {
+                                    popUpTo(ONBOARDING_ROUTE) { inclusive = true }
+                                }
                             }
                         }
-                    }
-                    composable(Screen.General.route) {
-                        SettingsTabsScreen(
-                            generalTabContent = generalTabContent,
-                            advancedTabContent = advancedTabContent,
-                        )
-                    }
-                    composable(Screen.Models.route) { modelsTabContent() }
-                    composable(Screen.PostProcess.route) { postProcessContent() }
-                    composable(Screen.History.route) { historyContent() }
-                    composable(Screen.About.route) { aboutContent() }
-                    // Sprint 28b — Debug destination is ALWAYS registered
-                    // (Option A from the Sprint 28 MVP TODO breadcrumb).
-                    // When the gate flips false mid-flight, the
-                    // `DeveloperToolsDisabled` placeholder renders
-                    // instead of the real panel — guaranteeing the
-                    // NavHost graph never tears (no IllegalStateException
-                    // when the user is currently on the Debug route).
-                    composable(Screen.Debug.route) {
-                        if (debugEnabled) debugContent()
-                        else com.handy.app.ui.debug.DeveloperToolsDisabled()
+                        composable(Screen.General.route) {
+                            SettingsTabsScreen(
+                                generalTabContent = generalTabContent,
+                                advancedTabContent = advancedTabContent,
+                            )
+                        }
+                        composable(Screen.Models.route) { modelsTabContent() }
+                        composable(Screen.PostProcess.route) { postProcessContent() }
+                        composable(Screen.History.route) { historyContent() }
+                        composable(Screen.About.route) { aboutContent() }
+                        // Sprint 28b — Debug destination is ALWAYS registered
+                        // (Option A from the Sprint 28 MVP TODO breadcrumb).
+                        // When the gate flips false mid-flight, the
+                        // `DeveloperToolsDisabled` placeholder renders
+                        // instead of the real panel — guaranteeing the
+                        // NavHost graph never tears (no IllegalStateException
+                        // when the user is currently on the Debug route).
+                        composable(Screen.Debug.route) {
+                            if (debugEnabled) debugContent()
+                            else com.handy.app.ui.debug.DeveloperToolsDisabled()
+                        }
                     }
                 }
             }

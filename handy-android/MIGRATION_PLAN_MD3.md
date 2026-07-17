@@ -2,6 +2,8 @@
 
 > **Objetivo**: convertir Handy Android en una app 100 % Material Design 3 (expressive-ready), usando **exactamente** la misma paleta de colores de Handy PC, replicando y elevando a primitivas nativas de Compose Material3 todas las funcionalidades del PC.
 
+> **Companion doc**: for the **cross-walk** between PC source-of-truth files and Android tokens/components, see [`PC_HANDY_REFERENCE.md`](./PC_HANDY_REFERENCE.md). That doc anchors every palette hex + every PC source-of-truth file path + every Android equivalent + every PC/JSX concept that has NO Android counterpart. Use this `MIGRATION_PLAN_MD3.md` for the *roadmap*; use `PC_HANDY_REFERENCE.md` as the *reference of truth* when verifying a claim.
+
 **Fecha**: 17 de julio de 2026 (post-replan; supersedes 16-jul-2026 original) · **Autor**: sesión orquestada desde `AGENTS.md` · **Estado actual**: cierre de Sprint 24 (MD3 backbone completo backbone + lint sweep). **Sprint 25-29 replan entregado** — ver sección "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17" al final del archivo.
 
 ---

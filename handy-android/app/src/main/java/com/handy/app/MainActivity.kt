@@ -49,20 +49,24 @@ class MainActivity : ComponentActivity() {
         // Sprint 28b diagnostic — one-shot Log.i breadcrumbs to disambiguate
         // why the Debug panel nav item sometimes does not appear post-broadcast.
         // The intent is to print the StateFlow values BEFORE setContent so we
-        // see exactly what the first composition will read. Remove after the
-        // Sprint 28 on-device verification closes.
-        android.util.Log.i("HandyMain", "onCreate enter: debugModeFlow.value=${app.settingsStore.debugModeFlow.value}, debug(prefs)=${app.settingsStore.debugMode}")
+        // see exactly what the first composition will read. Wrapped in
+        // `BuildConfig.DEBUG` so release builds never carry the noise.
+        if (BuildConfig.DEBUG) {
+            android.util.Log.i("HandyMain", "onCreate enter: debugModeFlow.value=${app.settingsStore.debugModeFlow.value}, debug(prefs)=${app.settingsStore.debugMode}")
+        }
         if (intent?.getBooleanExtra("skip_onboarding", false) == true) {
             app.settingsStore.onboardingCompleted = true
-            android.util.Log.i("HandyMain", "skip_onboarding=true")
+            if (BuildConfig.DEBUG) android.util.Log.i("HandyMain", "skip_onboarding=true")
         }
 
         if (intent?.getBooleanExtra("start_dictation", false) == true) {
             app.engineViewModel.startRecording()
-            android.util.Log.i("HandyMain", "start_dictation=true")
+            if (BuildConfig.DEBUG) android.util.Log.i("HandyMain", "start_dictation=true")
         }
 
-        android.util.Log.i("HandyMain", "BEFORE setContent: debugModeFlow.value=${app.settingsStore.debugModeFlow.value}, debug(prefs)=${app.settingsStore.debugMode}")
+        if (BuildConfig.DEBUG) {
+            android.util.Log.i("HandyMain", "BEFORE setContent: debugModeFlow.value=${app.settingsStore.debugModeFlow.value}, debug(prefs)=${app.settingsStore.debugMode}")
+        }
         setContent {
             // Subscribe to themeMode + dynamicColor via the StateFlow exposed
             // by SettingsStore. `collectAsState()` returns a Compose `State<T>`
