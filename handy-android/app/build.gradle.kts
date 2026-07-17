@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -64,9 +65,10 @@ android {
         aidl = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
-    }
+    // Sprint 30 — `composeOptions.kotlinCompilerExtensionVersion` DELETED
+    // (entire block removed). The Compose compiler is now a Kotlin
+    // plugin: `alias(libs.plugins.kotlin.compose)` in the `plugins` block
+    // above ships the compiler as part of the K2 toolchain itself.
 
     // Suppress known-false-positive `ObsoleteSdkInt` warnings for
     // `mipmap-anydpi-v26` (the conventional location for <adaptive-icon>
