@@ -10,7 +10,7 @@ Use este documento al arrancar una sesión nueva para continuar exactamente desd
 - **Módulos principales:**
   - `handy-android/handy-core/` — librería Rust con JNI (`libhandy_core.so`).
   - `handy-android/app/` — app Kotlin/Jetpack Compose.
-- **Sprint actual:** Sprint 23 — About + ThemeSelector + LocaleSelector (feature complete). Próximo sprint: **Sprint 24 — History con audio + retry**.
+- **Sprint actual:** Sprint 24 (History con audio + retry) **committed + closed**. **Pre-Sprint-26 cleanup in progress**: Batch A hygiene committed (`2425d7d`); Batch B (VM pure-logic extraction + 16 JVM tests) **designed but interrupted mid-execution** — next session must retry Batch B from scratch using the pre-designed patterns in `PROGRESS.md § Pre-Sprint-26 cleanup`. Próximo sprint: **Sprint 25 — Advanced Settings refinement + Retry backend binding** (2.5 días; split into 25a / 25b si los carry-overs de Sprint 24 atrasan).
 - **Documentos clave:**
   - `handy-android/PROGRESS.md` — estado actual y pasos pendientes.
   - `handy-android/SPEC.md` — especificación de UI/UX.

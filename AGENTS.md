@@ -27,9 +27,9 @@
 
 ---
 
-## 🗓️ Current State — Sprint 24 closed (History con audio + retry) (Julio 17, 2026)
+## 🗓️ Current State — Post-Sprint 24 + pre-Sprint-26 cleanup in progress (Julio 17, 2026)
 
-### ✅ Completed — Sprints 16 → 24 (full MD3 backbone + lint sweep + History MD3)
+### ✅ Completed — Sprints 16 → 24 (full MD3 backbone + lint sweep + History MD3) + pre-Sprint-26 Batch A (hygiene)
 
 #### Sprint 16 — Material Design 3 Redesign + ADB Test Hooks
 - **Settings** — `SettingsRow` replaced with Material 3 `ListItem`.

@@ -1,7 +1,7 @@
 # Handy Android — Progress & Current State
 
-**Last updated:** 2026-07-17 (post-Sprint 24 closure — full replan delivered; canonical Sprint 25-29 plan in MIGRATION_PLAN_MD3.md § "Corrección suplementaria")
-**Current checkpoint:** **Sprint 24 (History con audio + retry) feature complete**. 37 JVM tests PASS (10 Sprint 16 + 13 Sprint 22 + 14 Sprint 24). 0 compile warnings, 0 lint errors, lint trajectory stable at 84. Próximo sprint: **Sprint 25 — Advanced Settings refinement + Retry backend binding** (2.5 días; split into 25a/25b si los carry-overs atrasan).
+**Last updated:** 2026-07-17 (post-Sprint 24 closure + pre-Sprint-26 cleanup in progress; see "Pre-Sprint-26 cleanup" section below for Batch A committed + Batch B retry-needed state).
+**Current checkpoint:** **Sprint 24 (History con audio + retry) feature complete + committed**. 37 JVM tests PASS (10 Sprint 16 + 13 Sprint 22 + 14 Sprint 24). 0 compile warnings, 0 lint errors, lint trajectory stable at 84. **Pre-Sprint-26 cleanup started**: Batch A hygiene committed (`2425d7d` — ModelCatalogScreen AlertDialog→HandyConfirmDialog + ObsoleteSdkInt suppression). Batch B (VM pure-logic extraction + 16 JVM tests) **designed but interrupted mid-execution** — see instructions for retry. Próximo sprint: **Sprint 25 — Advanced Settings refinement + Retry backend binding** (2.5 días; split into 25a/25b si los carry-overs atrasan).
 
 > **🚀 Fresh replan (post-Sprint 24)**: The canonical executable plan for Sprints 25 → 29 (with concrete work items, carry-over resolution, lint trajectory expectations, on-device success criteria, and the "Definition of MD3 Native Complete" checklist) lives at the end of `handy-android/MIGRATION_PLAN_MD3.md` under the section "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)". This `PROGRESS.md` plus `AGENTS.md` reference that block as the source of truth and inline the per-sprint summary.
 
@@ -247,6 +247,122 @@ Reporte detallado en `handy-android/PROGRESS.md` seccion "MD3 Visual Verificatio
 | lintDebug warnings | 84 | 84 (delta explanation: appcompat dep bump + 1 nueva string `about_*` entering UnusedResources coverage) |
 
 Code-reviewer APPROVED el 7-edit batch con dos nits menores resueltos en este cierre (MainActivity comment ahora enumerates las 9 reales; LIMPIA.md "Próximas Tareas Pendientes" — feature-flavor no sprint-flavor, no requiere edición).
+
+### Pre-Sprint-26 cleanup (17 julio 2026 — work in progress)
+
+Started after Sprint 24 closure to clear carry-over debt + lint residuals before Sprint 25/26. The canonical executable plan lives at `handy-android/MIGRATION_PLAN_MD3.md` § "Corrección suplementaria"; this section documents the work actually shipped / planned in this session for the next one to resume.
+
+#### ✅ Batch A — Hygiene (committed `2425d7d`)
+
+**Files changed (2)**:
+1. `app/src/main/java/com/handy/app/ui/models/ModelCatalogScreen.kt` — `AlertDialog` (delete-model confirmation) swapped for `HandyConfirmDialog`. Removed unused `import androidx.compose.material3.AlertDialog`. Added `import com.handy.app.ui.components.HandyConfirmDialog`.
+2. `app/build.gradle.kts` — added `android { ... lint { disable += "ObsoleteSdkInt" } ... }`. Suppresses the false-positive ObsoleteSdkInt warning that previously flagged `mipmap-anydpi-v26/` (the conventional location for `<adaptive-icon>` XMLs on API 26+ devices).
+
+**Side note**: `HeavyModelWarningDialog.kt` (located at `app/src/main/java/com/handy/app/ui/models/components/`) was kept using direct `AlertDialog` because its content (Row+Icon title, Checkbox consent, error-color confirm button) does not fit `HandyConfirmDialog`'s simple title/message/buttons shape. Acceptable use of MD3 AlertDialog.
+
+**Build state at Batch A close**: compile + test + lint green; 0 `ObsoleteSdkInt` entries in `app/build/reports/lint-results-debug.xml`; lint trajectory holds at 84.
+
+**Decision log (lint.xml orphan)**: an attempt to use a `lint.xml` file with the AGP `lintConfig` hookup failed because `lintConfig(file(...))` is not callable in AGP 8.x receiver type (the property `lintConfig` is a `ConfigurableFileCollection`, not a function). The `lint.xml` was deleted to avoid being mistaken for "active rules"; the actual suppression lives in `build.gradle.kts` with an inline KDoc comment.
+
+#### 🔄 Batch B — VM pure-logic extraction + JVM tests (IN PROGRESS — interrupted mid-execution)
+
+Designed refactor + tests; the actual str_replace execution failed on `SettingsViewModel.kt` because the oldString patterns included surrounding context that didn't byte-exactly match the file content. **Next session must retry Batch B from scratch using the pre-designed patterns below.** No partial state on disk.
+
+**Design — `SettingsViewModel.kt` (extract step)**:
+1. Add top-level extension function AFTER the class closing brace:
+   ```kotlin
+   fun SettingsViewModel.UiState.toAppSettings(): AppSettings = AppSettings(
+       idleTimeout = idleTimeout,
+       shizukuEnabled = shizukuEnabled,
+       postProcessEndpoint = postProcessEndpoint,
+       postProcessApiKey = postProcessApiKey,
+       batteryOptimizationExempt = batteryOptimizationExempt,
+       experimentalEnabled = experimentalEnabled,
+       vadEnabled = vadEnabled,
+       addFinalSpace = addFinalSpace,
+       postProcessingEnabled = postProcessingEnabled,
+       autoSend = autoSend,
+   )
+   ```
+   Note: `isApiKeyVisible` is intentionally NOT mapped — pure UI flag, engine has no use.
+2. Remove the `private fun buildSettings()` method body at end of class.
+3. Update both call sites (with `allowMultiple: true`):
+   - In `setIdleTimeout(...)`: `engineViewModel.applySettings(buildSettings())` -> `engineViewModel.applySettings(toAppSettings())`
+   - In `debounceApplySettings()` inside `viewModelScope.launch { delay(500); ... }`: same swap.
+
+**Design — `OnboardingViewModel.kt` (extract steps)**:
+1. Insert into `companion object` (currently only contains `TAG`):
+   ```kotlin
+   internal fun computePromotionLabel(
+       target: ModelInfo,
+       tierRecs: com.handy.app.capability.TierRecommendations?,
+   ): String = when {
+       target.id == tierRecs?.primary -> "tier-primary"
+       tierRecs?.alternatives?.contains(target.id) == true -> "tier-alternative"
+       target.recommended -> "global-recommended"
+       else -> "fallback"
+   }
+   
+   internal fun pickTargetModel(
+       models: List<ModelInfo>,
+       tierRecs: com.handy.app.capability.TierRecommendations?,
+       fitsAndSafe: (ModelInfo) -> Boolean,
+   ): ModelInfo? {
+       fun pickById(id: String?): ModelInfo? =
+           id?.let { wanted ->
+               models.firstOrNull { it.id == wanted && !it.isDownloaded && fitsAndSafe(it) }
+           }
+       val primary = pickById(tierRecs?.primary)
+       val alternative = if (primary != null) null
+           else tierRecs?.alternatives?.firstNotNullOfOrNull(::pickById)
+       return primary
+           ?: alternative
+           ?: models.firstOrNull { it.recommended && !it.isDownloaded && fitsAndSafe(it) }
+           ?: models.firstOrNull { !it.isDownloaded && fitsAndSafe(it) }
+   }
+   ```
+2. Delete the instance-method `computePromotionLabel` (the companion becomes the canonical).
+3. Replace the inline selection logic in `initModelDownload` (5-line `pickById` lambda + primary/alternative/target cascade) with: `val target = pickTargetModel(models, tierRecs, fitsAndSafe)`.
+
+**Test files to create (3)** (mirror the `CatalogSorterTest.kt` JUnit4 / no Robolectric pattern):
+
+| Path | Tests | Topic |
+|------|-------|-------|
+| `app/src/test/java/com/handy/app/viewmodel/SettingsViewModelUiStateTest.kt` | 2 | `UiState.toAppSettings()` defaults + custom-mapping including `postProcessApiKey` |
+| `app/src/test/java/com/handy/app/viewmodel/OnboardingPromotionLabelTest.kt` | 6 | `computePromotionLabel` 4 priority outcomes (`tier-primary`, `tier-alternative`, `global-recommended`, `fallback`) + null tierRecs matrix (recommended vs fallback) |
+| `app/src/test/java/com/handy/app/viewmodel/OnboardingTargetPickerTest.kt` | 8 | `pickTargetModel` priority chain (tier primary > tier alt > global rec > first safe) + skip-downloaded + null-safe + empty-list |
+
+Total: **16 new tests**, post-Batch-B expected: `37 + 16 = 53 PASS`.
+
+**Critical retry hint for next session**: when retrying the str_replace calls, use `read_files` to get the EXACT byte content of the file immediately before crafting the oldString. The previous attempt failed because the oldString approximate-match included surrounding lines that didn't align with the file's actual whitespace. Use larger context blocks (4-5 surrounding lines) for unique anchoring, OR fall back to `write_file` for full-file replacement if the diff is small enough.
+
+#### ⏸ Batch C — `Sprint 25b Kotlin side` (LOCKED — biggest pre-work, do NOT start without explicit user OK)
+
+This is the BIG remaining pre-work item: it carries Sprint 24's `delay(RETRY_SIMULATED_DELAY_MS)` stub through to a working retry pipeline. Touches:
+- `SettingsStore.kt` — add `_recordingRepositoryShouldDualWrite: MutableStateFlow<Boolean>` for migration.
+- `app/.../audio/RecordingRepositoryProvider.kt` *(NEW)* — ring-buffer via `MediaStore` / `getExternalFilesDir(...)` to persist audio frames alongside the existing on-the-fly transcription path.
+- `service/RecordingService.kt` — dual-write integration with the buffer provider.
+- `viewmodel/HistoryViewModel.kt` — remove the `delay()` stub + bind `_uiState.retryingId` to the real `EngineBridge.nativeRetryHistoryEntry` call.
+- `bridge/EngineBridge.kt` — declare `external fun nativeRetryHistoryEntry(entryId: Long): Boolean`.
+- `handy-core/src/jni_bridge.rs` *(NEW entry)* — reads the persisted audio file and retranscribes. **Rust side deferred**; Kotlin side will fall back to existing error path while Rust catches up.
+
+Test target: 8 JVM tests for `RecordingRepositoryProvider` (mock-friendly storage abstraction) + integration verification on device.
+
+#### ⏸ Batch D — `SEED_HISTORY broadcast` (small)
+
+- `app/.../TestCommandReceiver.kt` — add `com.handy.app.action.SEED_HISTORY` action that injects N synthetic history entries (default 5) via `nativeGetHistory()` swap path. Debug-only.
+- `scripts/capture_history.sh` — `--seed-history` flag to call the broadcast before screencap. Currently the script captures the empty state because `nativeGetHistory()` returns `[]` on fresh install; the seed action enables visual diff of the 4-tone-on-tone actions (Save/Retry/Copy/Delete) and the `AudioPlayerBar` mount — closing the visual-diff gap noted at Sprint 24 closure.
+
+#### ⏸ Batch E — `CI workflow` (small)
+
+- `.github/workflows/test.yml` *(NEW)* — GitHub Actions workflow: `ubuntu-latest`, JDK 17, `chmod +x gradlew && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest :app:lintDebug`. Note: `compileDebugKotlin` requires the Android SDK to resolve AGP types — verify whether `actions/setup-android` is needed before enabling strict lint pass; alternatively, scope CI to JVM-only targets (`testDebugUnitTest`) as a starting point.
+
+### Build state at session end
+
+- `compileDebugKotlin` — green
+- `testDebugUnitTest` — 37 PASS (no Batch B yet)
+- `lintDebug` — 0 errors / 84 warnings (unchanged from Sprint 24 closure)
+- Git: `2425d7d` on `main` (local only, **NOT pushed**; user runs `git push origin main` from interactive shell per AGENTS.md auth notes).
 
 ### MD3 Visual Verification (carried forward from Sprint 16)
 
