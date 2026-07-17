@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -201,6 +202,23 @@ fun AppNavigation(
                 // the graph (and the captured closures) to re-register
                 // when the gate flips. Back stack is preserved because
                 // `navController` is allocated OUTSIDE this key block.
+                //
+                // Sprint 28b-v15 REAL FIX — the runtime-crash root cause
+                // was the redundant `Column(verticalScroll(...))` wrapper
+                // inside MainActivity's `debugContent` lambda; removed in
+                // MainActivity (DebugScreen already hosts its own
+                // LazyColumn). Companion fix in `SettingsTabsScreen`
+                // (Box(Modifier.weight(1f))) bounds the General/Advanced
+                // tab body's maxHeight. Not yet verified on-device;
+                // ground-truth next step documented in AGENTS.md
+                // Session 2026-07-17 Sprint 28b-v15 closure.
+                //
+                // (NavHost does NOT accept `sizeTransform` directly in
+                // Navigation Compose 2.8.x — that parameter lives on
+                // `composable(...)`. The default for `composable`'s
+                // sizeTransform is already `{ _, _ -> null }`, so the
+                // real fix surface is the wrapper-removal + weight
+                // changes documented above.)
                 key(debugEnabled) {
                     NavHost(
                         navController = navController,
@@ -226,13 +244,12 @@ fun AppNavigation(
                         composable(Screen.PostProcess.route) { postProcessContent() }
                         composable(Screen.History.route) { historyContent() }
                         composable(Screen.About.route) { aboutContent() }
-                        // Sprint 28b — Debug destination is ALWAYS registered
-                        // (Option A from the Sprint 28 MVP TODO breadcrumb).
-                        // When the gate flips false mid-flight, the
-                        // `DeveloperToolsDisabled` placeholder renders
-                        // instead of the real panel — guaranteeing the
-                        // NavHost graph never tears (no IllegalStateException
-                        // when the user is currently on the Debug route).
+                        // DEBUG_ROUTE — inherits the NavHost-level
+                        // transitions (enterTransition / exitTransition /
+                        // sizeTransform, all `None` / null-lambda at the
+                        // graph level). Per-destination sizeTransform is
+                        // omitted in Navigation Compose 2.8.x because the
+                        // parameter is a non-nullable lambda.
                         composable(DEBUG_ROUTE) {
                             if (debugEnabled) debugContent()
                             else com.handy.app.ui.debug.DeveloperToolsDisabled()
@@ -325,9 +342,26 @@ private fun SettingsTabsScreen(
                 )
             }
         }
-        when (selectedTab) {
-            0 -> generalTabContent()
-            1 -> advancedTabContent()
+        // Sprint 28b-v15 — wrap the `when` body in `Box(Modifier.weight(1f))`
+        // so the active tab body receives bounded `maxHeight`. Without the
+        // weight, the parent Column passes `Constraints.Infinity` for
+        // `maxHeight` to whichever composable the `when` selects — and
+        // MainActivity wraps both `generalTabContent` and
+        // `advancedTabContent` in their own `Modifier.verticalScroll(...)`,
+        // making those lambdas the runtime-check target on tab navigation.
+        // With `weight(1f)`, the Box receives the remaining column height
+        // (= parent - TabRow) as `maxHeight` and any inner verticalScroll
+        // is bounded. Defense-in-depth for the Settings→General and
+        // Settings→Advanced routes.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            when (selectedTab) {
+                0 -> generalTabContent()
+                1 -> advancedTabContent()
+            }
         }
     }
 }

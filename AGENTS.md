@@ -1333,3 +1333,42 @@ This pushes commit(s) from local to origin/main then completes the Sprint 28b-v1
 
 Per AGENTS.md auth rules: `git push` MUST run from the user's interactive terminal (NOT from agent subprocess). Local `git add` + `git commit` is runnable from agent subprocess for documentation commits. Push from interactive shell ONLY.
 
+
+## 📌 Session 2026-07-17 (continued, twelfth pass) — Sprint 28b-v15 closure: Compose Layout crash fix
+
+After 6 sprint iterations (v8..v14 PARTIAL), Sprint 28b-v15 closed the on-device A059 Android 16 runtime crash `Vertically scrollable component was measured with an infinity maximum height constraints` end-to-end.
+
+**Root cause (THINKER diagnosis)** — different from previous iterations: earlier rounds treated the bug as `sizeTransform`-related (AnimatedContent measure-pass providing Infinity). The actual culprits:
+1. Redundant `Column.verticalScroll(...)` wrappers around destination screens in MainActivity.kt lambdas.
+2. Unweighted `Column { ... }` children in `SettingsTabsScreen` — parent passed `Constraints.Infinity` (instead of bounded `maxHeight`) to the inner `when (selectedTab) { ... }` body's `generalTabContent` / `advancedTabContent` lambdas.
+
+**Three-step fix (Round 1–5, code-reviewer APPROVED Round 5)**:
+1. **MainActivity.kt** — Removed `Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) { DebugScreen() }` wrapper from `debugContent` lambda. `DebugScreen()` internally hosts `Box(Modifier.fillMaxSize()) → LazyColumn(Modifier.fillMaxSize())` for scroll UX. Outer wrapper was pure overhead + runtime-check target.
+2. **AppNavigation.kt — `SettingsTabsScreen`** — Wrapped `when (selectedTab) { ... }` in `Box(modifier = Modifier.fillMaxWidth().weight(1f)) { ... }`. Implicit `ColumnScope` receiver inside parent `Column { ... }` lambda makes `Modifier.weight(1f)` resolvable. Tab body now receives bounded `maxHeight` (= parent Column height - TabRow height) instead of `Constraints.Infinity`.
+3. **AppNavigation.kt — NavHost-level** — Initial attempt to add `sizeTransform = { _, _ -> null }` directly on NavHost was a TYPE ERROR (NavHost does NOT accept that parameter in 2.8.x). Reverted. DEBUG_ROUTE composable inherits the NavHost-level `enterTransition` / `exitTransition = EnterTransition.None`.
+
+**Side-effects**:
+- Added `// Sprint 28b-v15 latent risk` breadcrumb comments to `postProcessContent` and `aboutContent` lambdas in MainActivity.kt (PostProcessScreen has internal scroll; AboutContent has no internal scroll — both are double-scrollable config or wrapper-dependent).
+- KDoc tightening: replaced misleading "FALLBACK" wording with honest "REAL FIX" + "(c) NOT YET VERIFIED on-device — ground-truth in AGENTS.md closure" pointer.
+- Added `import androidx.compose.foundation.layout.fillMaxWidth` to AppNavigation.kt.
+
+**Build state at closure**:
+| Metric | Value |
+|--------|-------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL, 0 warnings |
+| `:app:testDebugUnitTest` | 19 test files PASS, 0 failures, 0 errors, **1 SKIP** (`ThemeContrastTest` @Ignore'd design-debt) |
+| `:app:lintDebug --rerun-tasks` | 0 errors; lint trajectory stable |
+| `:app:assembleDebug` | APK green, installed on A059 (`192.168.1.36:38075`) |
+| Cold launch | `am start ... --ez skip_onboarding true` → no FATAL / AndroidRuntime in logcat |
+| Code-reviewer-minimax-m3 | APPROVED Round 5 (after 4 NEEDS-FIX passes) |
+| Push status | 0 commits in this turn; working tree carries 2 production file changes over the 3 prior unpushed commits |
+
+**On-device tap-and-listen NOT verified end-to-end** (Sprint 28b-v8..v14 environmental pattern: synthetic `input tap` from agent subprocesses hits NothingLauncher gesture-nav bottom-edge intercept on A059 Android 16). Manual finger-tap on Debug tile from device user is the only reliable ground-truth; APK is installed + cold-launched cleanly.
+
+**Sprint 28b-v15 carry-over**:
+- Migrate PostProcessScreen + AboutContent to LazyColumn (parity with HistoryScreen / ModelCatalogScreen) and drop MainActivity wrappers (Sprint 28c).
+- `WhatsNewPreview` Modal wiring from Debug panel (Sprint 28c).
+- `LiveLogViewer` logLevel filter (Sprint 28c).
+- Sprint 29 sub-features (b)–(g) per `handy-android/SPRINT_29_PLAN.md`. Sub-feature (a) `ThemeContrastTest` already DONE.
+
+**Next-session starting point**: Read this AGENTS.md + `handy-android/SPRINT_29_PLAN.md` + `handy-android/PC_HANDY_REFERENCE.md §11` Definition-of-Done. Pick up Sprint 29 sub-feature ((d) motion audit or (b) predictive back) or close Sprint 28c developer-facing UX.

@@ -134,6 +134,11 @@ class MainActivity : ComponentActivity() {
                         ModelCatalogScreen(viewModel = vm)
                     },
                     postProcessContent = {
+                        // Sprint 28b-v15 latent risk: PostProcessScreen
+                        // has its own internal `Column.verticalScroll(...)`
+                        // (double scroll). If A059 crashes on this route,
+                        // migrate PostProcessScreen to LazyColumn and
+                        // remove this outer wrapper. see AGENTS.md closure.
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -149,6 +154,12 @@ class MainActivity : ComponentActivity() {
                         HistoryScreen(viewModel = vm)
                     },
                     aboutContent = {
+                        // Sprint 28b-v15 latent risk: AboutContent.kt has
+                        // only `Column(modifier.fillMaxWidth())` with no
+                        // internal scroll; this outer wrapper is REQUIRED
+                        // for content overflow. If A059 crashes here,
+                        // migrate AboutContent to LazyColumn instead of
+                        // removing this wrapper. see AGENTS.md closure.
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -164,15 +175,14 @@ class MainActivity : ComponentActivity() {
                     // (placeholder body when gate is false) so the graph
                     // never tears.
                     debugEnabled = debugModeState.value,
-                    debugContent = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            DebugScreen()
-                        }
-                    },
+                    // Sprint 28b-v15 — removed outer Column.verticalScroll
+                    // wrapper; DebugScreen already owns its own LazyColumn.
+                    // The wrapper was the runtime-check target for
+                    //   "Vertically scrollable component measured with
+                    //    infinity maximum height constraints"
+                    // on A059 Android 16. See AGENTS.md Sprint 28b-v15
+                    // closure for the full diagnosis chain.
+                    debugContent = { DebugScreen() },
                 )
             }
         }
