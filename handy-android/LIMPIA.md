@@ -10,7 +10,7 @@ Use este documento al arrancar una sesión nueva para continuar exactamente desd
 - **Módulos principales:**
   - `handy-android/handy-core/` — librería Rust con JNI (`libhandy_core.so`).
   - `handy-android/app/` — app Kotlin/Jetpack Compose.
-- **Sprint actual:** Sprint 24 (History con audio + retry) **committed + closed**. **Pre-Sprint-26 cleanup 100% complete**: Batches A (`2425d7d`) + B + C + D + E shipped; build verde con 87 tests PASS / 0 FAIL / 0 lint errors. Sprint 25 (Advanced Settings refinement + Retry backend binding) ya no requiere pre-work de Batch C/D/E — puede arrancar cuando el usuario dé luz verde.
+- **Sprint actual:** Sprint 25a (RecordingRepository factory binding) **committed + closed**. **Sprint 24 + pre-Sprint-26 cleanup 100% complete** (Batches A (`2425d7d`) + B + C + D + E shipped; build green con 88 tests PASS / 0 FAIL / 0 lint errors). Sprint 25b (Kotlin frame-subscribe callback + native `pushFloatArrayFrames` wiring + Advanced Settings refinement MD3 polish) puede arrancar cuando el usuario dé luz verde.
 - **Documentos clave:**
   - `handy-android/PROGRESS.md` — estado actual y pasos pendientes.
   - `handy-android/SPEC.md` — especificación de UI/UX.

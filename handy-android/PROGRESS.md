@@ -1,6 +1,6 @@
 # Handy Android — Progress & Current State
 
-**Last updated:** 2026-07-17 (Sprint 24 + pre-Sprint-26 cleanup Batches A, B, C, D, E **all complete**; build green 87 tests PASS / 0 FAIL).
+**Last updated:** 2026-07-17 (Sprint 25a — RecordingRepository factory binding complete; Sprint 24 + pre-Sprint-26 cleanup Batches A, B, C, D, E all complete; build green 88 tests PASS / 0 FAIL).
 **Current checkpoint:** **Sprint 24 + complete pre-Sprint-26 cleanup**. **87 JVM tests PASS / 0 FAIL** (23 CatalogSorterTest + 10 MobileRecommendationsTest + 11 ModelCapabilityTest + 14 HistoryPresentationLogicTest + 2 SettingsViewModelUiStateTest + 6 OnboardingPromotionLabelTest + 9 OnboardingTargetPickerTest + 10 RecordingRepositoryTest + 2 misc). 0 compile warnings, 0 lint errors, lint trajectory stable at 84. **Pre-Sprint-26 cleanup #100% complete**: Batches A (`2425d7d`), B (VM pure-logic + 17 tests), C (RecordingRepository + retry JNI binding), D (SEED_HISTORY broadcast + capture_history.sh flag), E (android-test.yml CI + testOptions.isReturnDefaultValues). Próximo sprint: **Sprint 25 — Advanced Settings refinement** (regresiva del Plan ejecutable post-Sprint 24 en `MIGRATION_PLAN_MD3.md` ya no es necesaria como pre-work; Sprint 25 puede arrancar cuando el usuario dé luz verde).
 
 > **🚀 Fresh replan (post-Sprint 24)**: The canonical executable plan for Sprints 25 → 29 (with concrete work items, carry-over resolution, lint trajectory expectations, on-device success criteria, and the "Definition of MD3 Native Complete" checklist) lives at the end of `handy-android/MIGRATION_PLAN_MD3.md` under the section "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)". This `PROGRESS.md` plus `AGENTS.md` reference that block as the source of truth and inline the per-sprint summary.
@@ -416,6 +416,46 @@ Brought the Android module under CI. The existing `.github/workflows/test.yml` c
 - `testDebugUnitTest` — **87 PASS / 0 FAIL** (37 Sprint 24 carry-over pre-existing + 17 Batch B VM-extract + 10 Batch C AudioRepository + 0 SEED_HISTORY unit tests this batch + 23 CatalogSorterTest covered in Sprint 22)
 - `lintDebug` — 0 errors / 84 warnings (unchanged from Sprint 24 closure)
 - Git: all batches local, **NOT pushed**; user runs `git push origin main` from interactive shell per AGENTS.md auth notes. Plan-D of the AGENTS.md "release-body-update ladder" remains the only reliable push workflow in this environment.
+
+### Sprint 25a — RecordingRepository factory binding (Julio 17, 2026 — same session, after pre-Sprint-26 push landed)
+
+Factory-only scope per Plan A (user chose Option A over Option B/C after I surfaced the architectural mismatch — the AAudio callback lives entirely in Rust's real-time thread, not Kotlin). The per-frame `pushFloatArrayFrames` wiring is **deferred to Sprint 25b**; this sprint closes (a) the factory in `HandyApplication`, (b) the start/stop/cancel `launch` hooks that prime + finalize the 44-byte placeholder WAV header, (c) one new JVM test that locks the zero-frame contract, and (d) the TODO(Sprint25b) breadcrumb for the next sprint.
+
+**Files changed (3)**
+
+| Path | Change |
+|---|---|
+| `app/src/main/java/com/handy/app/HandyApplication.kt` | Added `val recordingRepository: RecordingRepository by lazy { ... }` factory. Constructs `FileAudioStorageBackend(this)` + reads `settingsStore.recordingDualWriteMode` flag + `RecordingRepository.DEFAULT_MAX_STORAGE_BYTES` (~500MB) cap. Updated `engineViewModel` lazy to pass `recordingRepository` as the third constructor arg. |
+| `app/src/main/java/com/handy/app/viewmodel/EngineViewModel.kt` | Added `private val recordingRepository: RecordingRepository` as third constructor arg. Inside `startRecording()` / `stopRecording()` / `cancelRecording()` `viewModelScope.launch(Dispatchers.IO)` blocks: capture `recordingRepository.startRecording(...)` and `stopRecording()` results as **local `val`s** (the write-only `@Volatile` field that I initially introduced was flagged in code-reviewer pass 1 and dropped — the locals live only for the duration of each launch block). Short breadcrumb comment block in place of the deleted field documents the Sprint 25b Kotlin-frame-subscribe TODO. |
+| `app/src/test/java/com/handy/app/audio/RecordingRepositoryTest.kt` | Updated KDoc coverage count `10` → `11 tests`. Added test #11 `start then stop with zero frames produces a valid 44-byte WAV` that locks the Sprint 25a empty-WAV contract: starts a session, never calls `pushFloatArrayFrames`, stops, and asserts (a) the returned `stopPath == startPath`, (b) `backend.fileSize(startPath) == 44L`, (c) second consecutive `stopRecording()` returns `null` (idempotency check). |
+
+**Decision log (Option A — factory-only)**
+
+The audio capture loop runs entirely on the Rust AAudio real-time thread (`handy-core/src/audio/capture.rs::data_callback_thunk` → `PipelineInner::process_samples` → VAD + stream-router). Kotlin never sees raw frames — only `EngineCallback.onVadLevel(Float)`. Three binding shapes were evaluated (full-Rust wav dual-write vs Kotlin frame-subscribe callback vs factory-only), and the user chose **Option A**: ship the factory + start/stop wiring in 25a and defer the per-frame push to Sprint 25b once a Kotlin-side frame pipeline (callback + ring buffer) is decided. The on-device verification asserts that the WAV file appears at the expected path even with zero frames — proof that the construction + finalization round-trip works without depending on AAudio.
+
+**On-device verification (mandatory for Sprint 25a closure)**
+
+- `./gradlew :app:assembleDebug` → APK installed on A059.
+- Launch app with `--ez start_dictation true` (auto-starts recording via `MainActivity.onCreate`/`onNewIntent`); pause ~3 s; tap stop via Floating IME pill or Quick Dictate notification action.
+- `adb shell ls /sdcard/Android/data/com.handy.app.debug/files/history_audio/` should show `history_<timestamp>.wav` of **exactly 44 bytes** (header only — no PCM yet because frames aren't pumped until Sprint 25b wires `pushFloatArrayFrames`).
+- `adb pull` the file → `xxd | head` shows RIFF (offset 0) + WAVE (offset 8) + `fmt ` (offset 12) + `data` (offset 36), with the `data` chunk size field = 0.
+- Logcat tail for tags `EngineVM|HandyApp|RecordingRepository` shows `startRecording: repo path=/…/history_<timestamp>.wav` and `stopRecording: finalized repo path=…` lines.
+
+**Code-reviewer feedback (3 passes)**
+
+- **Pass 1**: flagged the `@Volatile pendingRecordingPath` field as write-only dead state (no consumer in this sprint or future until Sprint 25b wires `nativeSaveHistory(text, wavPath)`). Recommended collapsing to local `val` captures. ✅ Applied.
+- **Pass 2**: approved with two soft nits — (a) the `cancelRecording` comment verb "finalize" was confusing because user-cancel goes through the *stop* path, not a discard method; (b) forward-compat hint for Sprint 25b was removed when the field was dropped. ✅ Addressed both (a) by rewriting the cancel comment to "best-effort pre-finalize on cancel (orphan WAV; eviction takes over)" and (b) accepting the local-val promotion back to a field is a trivial one-liner when needed.
+- **Pass 3** (post-wording-nit edit): approved. The "pre-finalize" verb is now decoupled from the canonical stop path's "finalize", which was the source of pass 2's ambiguity.
+
+**Build state at Sprint 25a close**: compile green 0 warnings, **88 PASS / 0 FAIL** (87 pre-Sprint-25a + 1 new zero-frame test), lint 0 errors / 84 warnings (unchanged, no migration surface in this sprint). Code-reviewer APPROVED en 3 passes.
+
+### Build state at end of resumed session (Sprint 25a closure)
+
+- `compileDebugKotlin` — green, 0 compile warnings
+- `testDebugUnitTest` — **88 PASS / 0 FAIL**
+- `lintDebug` — 0 errors / 84 warnings (unchanged)
+- Git: changes local, **NOT pushed**; user runs `git push origin main` from interactive shell per AGENTS.md auth notes.
+- Code-reviewer APPROVED (3-pass).
 
 ### MD3 Visual Verification (carried forward from Sprint 16)
 

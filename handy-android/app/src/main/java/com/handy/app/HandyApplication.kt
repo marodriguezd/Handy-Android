@@ -11,6 +11,8 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.handy.app.audio.FileAudioStorageBackend
+import com.handy.app.audio.RecordingRepository
 import com.handy.app.bridge.EngineBridge
 import com.handy.app.injection.ClipboardInjector
 import com.handy.app.injection.InjectorRouter
@@ -45,9 +47,33 @@ class HandyApplication : Application(), ComponentCallbacks2 {
         )
     }
 
+    /**
+     * Sprint 25a factory binding: Kotlin-side recording repository that
+     * pre-creates a 44-byte WAV header placeholder when the engine
+     * starts and finalizes chunk sizes when the engine stops. The flag
+     * `SettingsStore.recordingDualWriteMode` is read at construction
+     * time so toggling the flag requires an app restart (acceptable —
+     * the surface is the same in Sprint 26+ when the persistence flag
+     * becomes user-visible in a Compose toggle).
+     *
+     * TODO(Sprint25b): `pushFloatArrayFrames` is not yet wired to any
+     * Kotlin-side capture pipeline. The AAudio callback lives inside
+     * the Rust `pipeline.rs` real-time thread, so Kotlin cannot plug
+     * into it directly. Sprint 25b will either add a Kotlin
+     * frame-subscribe callback (EngineCallback.onAudioFrames + SPSC
+     * ring buffer) or move dual-write fully into the Rust pipeline.
+     */
+    val recordingRepository: RecordingRepository by lazy {
+        RecordingRepository(
+            storage = FileAudioStorageBackend(this),
+            isDualWriteEnabled = settingsStore.recordingDualWriteMode,
+            maxStorageBytes = RecordingRepository.DEFAULT_MAX_STORAGE_BYTES,
+        )
+    }
+
     /** Singleton engine VM shared by MainActivity and HandyInputMethodService. */
     val engineViewModel: EngineViewModel by lazy {
-        EngineViewModel(this, injectorRouter)
+        EngineViewModel(this, injectorRouter, recordingRepository)
     }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)

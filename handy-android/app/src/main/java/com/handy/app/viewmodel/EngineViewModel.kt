@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.handy.app.R
 import com.handy.app.SettingsStore
+import com.handy.app.audio.RecordingRepository
 import com.handy.app.bridge.EngineBridge
 import com.handy.app.bridge.EngineCallback
 import com.handy.app.capability.DeviceCapabilityDetector
@@ -26,6 +27,7 @@ import java.io.File
 class EngineViewModel(
     application: Application,
     val injectorRouter: InjectorRouter,
+    private val recordingRepository: RecordingRepository,
 ) : AndroidViewModel(application), EngineCallback {
 
     companion object {
@@ -52,6 +54,19 @@ class EngineViewModel(
 
     private val _lastErrorMessage = MutableStateFlow<String?>(null)
     val lastErrorMessage: StateFlow<String?> = _lastErrorMessage.asStateFlow()
+
+    // ── Audio persistence (Sprint 25a factory binding) ─────────────
+    //
+    // TODO(Sprint25b): wire `RecordingRepository.pushFloatArrayFrames`
+    // to a Kotlin-side audio consumer. Either (a) add a Kotlin
+    // `EngineCallback.onAudioFrames(FloatArray)` callback that drains a
+    // lock-free SPSC ring buffer on `Dispatchers.IO`, or (b) move WAV
+    // dual-write entirely into the Rust pipeline. Until then,
+    // start/stop/cancel still call
+    // `RecordingRepository.startRecording` and `stopRecording` so the
+    // 44-byte placeholder WAV exists on disk; the resulting path is
+    // captured as a local `val` in each launch closure (no instance
+    // state required while no Kotlin-side consumer reads it).
 
     // ── Model Download Events ─────────────────────────────────
 
@@ -128,6 +143,14 @@ class EngineViewModel(
         _lastErrorMessage.value = null
         RecordingService.start(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
+            // Sprint 25a factory binding: prime the WAV file in lockstep
+            // with AAudio capture start. The repository creates the
+            // 44-byte placeholder header; `pushFloatArrayFrames` will
+            // fill in PCM bytes once Sprint 25b wires the audio
+            // pipeline. For Sprint 25a the recorded file is header-only
+            // and the on-device verification asserts exactly that.
+            val startPath = recordingRepository.startRecording(System.currentTimeMillis())
+            Log.d(TAG, "startRecording: repo path=$startPath")
             // Start mic immediately, no model needed
             Log.d(TAG, "nativeStartRecording starting immediately...")
             EngineBridge.nativeStartRecording(sampleRate = 16000, channelCount = 1)
@@ -162,13 +185,34 @@ class EngineViewModel(
         _state.value = STATE_TRANSCRIBING
         RecordingService.stop(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
+            // Sprint 25a factory binding: finalize the WAV header so the
+            // path is ready to be passed to `nativeSaveHistory` in a
+            // future sprint. The file size is currently exactly 44
+            // bytes (header placeholder only) because
+            // `pushFloatArrayFrames` is not yet wired — Sprint 25b
+            // TODO. Concurrent-stop null safety: `stopRecording()`
+            // returns null when no `startRecording` call has yet run;
+            // we just propagate the null to the local val.
+            val stopPath = recordingRepository.stopRecording()
+            Log.d(TAG, "stopRecording: finalized repo path=$stopPath")
             EngineBridge.nativeFinalizeStream()
         }
     }
 
     fun cancelRecording() {
+        // Sprint 25a factory binding: best-effort pre-finalize on
+        // user-cancel. We call `RecordingRepository.stopRecording()`
+        // (rather than a dedicated discard method) which finalizes
+        // the WAV header and leaves a 44-byte placeholder WAV on disk.
+        // The orphan is small and the directory-eviction LRU clears it
+        // eventually. Sprint 25b will add an explicit
+        // `RecordingRepository.cancelRecording()` discards-path method
+        // once frame pumping is wired and a cancelled WAV could
+        // carry partial PCM we don't want to leave behind.
         RecordingService.stop(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
+            val cancelPath = recordingRepository.stopRecording()
+            Log.d(TAG, "cancelRecording: finalized repo path=$cancelPath")
             EngineBridge.nativeCancelRecording()
         }
         _state.value = STATE_IDLE

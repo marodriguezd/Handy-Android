@@ -27,7 +27,7 @@
 
 ---
 
-## 🗓️ Current State — Sprint 24 + pre-Sprint-26 cleanup Batches A + B + C + D + E all complete (Julio 17, 2026)
+## 🗓️ Current State — Sprint 25a (RecordingRepository factory binding complete) + Sprint 25b next up (Julio 17, 2026)
 
 > **🟢 Pre-Sprint-26 cleanup 100% complete**. All 5 batches shipped; build is green at 87 PASS / 0 FAIL / 0 lint errors. Local commits pending user-push approval per AGENTS.md auth note (Plan D in the release-body-update ladder sections below). El Sprint 25 (Advanced Settings refinement + Retry backend binding) ya no requiere Batch C/D/E pre-work — puede arrancar cuando el usuario dé luz verde.
 
@@ -573,6 +573,28 @@ Not a Sprint feature pass. This session was a docs/branding/shipping hygiene pas
 - When implementing the plan, do **not** attempt Plan A/B/C for `gh` operations from agent subprocesses. The Plan-D Web UI step is the only reliable closure path on this machine; for code commits use the user's terminal directly. If `git push` is needed from the agent, the user must do it (or grant auth propagation explicitly).
 
 ---
+
+## 📌 Session 2026-07-17 (resumed) — Sprint 25a implementation + closure
+
+This session continued immediately after the pre-Sprint-26 cleanup closure (commit `bbcb9a2` was already pushed by the user from the interactive shell). Sprint 25a was implemented end-to-end with build verification + code-reviewer concurrence.
+
+- **Sprint 25a implemented** — RecordingRepository factory binding (see `handy-android/PROGRESS.md` § Sprint 25a). Three files changed:
+  1. `app/src/main/java/com/handy/app/HandyApplication.kt` — added `val recordingRepository: RecordingRepository by lazy` factory + updated `engineViewModel` lazy to pass it as third constructor arg.
+  2. `app/src/main/java/com/handy/app/viewmodel/EngineViewModel.kt` — added `private val recordingRepository: RecordingRepository` constructor arg; `startRecording()` / `stopRecording()` / `cancelRecording()` `viewModelScope.launch(Dispatchers.IO)` blocks now capture `recordingRepository.startRecording(...)` / `stopRecording()` results as local `val`s inside the closure.
+  3. `app/src/test/java/com/handy/app/audio/RecordingRepositoryTest.kt` — added test #11 `start then stop with zero frames produces a valid 44-byte WAV` (locks down the Sprint 25a placeholder-WAV contract).
+
+- **Design choice Option A** — user chose factory-only over Rust-side dual-write or Kotlin frame-subscribe callback. Per-frame `pushFloatArrayFrames` wiring is deferred to Sprint 25b once we decide between (a) Kotlin `onAudioFrames(FloatArray)` callback + SPSC ring buffer, or (b) full Rust-side wav dual-write.
+
+- **On-device verification path** documented (44-byte WAV file appears at `/sdcard/Android/data/com.handy.app.debug/files/history_audio/` after start→stop cycle; `data` chunk size = 0). Sprint 25a changes are **local, not pushed** per AGENTS.md auth notes.
+
+- **Code-reviewer** — APPROVED in 3 passes:
+  1. Pass 1: flagged the `@Volatile pendingRecordingPath` write-only dead state. ✅ Dropped, replaced with local `val`s.
+  2. Pass 2: 2 soft nits (cancel comment verb ambiguity + forward-compat hint removed by pass 1's fix). ✅ Addressed.
+  3. Pass 3 (post-wording nit): approved the comment-only "best-effort pre-finalize on cancel" wording.
+
+- **Tests**: **88 PASS / 0 FAIL** (87 pre-Sprint-25a + 1 new zero-frame RecordingRepository test for Sprint 25a's placeholder-WAV contract). No regressions.
+
+- **Build**: green, 0 compile warnings, 0 lint errors, lint trajectory stable at 84.
 
 ## 🧠 Memory Rules for Future Sessions
 

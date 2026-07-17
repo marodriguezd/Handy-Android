@@ -17,7 +17,7 @@ import java.io.IOException
  * touching the filesystem, so the WAV-header and ring-buffer eviction
  * logic is fully testable on CI runners.
  *
- * Coverage (10 tests):
+ * Coverage (11 tests):
  *  1. start → push → stop returns a finalized path with WAV magic intact.
  *  2. push without start is a silent no-op (does not crash, no file).
  *  3. start while already recording abandons the prior file.
@@ -29,6 +29,9 @@ import java.io.IOException
  *  8. Dual-write disabled short-circuits start/push/stop to no-ops.
  *  9. floatArrayToPcm16 saturates + clamps out-of-range floats.
  * 10. Eviction drops oldest files when total size exceeds the cap.
+ * 11. (Sprint 25a) Start → stop with ZERO frames produces a valid
+ *     44-byte WAV; calling stopRecording twice in a row returns null
+ *     on the second call (idempotency check).
  */
 class RecordingRepositoryTest {
 
@@ -233,6 +236,37 @@ class RecordingRepositoryTest {
         assertTrue(
             "eviction must have removed at least 1 file (had 6, cap=1024)",
             remaining.size < 6,
+        )
+    }
+
+    @Test
+    fun `start then stop with zero frames produces a valid 44-byte WAV`() = runBlocking {
+        // Sprint 25a contract: when `pushFloatArrayFrames` is NOT yet
+        // wired (waiting on Sprint 25b's Kotlin frame-subscribe
+        // callback or Rust-side dual-write), startRecording+stopRecording
+        // must still produce a valid WAV file ready to be passed to
+        // `nativeSaveHistory(...)`. The file is exactly 44 bytes (the
+        // placeholder header) and remains playable by AudioPlayerBar
+        // (silence in this case).
+        val backend = InMemoryAudioStorageBackend()
+        val repo = RecordingRepository(backend, isDualWriteEnabled = true)
+        val startPath = repo.startRecording(sessionTimestamp = 1_700_000_000L)
+        assertNotNull("startRecording must return a path when dual-write enabled", startPath)
+        // No pushes whatsoever — simulating Sprint 25a's not-yet-wired
+        // audio pipeline.
+        val stopPath = repo.stopRecording()
+        assertEquals(startPath, stopPath)
+        assertEquals(
+            "zero-frame recording must finalize to a valid 44-byte WAV placeholder",
+            44L, backend.fileSize(startPath!!),
+        )
+        // Idempotency: a second stop with no session open must return
+        // null (this is what protects us from double-finalize on the
+        // race where `stopRecording` fires before the `startRecording`
+        // coroutine has set `pendingRecordingPath`).
+        assertNull(
+            "second consecutive stopRecording must return null",
+            repo.stopRecording(),
         )
     }
 
