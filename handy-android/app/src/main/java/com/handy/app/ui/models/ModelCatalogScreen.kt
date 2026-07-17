@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -63,6 +62,7 @@ import com.handy.app.capability.CompatibilityStatus
 import com.handy.app.capability.ModelCompatibility
 import com.handy.app.model.ModelInfo
 import com.handy.app.ui.components.HandyChipGroup
+import com.handy.app.ui.components.HandyConfirmDialog
 import com.handy.app.ui.components.HandySearchBar
 import com.handy.app.ui.components.Spacing
 import com.handy.app.ui.models.components.ActiveBadge
@@ -535,23 +535,13 @@ fun ModelCard(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text(stringResource(R.string.models_confirm_delete)) },
-            text = { Text(stringResource(R.string.models_confirm_delete_message)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDelete(model.id)
-                    showDeleteDialog = false
-                }) {
-                    Text(stringResource(R.string.models_delete))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(stringResource(R.string.dialog_cancel))
-                }
-            },
+        HandyConfirmDialog(
+            title = stringResource(R.string.models_confirm_delete),
+            message = stringResource(R.string.models_confirm_delete_message),
+            confirmLabel = stringResource(R.string.models_delete),
+            onConfirm = { onDelete(model.id) },
+            onDismiss = { showDeleteDialog = false },
+            dismissLabel = stringResource(R.string.dialog_cancel),
         )
     }
 }

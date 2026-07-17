@@ -67,6 +67,13 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
     }
+
+    // Suppress known-false-positive `ObsoleteSdkInt` warnings for
+    // `mipmap-anydpi-v26` (the conventional location for <adaptive-icon>
+    // XMLs on API 26+ devices). Context documented in `lint.xml`.
+    lint {
+        disable += "ObsoleteSdkInt"
+    }
 }
 
 val buildRust by tasks.registering(Exec::class) {
