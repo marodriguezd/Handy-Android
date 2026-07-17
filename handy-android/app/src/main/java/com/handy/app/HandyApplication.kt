@@ -17,6 +17,7 @@ import com.handy.app.bridge.EngineBridge
 import com.handy.app.injection.ClipboardInjector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.injection.ShizukuInjector
+import com.handy.app.util.ReactiveRingBufferLog
 import com.handy.app.viewmodel.EngineViewModel
 import com.handy.app.BuildConfig
 import kotlinx.coroutines.CoroutineScope
@@ -74,6 +75,23 @@ class HandyApplication : Application(), ComponentCallbacks2 {
     /** Singleton engine VM shared by MainActivity and HandyInputMethodService. */
     val engineViewModel: EngineViewModel by lazy {
         EngineViewModel(this, injectorRouter, recordingRepository)
+    }
+
+    /**
+     * Sprint 28b — process-wide reactive ring buffer for the Debug
+     * panel's LiveLogViewer. The buffer itself is JVM-pure (see
+     * [com.handy.app.util.RingBufferLog]) so the test suite can run
+     * it under plain JUnit; this singleton just instantiates the
+     * Compose-reactive wrapper at process scope so any Composable can
+     * collect its StateFlow without prop-drilling.
+     *
+     * Cap of 500 lines matches the historical android.util.Log buffer
+     * Handy has been emitting to logcat; raising it would multiply
+     * memory pressure without surfacing anything useful for a single
+     * developer session.
+     */
+    val reactiveRingBuffer: ReactiveRingBufferLog by lazy {
+        ReactiveRingBufferLog(maxLines = 500)
     }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)

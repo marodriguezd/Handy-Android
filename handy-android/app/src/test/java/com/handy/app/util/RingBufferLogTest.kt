@@ -1,6 +1,7 @@
 package com.handy.app.util
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -9,6 +10,12 @@ import org.junit.Test
  * operations: append (order preservation), eviction (FIFO when at
  * capacity), tail (bounds and ordering), tail-edge cases (n <= 0,
  * n >= size), and clear (state reset).
+ *
+ * Sprint 28b: adds three carry-over edge tests from the Sprint 28
+ * v3 code-review pass — `[append on empty buffer keeps ordering]`,
+ * `[append of empty string is allowed and observable]`, and
+ * `[maxLines=1 boundary evict-on-second-append]` — plus a guard test
+ * for the `init { require(maxLines > 0) }` precondition.
  */
 class RingBufferLogTest {
 
@@ -72,5 +79,51 @@ class RingBufferLogTest {
         // After clear, fresh appends work as expected
         log.append("d")
         assertEquals(listOf("d"), log.snapshot())
+    }
+
+    // ---------- Sprint 28b: code-reviewer carry-over edge tests ----------
+
+    @Test
+    fun `append on empty buffer produces size 1 and that line is the snapshot`() {
+        val log = RingBufferLog(maxLines = 5)
+        assertEquals(0, log.size())
+        assertEquals(emptyList<String>(), log.snapshot())
+        log.append("first")
+        assertEquals(1, log.size())
+        assertEquals(listOf("first"), log.snapshot())
+        assertEquals(listOf("first"), log.tail(1))
+    }
+
+    @Test
+    fun `append of empty string is allowed and observable`() {
+        val log = RingBufferLog(maxLines = 3)
+        log.append("")
+        log.append("a")
+        log.append("")
+        // All three entries present, oldest-first, and the empty
+        // strings are explicitly preserved (NOT collapsed).
+        assertEquals(3, log.size())
+        assertEquals(listOf("", "a", ""), log.snapshot())
+    }
+
+    @Test
+    fun `maxLines=1 boundary keeps only the most recent append`() {
+        val log = RingBufferLog(maxLines = 1)
+        log.append("a")
+        log.append("b")
+        log.append("c")
+        // Capacity 1 means every prior append is evicted on the next.
+        assertEquals(1, log.size())
+        assertEquals(listOf("c"), log.snapshot())
+        assertEquals(listOf("c"), log.tail(1))
+        assertEquals(listOf("c"), log.tail(99))
+    }
+
+    @Test
+    fun `init rejects maxLines=0 with IllegalArgumentException`() {
+        val ex = assertThrows(IllegalArgumentException::class.java) {
+            RingBufferLog(maxLines = 0)
+        }
+        assertEquals("maxLines must be > 0; got 0", ex.message)
     }
 }

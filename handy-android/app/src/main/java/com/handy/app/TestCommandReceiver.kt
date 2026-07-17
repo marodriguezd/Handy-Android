@@ -92,6 +92,7 @@ class TestCommandReceiver : BroadcastReceiver() {
                 handleModelAction(context, intent, modelId)
             }
             "com.handy.app.action.SEED_HISTORY" -> handleSeedHistoryAction(intent)
+            "com.handy.app.action.SET_DEBUG_MODE" -> handleSetDebugModeAction(context, intent)
             else -> Log.w(
                 "HandyApp",
                 "TestCommandReceiver: unknown action ${intent.action}",
@@ -130,6 +131,27 @@ class TestCommandReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
+    }
+
+    /**
+     * Sprint 28b — `com.handy.app.action.SET_DEBUG_MODE` flips the
+     * `Settings.debugMode` flag so a developer can verify the Debug
+     * panel renders on a fresh install without going through the
+     * full Settings tree. Recognized extras:
+     *   - `enabled` (boolean): new value of the flag. Default `true`
+     *     (matches the ad-hoc pattern testers use: "turn it on,
+     *     please").
+     *
+     * Writes through the in-memory MutableStateFlow AND the
+     * SharedPreferences `debug_mode` key, so the next `am start`
+     * re-launch picks the value up reactively via
+     * `debugModeFlow.collectAsState()` in MainActivity.
+     */
+    private fun handleSetDebugModeAction(context: Context, intent: Intent) {
+        val enabled = intent.getBooleanExtra("enabled", true)
+        val app = context.applicationContext as HandyApplication
+        app.settingsStore.debugMode = enabled
+        Log.i("HandyApp", "TestCommandReceiver: SET_DEBUG_MODE enabled=$enabled")
     }
 
     /**

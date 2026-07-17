@@ -74,6 +74,8 @@
             <intent-filter>
                 <action android:name="com.handy.app.action.DOWNLOAD_MODEL" />
                 <action android:name="com.handy.app.action.SET_ACTIVE_MODEL" />
+                <action android:name="com.handy.app.action.SEED_HISTORY" />
+                <action android:name="com.handy.app.action.SET_DEBUG_MODE" />
             </intent-filter>
         </receiver>
 

@@ -1,5 +1,8 @@
+@file:Suppress("PrivateApi", "DiscouragedPrivateApi")
+
 package com.handy.app.injection
 
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
@@ -9,6 +12,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.InputEvent
 import android.view.KeyEvent
+import com.handy.app.HandyApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -112,12 +116,32 @@ class ShizukuInjector(
         }
     }
 
+    /**
+     * Inject via clipboard + paste-key sequence. Reads the user-tunable
+     * post-clipboard delay from [com.handy.app.SettingsStore.pasteDelayMs]
+     * so a developer can stretch it from the Debug panel without
+     * rebuilding. Default 50 ms preserves the historical behavior.
+     *
+     * Hidden API: [injectInputEvent] on `IInputManager` is `@hide` in
+     * every Android API level to date; there is no public alternative
+     * for injecting synthetic input events system-wide. Shizuku apps
+     * (UID 2000) are intentionally granted access to the historical
+     * greylist via the framework's hidden-API bypass, so this reflection
+     * call still resolves at runtime on Android 16 (API 36).
+     */
+    @SuppressLint("PrivateApi")
     override suspend fun inject(text: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Handy", text))
 
-            delay(50L)
+            // Sprint 28b — paste delay is now configurable via
+            // SettingsStore.pasteDelayMs; default 50 ms preserves the
+            // historical ShizukuInjector behavior. `applicationContext`
+            // is guaranteed to be the process Application for a non-test
+            // build so the cast is safe.
+            val app = context.applicationContext as HandyApplication
+            delay(app.settingsStore.pasteDelayMs.toLong())
 
             val svc = userService
                 ?: return@withContext Result.failure(

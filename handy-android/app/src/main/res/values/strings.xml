@@ -322,6 +322,21 @@
     <string name="debug_audio_recordingbuffer_label">Recording buffer size</string>
     <string name="debug_audio_alwaysonmicrophone_label">Always-on microphone</string>
     <string name="debug_panel_gated_hint">Developer tools. Hidden by default in release builds.</string>
-    <!-- Sprint 28 - Placeholder row suffix (used by DebugContent.PlaceholderText) -->
+    <!-- Sprint 28 - Placeholder row suffix (kept for back-compat; unused since 28b shipped real components) -->
     <string name="debug_placeholder_suffix">— coming soon (Sprint 28b)</string>
+
+    <!-- Sprint 28b - Sprint 28b MD3 components -->
+    <string name="debug_mode_toggle_label">Developer tools</string>
+    <string name="debug_mode_toggle_subtitle">Turn off the Debug panel and hide it from the navigation rail.</string>
+    <string name="debug_screen_disabled_body">Developer tools are currently off. Reopen the Settings → Experimental section or flip this back via the TestCommandReceiver SET_DEBUG_MODE broadcast.</string>
+    <string name="debug_loglevel_subtitle">Verbosity for the in-app log viewer.</string>
+    <string name="debug_loglevel_verbose">Verbose</string>
+    <string name="debug_loglevel_debug">Debug</string>
+    <string name="debug_loglevel_info">Info</string>
+    <string name="debug_loglevel_warn">Warn</string>
+    <string name="debug_loglevel_error">Error</string>
+    <string name="debug_log_liveviewer_subtitle">Tail of the in-memory ring buffer (last 50 lines).</string>
+    <string name="debug_log_liveviewer_empty">No log lines yet. Start a recording to populate.</string>
+    <string name="debug_updates_check_subtitle">When off, the launch-time updater check is short-circuited.</string>
+    <string name="debug_audio_alwaysonmicrophone_subtitle">Keep the AAudio capture hot between dictations.</string>
 </resources>

@@ -10,39 +10,55 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.handy.app.HandyApplication
 import com.handy.app.R
 import com.handy.app.ui.components.SettingsGroup
+import com.handy.app.ui.debug.components.AlwaysOnMicrophoneSwitch
+import com.handy.app.ui.debug.components.DebugModeToggle
+import com.handy.app.ui.debug.components.LiveLogViewer
+import com.handy.app.ui.debug.components.LogLevelSelector
+import com.handy.app.ui.debug.components.PasteDelaySlider
+import com.handy.app.ui.debug.components.RecordingBufferSlider
+import com.handy.app.ui.debug.components.UpdateChecksToggle
+import com.handy.app.ui.settings.components.SoundPicker
 
 /**
- * Sprint 28 — Debug panel MD3 composition root.
+ * Sprint 28b — Debug panel MD3 composition root (full implementation).
  *
- * Gated by `Settings.debugMode == true` (set via SettingsStore.debugMode).
- * The `Screen.Debug` nav-rail/bar item only appears when the flag is
- * true; this content is never reachable in release builds unless the
- * developer explicitly opts in.
+ * Sprint 28 MVP shipped placeholder rows so reviewers could see the
+ * group/row grid; this is the real component graph:
  *
- * Sprint 28 MVP scope:
- *   - 3 placeholder SettingsGroups covering Logging, Updates, and Audio.
- *   - 7 placeholder rows surface the future component shape so reviewers
- *     can see what's planned. Each row is a [PlaceholderText] using a
- *     string resource — when the component lands in Sprint 28b, the
- *     string content stays and the row body swaps from "coming soon"
- *     text to the actual HandySwitch / HandyDropdown / HandySlider.
- *   - A gated-hint footer reminds the user this is developer tooling.
+ *   - DebugModeToggle (first row — lets a developer turn off the
+ *     gate without leaving the screen).
+ *   - Logging: LogLevelSelector + LiveLogViewer.
+ *   - Updates & Info: UpdateChecksToggle + a "Preview What's New"
+ *     placeholder row (the modal exists in `whats-new/`; Sprint 28b
+ *     scopes to the wiring so the surface stays).
+ *   - Audio: SoundPicker, PasteDelaySlider, RecordingBufferSlider,
+ *     AlwaysOnMicrophoneSwitch.
  *
- * Future Sprint 28b implementation plan:
- *   - LogLevelSelector (HandyDropdown: VERBOSE/DEBUG/INFO/WARN/ERROR)
- *   - UpdateChecksToggle (HandySwitch)
- *   - SoundPicker (reuse from ui.settings.components.SoundPicker)
- *   - PasteDelaySlider (HandySlider 0..1000 ms)
- *   - RecordingBufferSlider (HandySlider 0..600 s)
- *   - AlwaysOnMicrophoneSwitch (HandySwitch)
- *   - LiveLogViewer (LazyColumn + com.handy.app.util.RingBufferLog tail(50))
+ * The SoundPicker row is `ui.settings.components.SoundPicker` (the
+ * same primitive used in General Settings) — single source of truth
+ * so changing the sound list re-emits in both screens.
+ *
+ * Gated by `Settings.debugMode == true` via `AppNavigation.debugEnabled`
+ * (reactive via `debugModeFlow.collectAsState()` in MainActivity,
+ * Option A: the Debug route is always registered, the placeholder
+ * body renders when the gate is false).
  */
 @Composable
-fun DebugContent() {
+fun DebugScreen() {
+    val context = LocalContext.current
+    val app = context.applicationContext as HandyApplication
+
+    DebugContent(app)
+}
+
+@Composable
+internal fun DebugContent(app: HandyApplication) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -55,21 +71,35 @@ fun DebugContent() {
             style = MaterialTheme.typography.headlineSmall,
         )
 
+        DebugModeToggle(app = app)
+
         SettingsGroup(title = stringResource(R.string.debug_section_logging)) {
-            PlaceholderText(R.string.debug_log_loglevel_label)
-            PlaceholderText(R.string.debug_log_liveviewer_label)
+            LogLevelSelector(app = app)
+            LiveLogViewer(app = app)
         }
 
         SettingsGroup(title = stringResource(R.string.debug_section_updates)) {
-            PlaceholderText(R.string.debug_updates_check_label)
-            PlaceholderText(R.string.debug_whatsnew_label)
+            UpdateChecksToggle(app = app)
+            // WhatsNewPreview is intentionally deferred; the modal
+            // exists at `ui/whats-new/` but no SettingsStore flag
+            // drives it from the Debug panel yet. Sprint 28b keeps the
+            // row visible so the surface doesn't move on Sprint 28c.
+            Text(
+                text = "${stringResource(R.string.debug_whatsnew_label)} (Sprint 28c)",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
         }
 
         SettingsGroup(title = stringResource(R.string.debug_section_audio)) {
-            PlaceholderText(R.string.debug_audio_soundpicker_label)
-            PlaceholderText(R.string.debug_audio_pastedelay_label)
-            PlaceholderText(R.string.debug_audio_recordingbuffer_label)
-            PlaceholderText(R.string.debug_audio_alwaysonmicrophone_label)
+            SoundPicker(
+                selected = app.settingsStore.soundTheme,
+                onSelect = { app.settingsStore.soundTheme = it },
+                enabled = app.settingsStore.audioFeedbackEnabled,
+            )
+            PasteDelaySlider(app = app)
+            RecordingBufferSlider(app = app)
+            AlwaysOnMicrophoneSwitch(app = app)
         }
 
         Text(
@@ -79,13 +109,27 @@ fun DebugContent() {
     }
 }
 
+/**
+ * Public, no-op body used when [com.handy.app.navigation.AppNavigation]
+ * registers the Debug route but the gate is currently OFF (Option A
+ * for the Sprint 28b reactive-flag-flip hardening — see the comment
+ * block above [com.handy.app.navigation.AppNavigation.AppNavigation]).
+ */
 @Composable
-private fun PlaceholderText(labelResId: Int) {
-    val label = stringResource(labelResId)
-    val suffix = stringResource(R.string.debug_placeholder_suffix)
-    Text(
-        text = "$label $suffix",
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(vertical = 4.dp),
-    )
+fun DeveloperToolsDisabled() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.debug_screen_title),
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        Text(
+            text = stringResource(R.string.debug_screen_disabled_body),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+    }
 }

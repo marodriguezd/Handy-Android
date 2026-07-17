@@ -163,10 +163,16 @@ fun AppNavigation(
                     composable(Screen.PostProcess.route) { postProcessContent() }
                     composable(Screen.History.route) { historyContent() }
                     composable(Screen.About.route) { aboutContent() }
-                    // Sprint 28 — Debug destination visible only when the gate
-                    // is open. AppNavigation.variants setting controls reachability.
-                    if (debugEnabled) {
-                        composable(Screen.Debug.route) { debugContent() }
+                    // Sprint 28b — Debug destination is ALWAYS registered
+                    // (Option A from the Sprint 28 MVP TODO breadcrumb).
+                    // When the gate flips false mid-flight, the
+                    // `DeveloperToolsDisabled` placeholder renders
+                    // instead of the real panel — guaranteeing the
+                    // NavHost graph never tears (no IllegalStateException
+                    // when the user is currently on the Debug route).
+                    composable(Screen.Debug.route) {
+                        if (debugEnabled) debugContent()
+                        else com.handy.app.ui.debug.DeveloperToolsDisabled()
                     }
                 }
             }

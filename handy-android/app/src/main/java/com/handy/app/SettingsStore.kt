@@ -329,4 +329,98 @@ class SettingsStore(context: Context) {
             _debugModeFlow.value = value
             prefs.edit().putBoolean("debug_mode", value).apply()
         }
+
+    // ── Sprint 28b — Debug panel settings (5 new fields) ──────────────────
+    //
+    // Each backs a Compose component in `ui/debug/components/` and is
+    // persisted via SharedPreferences with a sibling MutableStateFlow
+    // so observers re-compose reactively. Defaults match the post-Sprint
+    // baseline so installing fresh leaves a sensible developer-facing
+    // configuration that can be tweaked from the Debug panel itself.
+
+    /** Log verbosity for the Debug panel's LiveLogViewer. One of
+     *  "VERBOSE", "DEBUG", "INFO", "WARN", "ERROR". The Compose
+     *  LogLevelSelector uses the same strings as a key into the
+     *  HandyDropdown options. Default "INFO" mirrors the production
+     *  android.util.Log call. */
+    private val _logLevelFlow: MutableStateFlow<String> = MutableStateFlow(
+        prefs.getString("log_level", "INFO") ?: "INFO",
+    )
+    val logLevelFlow: StateFlow<String> = _logLevelFlow.asStateFlow()
+
+    var logLevel: String
+        get() = _logLevelFlow.value
+        set(value) {
+            _logLevelFlow.value = value
+            prefs.edit().putString("log_level", value).apply()
+        }
+
+    /** True when the app checks for updates on every launch. Toggled
+     *  from the Debug panel's UpdateChecksToggle. Default `true` so
+     *  releases stay current; the Sprint 28b DebugPanel allows
+     *  developers to silence this for offline testing. */
+    private val _updateChecksOnLaunchFlow: MutableStateFlow<Boolean> = MutableStateFlow(
+        prefs.getBoolean("update_checks_on_launch", true),
+    )
+    val updateChecksOnLaunchFlow: StateFlow<Boolean> = _updateChecksOnLaunchFlow.asStateFlow()
+
+    var updateChecksOnLaunch: Boolean
+        get() = _updateChecksOnLaunchFlow.value
+        set(value) {
+            _updateChecksOnLaunchFlow.value = value
+            prefs.edit().putBoolean("update_checks_on_launch", value).apply()
+        }
+
+    /** Delay after `Clipboard.setPrimaryClip` before injecting the
+     *  paste key event (ms). Previously hardcoded `delay(50L)` in
+     *  ShizukuInjector.kt; sensitised to user input so flaky targets
+     *  can stretch it (e.g. slow remote-app composition). Default
+     *  50 ms to match the historical behavior. Range 0..1000. */
+    private val _pasteDelayMsFlow: MutableStateFlow<Int> = MutableStateFlow(
+        prefs.getInt("paste_delay_ms", 50),
+    )
+    val pasteDelayMsFlow: StateFlow<Int> = _pasteDelayMsFlow.asStateFlow()
+
+    var pasteDelayMs: Int
+        get() = _pasteDelayMsFlow.value
+        set(value) {
+            _pasteDelayMsFlow.value = value.coerceIn(0, 1000)
+            prefs.edit().putInt("paste_delay_ms", _pasteDelayMsFlow.value).apply()
+        }
+
+    /** Frames reserved in the AAudio pipeline ring buffer. Larger
+     *  values handle longer utterances without dropouts at the cost
+     *  of fixed memory. The Rust pipeline currently reserves 262_144
+     *  frames at 16 kHz (~16 s). Default matches production. */
+    private val _recordingBufferFramesFlow: MutableStateFlow<Int> = MutableStateFlow(
+        prefs.getInt("recording_buffer_frames", 262_144),
+    )
+    val recordingBufferFramesFlow: StateFlow<Int> = _recordingBufferFramesFlow.asStateFlow()
+
+    var recordingBufferFrames: Int
+        get() = _recordingBufferFramesFlow.value
+        set(value) {
+            // Snap to the nearest 4096-multiple to keep page-aligned
+            // memory contracts on most allocators and to make the
+            // slider UI feel key-stopped.
+            val aligned = ((value.coerceIn(8192, 1_048_576) + 2047) / 4096) * 4096
+            _recordingBufferFramesFlow.value = aligned
+            prefs.edit().putInt("recording_buffer_frames", aligned).apply()
+        }
+
+    /** True when the foreground recording service keeps the
+     *  microphone on between dictations (no pre-roll). Toggled from
+     *  the Debug panel; default `false` to match the production
+     *  preference that hands the mic back to other apps quickly. */
+    private val _alwaysOnMicrophoneFlow: MutableStateFlow<Boolean> = MutableStateFlow(
+        prefs.getBoolean("always_on_microphone", false),
+    )
+    val alwaysOnMicrophoneFlow: StateFlow<Boolean> = _alwaysOnMicrophoneFlow.asStateFlow()
+
+    var alwaysOnMicrophone: Boolean
+        get() = _alwaysOnMicrophoneFlow.value
+        set(value) {
+            _alwaysOnMicrophoneFlow.value = value
+            prefs.edit().putBoolean("always_on_microphone", value).apply()
+        }
 }

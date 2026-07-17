@@ -69,6 +69,13 @@ class MainActivity : ComponentActivity() {
                 app.settingsStore.themeModeFlow.collectAsState()
             val dynamicColorState: State<Boolean> =
                 app.settingsStore.dynamicColorFlow.collectAsState()
+            // Sprint 28b — Debug gate is now reactive. collectAsState on
+            // debugModeFlow flips the AppNavigation `debugEnabled` prop
+            // whenever SettingsStore.debugMode changes; AppNavigation
+            // uses Option A (always-registered route + placeholder) so
+            // the graph rebuild is atomic.
+            val debugModeState: State<Boolean> =
+                app.settingsStore.debugModeFlow.collectAsState()
 
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = ViewModelFactory.create(app)
@@ -137,13 +144,13 @@ class MainActivity : ComponentActivity() {
                             AboutContent()
                         }
                     },
-                    // Sprint 28 — Debug destination is reachable only when
-                    // Settings.debugMode == true, sourced from
-                    // SettingsStore.debugMode (MutableStateFlow).
-                    // MVP scope: read the value at composition time. A
-                    // reactive collectAsState wiring lands in Sprint 28b
-                    // with the toggle UI in Settings → Experimental.
-                    debugEnabled = app.settingsStore.debugMode,
+                    // Sprint 28b — Debug destination reachability controlled
+                    // by Settings.debugMode, reactively sourced via
+                    // debugModeFlow.collectAsState(). Option A in
+                    // AppNavigation keeps the Debug route always-registered
+                    // (placeholder body when gate is false) so the graph
+                    // never tears.
+                    debugEnabled = debugModeState.value,
                     debugContent = {
                         Column(
                             modifier = Modifier
