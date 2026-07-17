@@ -19,7 +19,7 @@ object ViewModelFactory {
                     modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
                         SettingsViewModel(app, app.settingsStore, app.engineViewModel) as T
                     modelClass.isAssignableFrom(HistoryViewModel::class.java) ->
-                        HistoryViewModel() as T
+                        HistoryViewModel(app) as T
                     modelClass.isAssignableFrom(OnboardingViewModel::class.java) ->
                         OnboardingViewModel(
                             settingsStore = app.settingsStore,

@@ -240,4 +240,10 @@
     <string name="about_log_dir">Log directory</string>
     <string name="about_log_dir_missing">Logs folder will be created on first use.</string>
     <string name="about_acknowledgments_text">Handy Android is licensed under Apache 2.0. Transcribe-cpp / ggml / whisper.cpp are MIT-licensed. See the GitHub repository for the full list of dependencies.</string>
+
+    <!-- Sprint 24: History con audio + retry (MD3 refactor) -->
+    <string name="content_desc_copy">Copy</string>
+    <string name="history_retry">Retry transcription</string>
+    <string name="history_audio_play">Play</string>
+    <string name="history_audio_pause">Pause</string>
 </resources>
