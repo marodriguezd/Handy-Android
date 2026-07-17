@@ -12,9 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
 import com.handy.app.di.ViewModelFactory
 import com.handy.app.navigation.AppNavigation
+import com.handy.app.navigation.FoldingFeatureInfo
 import com.handy.app.ui.history.HistoryScreen
 import com.handy.app.ui.models.ModelCatalogScreen
 import com.handy.app.ui.onboarding.OnboardingScreen
@@ -115,6 +119,39 @@ class MainActivity : ComponentActivity() {
             val debugModeState: State<Boolean> =
                 app.settingsStore.debugModeFlow.collectAsState()
 
+            // Sprint 29c — foldable hinge observation. WindowInfoTracker
+            // exposes a Flow<WindowLayoutInfo> keyed off the Activity; the
+            // `produceState` coroutine auto-cancels when the composition
+            // leaves (Activity destroy / process death). The downstream
+            // FoldingFeatureInfo is a parallel data class so AppNavigation.kt
+            // does NOT need androidx.window on its classpath — see
+            // [FoldingFeatureInfo] in com.handy.app.navigation.FoldPresentation.
+            // The mapping (isSeparating + state + orientation + bounds) is
+            // pruned to only what the fold-aware padding computation needs;
+            // recompose cost is bounded by one WindowLayoutInfo emission per
+            // posture change.
+            val foldInfoState: State<FoldingFeatureInfo?> = produceState<FoldingFeatureInfo?>(
+                initialValue = null,
+                key1 = this@MainActivity,
+            ) {
+                WindowInfoTracker.getOrCreate(this@MainActivity)
+                    .windowLayoutInfo(this@MainActivity)
+                    .collect { info ->
+                        val feature = info.displayFeatures
+                            .filterIsInstance<FoldingFeature>()
+                            .firstOrNull()
+                        value = feature?.let {
+                            FoldingFeatureInfo(
+                                isSeparating = it.isSeparating,
+                                isHalfOpened = it.state == FoldingFeature.State.HALF_OPENED,
+                                isHorizontal = it.orientation == FoldingFeature.Orientation.HORIZONTAL,
+                                boundsTop = it.bounds.top,
+                                boundsBottom = it.bounds.bottom,
+                            )
+                        }
+                    }
+            }
+
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = ViewModelFactory.create(app)
             )
@@ -200,6 +237,15 @@ class MainActivity : ComponentActivity() {
                     // on A059 Android 16. See AGENTS.md Sprint 28b-v15
                     // closure for the full diagnosis chain.
                     debugContent = { DebugScreen() },
+                    // Sprint 29c — foldable-aware padding is driven here.
+                    // AppNavigation converts the fold state to dp-typed
+                    // top + bottom padding and applies it to TopAppBar and
+                    // the BottomBar (HandyBottomNavigation). Mirrors the
+                    // Sprint 28b-v15 + Sprint 29b architecture pattern: the
+                    // Activity owns the platform integration (WindowInfoTracker
+                    // is Activity-scoped), the Composable layer receives the
+                    // already-mapped state and renders.
+                    foldInfo = foldInfoState.value,
                 )
             }
         }

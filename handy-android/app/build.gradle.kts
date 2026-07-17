@@ -172,6 +172,14 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.coroutines.android)
     implementation(libs.lifecycle.runtime)
+    // Sprint 29c — foldable hinge avoidance. WindowInfoTracker exposes a
+    // Flow<WindowLayoutInfo> that MainActivity.kt collects via produceState
+    // and emits as FoldingFeatureInfo state passed to AppNavigation.kt.
+    // The Flow auto-cancels when the Compose lifecycle ends (process death,
+    // Activity destroy). The pure presentation logic is JVM-testable in
+    // FoldPresentation.kt without needing WindowInfoTracker on the
+    // test classpath.
+    implementation(libs.androidx.window)
 
     // Sprint 23 — About/Theme/Locale picker uses AppCompatDelegate
     // setApplicationLocales() which needs androidx.appcompat. core-ktx

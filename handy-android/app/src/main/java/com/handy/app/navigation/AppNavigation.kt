@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -55,6 +56,7 @@ import com.handy.app.R
 import com.handy.app.ui.debug.DEBUG_ROUTE
 import com.handy.app.ui.debug.shouldPopBackStackFromDebug
 import kotlinx.coroutines.CancellationException
+import kotlin.math.roundToInt
 
 private const val ONBOARDING_ROUTE = "onboarding"
 
@@ -97,6 +99,12 @@ fun AppNavigation(
     aboutContent: @Composable () -> Unit,
     debugContent: @Composable () -> Unit = {},
     debugEnabled: Boolean = false,
+    // Sprint 29c — foldable hinge state sourced from
+    // WindowInfoTracker.windowLayoutInfo(activity) inside MainActivity.
+    // Null on phones, tablets, and continuous-screen foldables in
+    // FLAT state. The bounds are in pixel coordinates (window-relative);
+    // AppNavigation converts to dp at the Compose surface.
+    foldInfo: FoldingFeatureInfo? = null,
 ) {
     val navController = rememberNavController()
     val startDestination = if (onboardingCompleted) Screen.General.route else ONBOARDING_ROUTE
@@ -117,6 +125,23 @@ fun AppNavigation(
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val isCompact = screenWidthDp < 600
+
+    // Sprint 29c — foldable-aware padding for the TopAppBar and the
+    // BottomBar. The pixel-typed (top, bottom) Pair comes from the
+    // pure FoldPresentation.computeHingePaddingPx helper; we convert
+    // to dp once at the Compose surface so the consumer modifiers
+    // are type-safe. The helper short-circuits to (0, 0) on phones,
+    // tablets, and continuous-screen foldables in FLAT state — no
+    // Compose-level cost for non-foldable form factors.
+    val density = LocalDensity.current
+    val screenHeightPx = with(density) {
+        configuration.screenHeightDp.dp.toPx().roundToInt()
+    }
+    val foldPad: Pair<Int, Int> = remember(foldInfo, screenHeightPx) {
+        FoldPresentation.computeHingePaddingPx(foldInfo, screenHeightPx)
+    }
+    val foldPadTopDp = with(density) { foldPad.first.toDp() }
+    val foldPadBottomDp = with(density) { foldPad.second.toDp() }
 
     /**
      * Sprint 29b — predictive back gesture support (Android 14+).
@@ -179,6 +204,7 @@ fun AppNavigation(
         topBar = {
             if (currentScreen != null && currentDestination?.route != ONBOARDING_ROUTE) {
                 TopAppBar(
+                    modifier = Modifier.padding(top = foldPadTopDp), // Sprint 29c
                     title = { Text(stringResource(currentScreen.titleRes)) },
                     colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
@@ -199,6 +225,7 @@ fun AppNavigation(
                     HandyBottomNavigation(
                         navController = navController,
                         screens = navScreens,
+                        modifier = Modifier.padding(bottom = foldPadBottomDp), // Sprint 29c
                     )
                 }
             }
@@ -324,11 +351,13 @@ fun AppNavigation(
 private fun HandyBottomNavigation(
     navController: NavHostController,
     screens: List<Screen>,
+    modifier: Modifier = Modifier, // Sprint 29c — foldable-aware bottom padding
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
     NavigationBar(
+        modifier = modifier, // Sprint 29c — foldable-aware padding propagation
         containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {

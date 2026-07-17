@@ -29,8 +29,14 @@ core-ktx = "1.13.1"
 robolectric = "4.14.1"
 androidx-test-ext = "1.2.1"
 androidx-test-core = "1.6.1"
+# Sprint 29c — foldable hinge avoidance. androidx.window 1.3.0 is the
+# latest stable that pairs with Compose 1.7.x / M3 1.4.x. We are on M3
+# 1.3.1 but WindowInfoTracker works at the Activity-scope level
+# independently of Compose version. Bumping to 1.4+ is allowed only
+# together with a Kotlin 2.x migration.
+androidx-window = "1.3.0"
 
-[libraries]   
+[libraries]  
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
@@ -61,7 +67,12 @@ compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-mani
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidx-test-core" }
+# Sprint 29c — provides WindowInfoTracker, FoldingFeature,
+# WindowMetricsCalculator. Used in MainActivity.kt via the
+# `windowLayoutInfo(activity): Flow<WindowLayoutInfo>` API to drive
+# fold-aware top-bar / bottom-bar padding in AppNavigation.kt.
+androidx-window = { group = "androidx.window", name = "window", version.ref = "androidx-window" }
 
-[plugins]   
+[plugins]  
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
