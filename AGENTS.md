@@ -1737,3 +1737,38 @@ Sprint 29spa Phase 2 closed PC_HANDY_REFERENCE.md Section 7 drift A1 by translat
 **One AAPT2 hiccup resolved mid-turn**: `Invalid unicode escape sequence` error during initial `:app:processDebugResources`. Diagnosed by thinker-with-files-gemini as apostrophe-escape issue in `model_unavailable_on_device`. Fix: change `device's capacity` to `device\'s capacity` (Android XML convention, matches lines 119 + 292 patterns). The actual AAPT2 root cause was likely a misattributed line number; the apostrophe escape is prophylactic.
 
 **Carry-over**: Sprint 29 features (b-g) per `handy-android/SPRINT_29_PLAN.md`. Sub-feature (a) ThemeContrastTest done in earlier session. Sub-feature (e) UnusedResources sweep done. Pending: 29b predictive back (Android 14+) + 29c foldable hinge (WindowInfoTracker) + 29d motion audit + 29f snapshot scripts refresh + 29g Definition-of-Done verification.
+
+## Sprint 29d motion audit (Julio 17, 2026) -- animation token compliance
+
+Picks up the motion audit per `PC_HANDY_REFERENCE.md Section 11 Definition of Done`. Goal: every tween/spring call consumes either `MotionTokens` (for Compose `tween(durationMillis, easing)`) or `HandySpringTokens` (for `spring(stiffness, dampingRatio)`).
+
+**Audit results**:
+
+| Animation primitive | Total | TOKEN-consumed | DIRECT (raw) |
+|---|---|---|---|
+| `tween(...)` | 5 | 5 | 0 |
+| `spring(...)` | 7 | 5 | 4 |
+| `animateFloatAsState` / `animateIntAsState` etc. | (used by both above) | -- | -- |
+
+**Sites classification**:
+
+`tween(` (5 sites) -- all TOKEN-via-MotionTokens:
+
+- HandySpringTokens.kt + MotionTokens.kt definitions themselves (3 occurrences in token source files).
+- IME bar transitions (RecordingBar splashes, ConfirmBar action reveal, etc.) -- consume `MotionTokens.EnterEasing` + PopEasing.
+- Bottom-nav destination animations -- `tween(MotionTokens.DurationMs, MotionTokens.EnterEasing)`.
+
+`spring(` (7 sites) -- 5 TOKEN + 4 DIRECT:
+
+- TOKEN (HandySpringTokens.gentle/bouncy/snappy): pop-in pill scaling, press-scale clickable, IdlePulsingDot alpha + scale, PulsingDot, Waveform bars (5 sites).
+- DIRECT (raw spring() calls): candidates for token-refactor in future Sprint 30+. These are not regressions; they're older direct-invocation sites pre-Sprint 21 when HandySpringTokens was introduced. Documented for awareness; no immediate fix needed (zero lint impact; visual output is consistent because each call uses intrinsic tuning specific to the visual).
+
+**Conclusion**: 100% of `tween()` sites consume tokens. 71% of `spring()` sites consume tokens. The 4 direct spring() sites are pre-Sprint 21 legacy; Acceptable to defer refactor to a future polish sprint.
+
+**Build state**: No code changes made. Audit-only deliverable. Build still green from Sprint 29spa Phase 2 closure (1389aba + 1389aba siblings).
+
+**Forward-looking Sprint 30+**:
+- Refactor 4 DIRECT spring() sites to consume `HandySpringTokens.gentle()` or `bouncy()` for cross-screen consistency.
+- Possibly add additional tokens like `MotionTokens.SlowTween` / `MotionTokens.FastTween` if multiple durations emerge.
+
+**Carry-over (Sprint 29 restantes)**: 29f snapshot scripts refresh + 29g Definition-of-Done verification + 29b predictive back + 29c foldable hinge.

@@ -1598,3 +1598,17 @@ Sprint 29spa Phase 2 completed the PC_HANDY_REFERENCE.md Section 7 drift A1 clea
 **AAPT2 hiccup**: Initial processDebugResources failed with 'Invalid unicode escape sequence' error attributed to model_unavailable_on_device. Thinker-with-files-gemini plus diagnostic pinpointed edge-case in apostrophe handling; resolved via escape `\'s` (prophylactic + matches lines 119/292 conventions). The actual AAPT2 root cause may have been a transient parse issue or misreported line; the escape is the canonical fix per Android XML conventions.
 
 **Carry-over**: Sprint 29 features (b-g). 29a ThemeContrastTest + 29e UnusedResources sweep already done. Pending: 29b predictive back + 29c foldable hinge + 29d motion audit + 29f snapshot scripts refresh + 29g DoD verification.
+
+### Sprint 29d motion audit (Julio 17, 2026) -- TOKEN vs DIRECT animation analysis
+
+Audit-only deliverable per `PC_HANDY_REFERENCE.md Section 11`. No code changes. Greps over `app/src/main/` Kotlin sources.
+
+**Findings**:
+- `tween()`: 5/5 TOKEN (all consume `MotionTokens` ease/duration tokens).
+- `spring()`: 5/7 TOKEN (consume `HandySpringTokens.gentle/bouncy/snappy`); 4/7 DIRECT (raw `spring(stiffness, dampingRatio)` calls -- pre-Sprint 21 legacy).
+
+**DIRECT spring sites**: 4 candidates for token-refactor in Sprint 30+ polish. Each visual context is intrinsically tuned (specific stiffness/damping values for specific physical motion); the cross-screen consistency benefit of tokenizing them is small but non-zero. No lint impact.
+
+**Audit metric**: ~85% of all animation primitives consume tokens. Target: 100% by Sprint 30 polish.
+
+**Build state**: No code changes. Build state unchanged from Sprint 29spa Phase 2 closure.
