@@ -313,4 +313,6 @@ Continue at your own risk?</string>
     <!-- Sprint 28b-v11: Toggle flip feedback (Snackbar) -->
     <string name="debug_toggle_enabled_feedback">Developer tools enabled. The Debug panel is now in the navigation rail.</string>
     <string name="debug_toggle_disabled_feedback">Developer tools disabled. The Debug panel is hidden from the navigation rail.</string>
+    <string name="debug_audio_dualwrite_label">Dual-write WAV files</string>
+    <string name="debug_audio_dualwrite_subtitle">Persist recording audio to disk for retry/replay. Requires restart.</string>
 </resources>

@@ -44,12 +44,27 @@ fun SoundPicker(
             )
         },
         trailing = {
+            // Sprint 30c-#5: same root cause as MicrophoneSelector's trailing
+            // slot — see that file's KDoc block for the full diagnosis.
+            // Briefly: `Modifier.fillMaxWidth()` here is the trailing slot's
+            // child of HandyListItem's OUTER Row. The Row distributes width
+            // greedily to non-`weight(1f)` children first; an unweighted
+            // child that asks for `fillMaxWidth()` consumes the full Row
+            // max-width and starves the title/subtitle `Column(weight(1f))`
+            // of the middle column, producing 0dp width → Text wraps one
+            // character per line → astronomically tall Surface → items
+            // pushed off-screen with massive empty dark gaps.
+            //
+            // Removing `fillMaxWidth()` here lets the HandyDropdown report
+            // its INTRINSIC width (= the OutlinedTextField's natural
+            // render width ~250dp for "Marimba"/"Pop"/"Narrador"), and
+            // the title/subtitle column retains the remainder.
             HandyDropdown(
                 label = title,
                 options = options,
                 selected = selected,
                 onSelect = onSelect,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier,
                 enabled = enabled,
             )
         },

@@ -36,6 +36,20 @@ fun VolumeSlider(
             )
         },
         trailing = {
+            // Sprint 30c-#5: same root cause as MicrophoneSelector's /
+            // SoundPicker's trailing slots — see those files' KDoc blocks
+            // for the full diagnosis. `Modifier.fillMaxWidth()` on the
+            // HandySlider propagates to HandyListItem's OUTER Row which
+            // then distributes width greedily to non-`weight(1f)` children
+            // first, starving the title/subtitle `Column(weight(1f))` of
+            // any width. Removing the modifier lets the slider report its
+            // INTRINSIC width and the title/subtitle column retains the
+            // remainder of the row's width.
+            //
+            // Slider still looks correct because HandySlider's internal
+            // `Modifier.widthIn(min = 196.dp)` (set at the component
+            // level) keeps the touch target large enough even at the
+            // reduced width; ticks + percentage label remain visible.
             HandySlider(
                 value = volume.coerceIn(0f, 1f),
                 onValueChange = onValueChange,
@@ -43,7 +57,7 @@ fun VolumeSlider(
                 formatValue = { v -> "${(v * 100).toInt()}%" },
                 valueRange = 0f..1f,
                 enabled = enabled,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier,
             )
         },
         modifier = modifier,

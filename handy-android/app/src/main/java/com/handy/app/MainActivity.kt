@@ -5,11 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.produceState
@@ -171,23 +167,28 @@ class MainActivity : ComponentActivity() {
                             onComplete = onComplete,
                         )
                     },
+                    // Sprint 30c-#1: drop the redundant Column+verticalScroll
+                    // wrapper. Column.verticalScroll cannot accept
+                    // Constraints.Infinity maxHeight; when the parent
+                    // AnimatedContent emits Infinity during transitions /
+                    // intrinsic queries, the runtime check trips:
+                    //   "Vertically scrollable component was measured with
+                    //    an infinity maximum height constraints"
+                    // and (per thinker diagnosis) it ALSO propagates a
+                    // negative-width constraint to ListItem downstream,
+                    // producing the `maxWidth(-7) must be >= minWidth(0)`
+                    // IllegalArgumentException in `ListItemMeasurePolicy`.
+                    //
+                    // The canonical fix (mirrors Sprint 28c-#1 PostProcess
+                    // and Sprint 28c-#2 AboutContent): make the destination
+                    // COMPOSABLE OWN ITS OWN SCROLL SURFACE. SettingScreen.kt's
+                    // `GeneralSettingsContent` + `AdvancedSettingsContent` now
+                    // host LazyColumn internally — see their migrated bodies.
                     generalTabContent = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            GeneralSettingsContent(viewModel = settingsViewModel)
-                        }
+                        GeneralSettingsContent(viewModel = settingsViewModel)
                     },
                     advancedTabContent = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            AdvancedSettingsContent(viewModel = settingsViewModel)
-                        }
+                        AdvancedSettingsContent(viewModel = settingsViewModel)
                     },
                     modelsTabContent = {
                         val vm: ModelsViewModel = viewModel(

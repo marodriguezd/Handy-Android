@@ -57,12 +57,12 @@ class HandyApplication : Application(), ComponentCallbacks2 {
      * the surface is the same in Sprint 26+ when the persistence flag
      * becomes user-visible in a Compose toggle).
      *
-     * TODO(Sprint25b): `pushFloatArrayFrames` is not yet wired to any
-     * Kotlin-side capture pipeline. The AAudio callback lives inside
-     * the Rust `pipeline.rs` real-time thread, so Kotlin cannot plug
-     * into it directly. Sprint 25b will either add a Kotlin
-     * frame-subscribe callback (EngineCallback.onAudioFrames + SPSC
-     * ring buffer) or move dual-write fully into the Rust pipeline.
+     * Sprint 25b already wired the pipeline end-to-end:
+     * Rust `RecordingSink` → JNI `dispatch_audio_frames` →
+     * Kotlin `EngineCallback.onAudioFrames` →
+     * `RecordingRepository.pushFloatArrayFrames`.
+     * The WAV dual-write is controlled by
+     * [SettingsStore.recordingDualWriteMode].
      */
     val recordingRepository: RecordingRepository by lazy {
         RecordingRepository(

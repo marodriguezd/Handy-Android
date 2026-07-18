@@ -1,12 +1,15 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "com.handy.app"
     compileSdk = 35
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 
     defaultConfig {
         applicationId = "com.handy.app"
@@ -50,13 +53,17 @@ android {
         }
     }
 
+    // Dual-spec is intentional: kotlinOptions.jvmTarget = "17" above sets
+    // the Kotlin compilation target via the Kotlin compiler CLI path. The
+    // compileOptions here set the Java *bytecode target version* emitted to
+    // .class files. Both stay at 17 because standard Java 17 / Kotlin 1.9.x
+    // emit Java 17 bytecode, which is what we want for downstream consumers.
+    // Future bumps should advance both in lockstep to avoid class-file /
+    // Kotlin-bytecode mismatch (e.g., if the project ever moves to Kotlin
+    // 2.x again, revisit Sprint 30 closure log entry in AGENTS.md).
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -65,10 +72,16 @@ android {
         aidl = true
     }
 
-    // Sprint 30 — `composeOptions.kotlinCompilerExtensionVersion` DELETED
-    // (entire block removed). The Compose compiler is now a Kotlin
-    // plugin: `alias(libs.plugins.kotlin.compose)` in the `plugins` block
-    // above ships the compiler as part of the K2 toolchain itself.
+    // Compose compiler extension version paired with compose-bom =
+    // "2025.01.00" (Compose UI 1.7.x family + Material3 1.3.1) and
+    // Kotlin 1.9.24. 1.5.14 is the last extension compatible with
+    // Kotlin 1.9.x; bumping kotlin to 2.0+ would require either
+    // switching to the kotlin-compose plugin (Sprint 30 path, recently
+    // reverted due to intrinsic-cascade crash) or upgrading to a
+    // compatible compose-compiler release.
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
+    }
 
     // Suppress known-false-positive `ObsoleteSdkInt` warnings for
     // `mipmap-anydpi-v26` (the conventional location for <adaptive-icon>

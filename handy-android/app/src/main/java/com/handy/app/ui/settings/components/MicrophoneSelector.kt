@@ -89,8 +89,26 @@ fun MicrophoneSelector(
             )
         },
         trailing = {
+            // Sprint 30c-#5: outer trailing Row MUST NOT use
+            // `Modifier.fillMaxWidth()`. The OUTER `Row` inside
+            // `HandyListItem.kt` distributes width to children in this order:
+            //   (a) measure non-`weight(1f)` children with full max-width,
+            //   (b) hand remaining width to children with `weight(1f)`.
+            // If the trailing `Row` reports `fillMaxWidth()` to the parent
+            // it greedily consumes 100% of the available width, leaving
+            // exactly 0dp for the middle `Column(weight(1f))` that holds
+            // the title + subtitle. Squeezed into 0dp, the `Text`
+            // composables wrap one character per line — generating an
+            // astronomically tall `Surface` and pushing the next row
+            // entirely off-screen. This is the source of the extreme
+            // vertical spacing the user observed on A059 in the Audio
+            // section. Removing the `fillMaxWidth()` means the trailing
+            // Row reports its INTRINSIC width (HandyDropdown's
+            // OutlinedTextField intrinsic + 48dp IconButton + 4dp spacing
+            // = ~302dp), which lets the middle `Column(weight(1f))`
+            // take the remainder and renders title/subtitle correctly.
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

@@ -6,9 +6,11 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Visibility
@@ -46,6 +48,7 @@ import com.handy.app.ui.components.HandySegmentedButton
 import com.handy.app.ui.components.SettingsGroup
 import com.handy.app.ui.components.SettingsRow
 import com.handy.app.ui.components.SettingsRowDivider
+import com.handy.app.ui.components.Spacing
 import com.handy.app.ui.components.StatusDot
 import com.handy.app.ui.components.Status
 import com.handy.app.ui.settings.components.AudioFeedbackToggle
@@ -66,6 +69,29 @@ import com.handy.app.viewmodel.SettingsViewModel
  *     pattern — the SettingsViewModel does not yet expose these as
  *     StateFlow, so direct SharedPreferences access keeps the diff
  *     small until Sprint 24 wires a proper VM).
+ *
+ * Sprint 30c-#1 migration: outer body migrated from
+ *   `Column(modifier = modifier.fillMaxSize()) { ... }` to
+ *   `LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.lg)) { item { ... } }`.
+ *
+ * Why LazyColumn:
+ *   - Compose's `verticalScroll` modifier on a Column trips the runtime
+ *     check `"Vertically scrollable component was measured with an
+ *     infinity maximum height constraints"` whenever the parent
+ *     constraint chain supplies `Constraints.Infinity` for maxHeight.
+ *     This is exactly what `AnimatedContent`'s measure-pass does during
+ *     destination transitions AND during intrinsic-min-height queries
+ *     that propagate through the parent chain
+ *     (Scaffold → NavHost → AnimatedContent → composable → SettingsTabsScreen
+ *      → Column → verticalScroll).
+ *   - LazyColumn measures only the items visible in the viewport, so it
+ *     accepts `Infinity` bounds gracefully. This mirrors the canonical
+ *     fix that Sprint 28c-#1 (PostProcessScreen) and Sprint 28c-#2
+ *     (AboutContent) used to close the same family of crash pre-Sprint 29.
+     *   - Companion fix in AppNavigation.kt **keeps** the `Modifier.weight(1f)`
+     *     wrapper in `SettingsTabsScreen` as the **primary defense** against
+     *     the intrinsic-query cascade (produces `maxWidth(-N)` at
+     *     `ListItemMeasurePolicy.measure`). See AGENTS.md Sprint 30c closure.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,124 +113,138 @@ fun GeneralSettingsContent(
         )
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+    ) {
         // ── Audio group ──
-        SettingsGroup(title = stringResource(R.string.settings_audio_section_label)) {
-            MicrophoneSelector(
-                selected = app.settingsStore.selectedMicrophone,
-                onSelect = { app.settingsStore.selectedMicrophone = it },
-            )
-            SettingsRowDivider()
-            AudioFeedbackToggle(
-                enabled = app.settingsStore.audioFeedbackEnabled,
-                onCheckedChange = { app.settingsStore.audioFeedbackEnabled = it },
-            )
-            SettingsRowDivider()
-            SoundPicker(
-                selected = app.settingsStore.soundTheme,
-                onSelect = { app.settingsStore.soundTheme = it },
-                enabled = app.settingsStore.audioFeedbackEnabled,
-            )
-            SettingsRowDivider()
-            VolumeSlider(
-                volume = app.settingsStore.audioFeedbackVolume,
-                onValueChange = { app.settingsStore.audioFeedbackVolume = it },
-                enabled = app.settingsStore.audioFeedbackEnabled,
-            )
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_audio_section_label)) {
+                MicrophoneSelector(
+                    selected = app.settingsStore.selectedMicrophone,
+                    onSelect = { app.settingsStore.selectedMicrophone = it },
+                )
+                SettingsRowDivider()
+                AudioFeedbackToggle(
+                    enabled = app.settingsStore.audioFeedbackEnabled,
+                    onCheckedChange = { app.settingsStore.audioFeedbackEnabled = it },
+                )
+                SettingsRowDivider()
+                SoundPicker(
+                    selected = app.settingsStore.soundTheme,
+                    onSelect = { app.settingsStore.soundTheme = it },
+                    enabled = app.settingsStore.audioFeedbackEnabled,
+                )
+                SettingsRowDivider()
+                VolumeSlider(
+                    volume = app.settingsStore.audioFeedbackVolume,
+                    onValueChange = { app.settingsStore.audioFeedbackVolume = it },
+                    enabled = app.settingsStore.audioFeedbackEnabled,
+                )
+            }
         }
 
         // ── Active model ──
-        SettingsGroup(title = stringResource(R.string.settings_model_section_label)) {
-            ModelSettingsCard(
-                currentModelId = app.settingsStore.selectedModel,
-                onUnload = {
-                    com.handy.app.bridge.EngineBridge.nativeUnloadModel()
-                },
-            )
-        }
-
-        // ── Keyboard shortcuts / IME shortcuts ──
-        SettingsGroup(title = stringResource(R.string.settings_shortcuts_label)) {
-            SettingsRow(
-                title = stringResource(R.string.settings_switch_keyboard),
-                trailing = {
-                    Button(
-                        onClick = {
-                            val imm = context.getSystemService(
-                                android.content.Context.INPUT_METHOD_SERVICE,
-                            ) as InputMethodManager
-                            imm.showInputMethodPicker()
-                        },
-                    ) {
-                        Text(stringResource(R.string.settings_switch))
-                    }
-                },
-            )
-        }
-
-        // ── Text injection (Shizuku) ──
-        SettingsGroup(title = stringResource(R.string.settings_injection)) {
-            if (!BuildConfig.DEBUG) {
-                SettingsRow(
-                    title = stringResource(R.string.settings_shizuku),
-                    subtitle = stringResource(R.string.settings_shizuku_description),
-                    leading = { StatusDot(status = shizukuStatus(app)) },
-                    trailing = {
-                        Switch(
-                            checked = uiState.shizukuEnabled,
-                            onCheckedChange = { enabled ->
-                                if (enabled) {
-                                    try {
-                                        val pingOk = Shizuku.pingBinder()
-                                        val hasPerm = Shizuku.checkSelfPermission() == 0
-                                        if (!pingOk || !hasPerm) {
-                                            showShizukuDialog = true
-                                        } else {
-                                            viewModel.setShizukuEnabled(true)
-                                        }
-                                    } catch (_: Exception) {
-                                        showShizukuDialog = true
-                                    }
-                                } else {
-                                    viewModel.setShizukuEnabled(false)
-                                }
-                            },
-                        )
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_model_section_label)) {
+                ModelSettingsCard(
+                    currentModelId = app.settingsStore.selectedModel,
+                    onUnload = {
+                        com.handy.app.bridge.EngineBridge.nativeUnloadModel()
                     },
                 )
             }
         }
 
-        // ── Battery optimization ──
-        SettingsGroup(title = stringResource(R.string.settings_battery)) {
-            SettingsRow(
-                title = stringResource(R.string.settings_battery_exemption),
-                subtitle = stringResource(R.string.settings_battery_exemption_description),
-                trailing = {
-                    Switch(
-                        checked = uiState.batteryOptimizationExempt,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                val intent = Intent(
-                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                ).apply {
-                                    setData(Uri.parse("package:${app.packageName}"))
-                                }
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                try {
-                                    app.startActivity(intent)
-                                } catch (e: Exception) {
-                                    android.util.Log.w(
-                                        "HandySettings",
-                                        "Battery opt intent failed: $e",
-                                    )
-                                }
-                            }
-                            viewModel.setBatteryOptimizationExempt(enabled)
+        // ── Keyboard shortcuts / IME shortcuts ──
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_shortcuts_label)) {
+                SettingsRow(
+                    title = stringResource(R.string.settings_switch_keyboard),
+                    trailing = {
+                        Button(
+                            onClick = {
+                                val imm = context.getSystemService(
+                                    android.content.Context.INPUT_METHOD_SERVICE,
+                                ) as InputMethodManager
+                                imm.showInputMethodPicker()
+                            },
+                        ) {
+                            Text(stringResource(R.string.settings_switch))
+                        }
+                    },
+                )
+            }
+        }
+
+        // ── Text injection (Shizuku) ──
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_injection)) {
+                if (!BuildConfig.DEBUG) {
+                    SettingsRow(
+                        title = stringResource(R.string.settings_shizuku),
+                        subtitle = stringResource(R.string.settings_shizuku_description),
+                        leading = { StatusDot(status = shizukuStatus(app)) },
+                        trailing = {
+                            Switch(
+                                checked = uiState.shizukuEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled) {
+                                        try {
+                                            val pingOk = Shizuku.pingBinder()
+                                            val hasPerm = Shizuku.checkSelfPermission() == 0
+                                            if (!pingOk || !hasPerm) {
+                                                showShizukuDialog = true
+                                            } else {
+                                                viewModel.setShizukuEnabled(true)
+                                            }
+                                        } catch (_: Exception) {
+                                            showShizukuDialog = true
+                                        }
+                                    } else {
+                                        viewModel.setShizukuEnabled(false)
+                                    }
+                                },
+                            )
                         },
                     )
-                },
-            )
+                }
+            }
+        }
+
+        // ── Battery optimization ──
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_battery)) {
+                SettingsRow(
+                    title = stringResource(R.string.settings_battery_exemption),
+                    subtitle = stringResource(R.string.settings_battery_exemption_description),
+                    trailing = {
+                        Switch(
+                            checked = uiState.batteryOptimizationExempt,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    val intent = Intent(
+                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    ).apply {
+                                        setData(Uri.parse("package:${app.packageName}"))
+                                    }
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    try {
+                                        app.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.util.Log.w(
+                                            "HandySettings",
+                                            "Battery opt intent failed: $e",
+                                        )
+                                    }
+                                }
+                                viewModel.setBatteryOptimizationExempt(enabled)
+                            },
+                        )
+                    },
+                )
+            }
         }
     }
 }
@@ -287,171 +327,216 @@ fun PostProcessContent(viewModel: SettingsViewModel) {
     }
 }
 
+/**
+ * Sprint 30c-#1 migration: outer body migrated from
+ *   `Column(modifier = Modifier.fillMaxSize()) { ... }` to
+ *   `LazyColumn(...)` for the same AnimatedContent-supplied Infinity
+ *   reason documented on [GeneralSettingsContent]. LazyColumn owns the
+ *   scroll surface here as well so MainActivity does NOT need to wrap
+ *   the call with `Modifier.verticalScroll`.
+ *
+ * 5 SettingsGroups (Sprint 25b Advanced):
+ *   - Sprint 25b Phase C `aplicacion` (experimental features toggle).
+ *   - Sprint 25b Phase C `salida` (auto-send injection target).
+ *   - Sprint 20 'transcripcion' (VAD + add-final-space).
+ *   - Sprint 25b Phase C `history_retention` (history limit + retention
+ *     period dropdowns).
+ *   - Sprint 25b Phase C `experimental_features` (custom words +
+ *     acceleration + LLM post-processing — gated by `experimentalEnabled`).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val app = context.applicationContext as HandyApplication
-    Column(modifier = Modifier.fillMaxSize()) {
-        SettingsGroup(title = stringResource(R.string.settings_section_aplicacion)) {
-            SettingsRow(
-                title = stringResource(R.string.settings_experimental_features),
-                subtitle = stringResource(R.string.settings_experimental_features_desc),
-                trailing = {
-                    Switch(
-                        checked = uiState.experimentalEnabled,
-                        onCheckedChange = { viewModel.setExperimentalEnabled(it) },
-                    )
-                },
-            )
+
+    // Sprint 30c-#1 state hoisting: these `collectAsState()` calls MUST live
+    // outside the LazyColumn body block. The LazyColumn DSL receiver is
+    // `LazyListScope`, NOT @Composable; calling `@Composable` functions
+    // inside it produces the compile error
+    //   "@Composable invocations can only happen from the context of a
+    //    @Composable function"
+    // at SettingsScreen.kt line 445/446/482/483 (the `item { ... }` blocks
+    // that consume `customWordsRaw`/`accelerationBackend`/`historyLimit`/
+    // `retentionPeriod`). Hoisting here resolves the constraint while
+    // preserving LazyColumn's scroll surface. Same pattern as
+    // GeneralSettingsContent, which already declared `uiState` +
+    // `showShizukuDialog` at the function top.
+    val historyLimit by app.settingsStore.historyLimitFlow.collectAsState()
+    val retentionPeriod by app.settingsStore.retentionPeriodFlow.collectAsState()
+    val customWordsRaw by app.settingsStore.customWordsRawFlow.collectAsState()
+    val accelerationBackend by app.settingsStore.accelerationBackendFlow.collectAsState()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+    ) {
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_section_aplicacion)) {
+                SettingsRow(
+                    title = stringResource(R.string.settings_experimental_features),
+                    subtitle = stringResource(R.string.settings_experimental_features_desc),
+                    trailing = {
+                        Switch(
+                            checked = uiState.experimentalEnabled,
+                            onCheckedChange = { viewModel.setExperimentalEnabled(it) },
+                        )
+                    },
+                )
+            }
         }
-        SettingsGroup(title = stringResource(R.string.settings_section_salida)) {
-            SettingsRow(
-                title = stringResource(R.string.settings_auto_send),
-                trailing = {
-                    var expanded by remember { mutableStateOf(false) }
-                    val options = listOf(
-                        "disabled" to stringResource(R.string.settings_auto_send_disabled),
-                        "ime" to stringResource(R.string.settings_auto_send_ime),
-                    )
-                    val displayText = options.firstOrNull { it.first == uiState.autoSend }?.second
-                        ?: stringResource(R.string.settings_auto_send_disabled)
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded },
-                    ) {
-                        OutlinedButton(
-                            onClick = { expanded = true },
-                            modifier = Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true),
-                        ) {
-                            Text(displayText)
-                        }
-                        ExposedDropdownMenu(
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_section_salida)) {
+                SettingsRow(
+                    title = stringResource(R.string.settings_auto_send),
+                    trailing = {
+                        var expanded by remember { mutableStateOf(false) }
+                        val options = listOf(
+                            "disabled" to stringResource(R.string.settings_auto_send_disabled),
+                            "ime" to stringResource(R.string.settings_auto_send_ime),
+                        )
+                        val displayText = options.firstOrNull { it.first == uiState.autoSend }?.second
+                            ?: stringResource(R.string.settings_auto_send_disabled)
+                        ExposedDropdownMenuBox(
                             expanded = expanded,
-                            onDismissRequest = { expanded = false },
+                            onExpandedChange = { expanded = !expanded },
                         ) {
-                            options.forEach { (value, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        viewModel.setAutoSend(value)
-                                        expanded = false
-                                    },
-                                )
+                            OutlinedButton(
+                                onClick = { expanded = true },
+                                modifier = Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true),
+                            ) {
+                                Text(displayText)
+                            }
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                            ) {
+                                options.forEach { (value, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            viewModel.setAutoSend(value)
+                                            expanded = false
+                                        },
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
-        SettingsGroup(title = stringResource(R.string.settings_section_transcripcion)) {
-            SettingsRow(
-                title = stringResource(R.string.settings_vad),
-                subtitle = stringResource(R.string.settings_vad_desc),
-                trailing = {
-                    Switch(
-                        checked = uiState.vadEnabled,
-                        onCheckedChange = { viewModel.setVadEnabled(it) },
-                    )
-                },
-            )
-            SettingsRowDivider()
-            SettingsRow(
-                title = stringResource(R.string.settings_add_final_space),
-                subtitle = stringResource(R.string.settings_add_final_space_desc),
-                trailing = {
-                    Switch(
-                        checked = uiState.addFinalSpace,
-                        onCheckedChange = { viewModel.setAddFinalSpace(it) },
-                    )
-                },
-            )
+        item {
+            SettingsGroup(title = stringResource(R.string.settings_section_transcripcion)) {
+                SettingsRow(
+                    title = stringResource(R.string.settings_vad),
+                    subtitle = stringResource(R.string.settings_vad_desc),
+                    trailing = {
+                        Switch(
+                            checked = uiState.vadEnabled,
+                            onCheckedChange = { viewModel.setVadEnabled(it) },
+                        )
+                    },
+                )
+                SettingsRowDivider()
+                SettingsRow(
+                    title = stringResource(R.string.settings_add_final_space),
+                    subtitle = stringResource(R.string.settings_add_final_space_desc),
+                    trailing = {
+                        Switch(
+                            checked = uiState.addFinalSpace,
+                            onCheckedChange = { viewModel.setAddFinalSpace(it) },
+                        )
+                    },
+                )
+            }
         }
 
         // ── Sprint 25b Phase C: History & retention controls ─────────────
-        // Compose-side direct read of [SettingsStore] flows (mirrors the
-        // pattern already used in `GeneralSettingsContent` for the Audio
-        // group — keeps the diff small vs. the equivalent UiState
-        // round-trip).
-        val historyLimit by app.settingsStore.historyLimitFlow.collectAsState()
-        val retentionPeriod by app.settingsStore.retentionPeriodFlow.collectAsState()
-        SettingsGroup(title = stringResource(R.string.advanced_section_history_retention)) {
-            HandyDropdown(
-                label = stringResource(R.string.advanced_history_limit_title),
-                options = listOf(
-                    com.handy.app.settings.HistoryLimit.Unlimited to stringResource(R.string.history_limit_unlimited),
-                    com.handy.app.settings.HistoryLimit.Limited5 to stringResource(R.string.history_limit_5),
-                    com.handy.app.settings.HistoryLimit.Limited10 to stringResource(R.string.history_limit_10),
-                    com.handy.app.settings.HistoryLimit.Limited25 to stringResource(R.string.history_limit_25),
-                    com.handy.app.settings.HistoryLimit.Limited50 to stringResource(R.string.history_limit_50),
-                    com.handy.app.settings.HistoryLimit.Limited100 to stringResource(R.string.history_limit_100),
-                    com.handy.app.settings.HistoryLimit.Limited250 to stringResource(R.string.history_limit_250),
-                ),
-                selected = historyLimit,
-                onSelect = { app.settingsStore.historyLimit = it },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            SettingsRowDivider()
-            HandyDropdown(
-                label = stringResource(R.string.advanced_retention_title),
-                options = listOf(
-                    com.handy.app.settings.RetentionPeriod.Never to stringResource(R.string.retention_never),
-                    com.handy.app.settings.RetentionPeriod.OneDay to stringResource(R.string.retention_one_day),
-                    com.handy.app.settings.RetentionPeriod.OneWeek to stringResource(R.string.retention_one_week),
-                    com.handy.app.settings.RetentionPeriod.OneMonth to stringResource(R.string.retention_one_month),
-                    com.handy.app.settings.RetentionPeriod.OneYear to stringResource(R.string.retention_one_year),
-                ),
-                selected = retentionPeriod,
-                onSelect = { app.settingsStore.retentionPeriod = it },
-                modifier = Modifier.fillMaxWidth(),
-            )
+        // Compose-side direct read of [SettingsStore] flows (now hoisted
+        // to the function top per the Sprint 30c-#1 LazyColumn migration).
+        item {
+            SettingsGroup(title = stringResource(R.string.advanced_section_history_retention)) {
+                HandyDropdown(
+                    label = stringResource(R.string.advanced_history_limit_title),
+                    options = listOf(
+                        com.handy.app.settings.HistoryLimit.Unlimited to stringResource(R.string.history_limit_unlimited),
+                        com.handy.app.settings.HistoryLimit.Limited5 to stringResource(R.string.history_limit_5),
+                        com.handy.app.settings.HistoryLimit.Limited10 to stringResource(R.string.history_limit_10),
+                        com.handy.app.settings.HistoryLimit.Limited25 to stringResource(R.string.history_limit_25),
+                        com.handy.app.settings.HistoryLimit.Limited50 to stringResource(R.string.history_limit_50),
+                        com.handy.app.settings.HistoryLimit.Limited100 to stringResource(R.string.history_limit_100),
+                        com.handy.app.settings.HistoryLimit.Limited250 to stringResource(R.string.history_limit_250),
+                    ),
+                    selected = historyLimit,
+                    onSelect = { app.settingsStore.historyLimit = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                SettingsRowDivider()
+                HandyDropdown(
+                    label = stringResource(R.string.advanced_retention_title),
+                    options = listOf(
+                        com.handy.app.settings.RetentionPeriod.Never to stringResource(R.string.retention_never),
+                        com.handy.app.settings.RetentionPeriod.OneDay to stringResource(R.string.retention_one_day),
+                        com.handy.app.settings.RetentionPeriod.OneWeek to stringResource(R.string.retention_one_week),
+                        com.handy.app.settings.RetentionPeriod.OneMonth to stringResource(R.string.retention_one_month),
+                        com.handy.app.settings.RetentionPeriod.OneYear to stringResource(R.string.retention_one_year),
+                    ),
+                    selected = retentionPeriod,
+                    onSelect = { app.settingsStore.retentionPeriod = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         // ── Sprint 25b Phase C: Experimental features (gated by switch)─
-        val customWordsRaw by app.settingsStore.customWordsRawFlow.collectAsState()
-        val accelerationBackend by app.settingsStore.accelerationBackendFlow.collectAsState()
-        SettingsGroup(title = stringResource(R.string.advanced_section_experimental_features)) {
-            SettingsRow(
-                title = stringResource(R.string.advanced_custom_words_title),
-                subtitle = stringResource(R.string.advanced_custom_words_subtitle),
-            )
-            OutlinedTextField(
-                value = customWordsRaw,
-                onValueChange = { app.settingsStore.customWordsRaw = it },
-                minLines = 3,
-                maxLines = 5,
-                enabled = uiState.experimentalEnabled,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Buffy, iPhone, Llama") },
-            )
-            SettingsRowDivider()
-            SettingsRow(
-                title = stringResource(R.string.advanced_acceleration_title),
-                subtitle = stringResource(R.string.advanced_acceleration_subtitle),
-            )
-            HandySegmentedButton(
-                options = listOf(
-                    com.handy.app.settings.AccelerationBackend.CPU to stringResource(R.string.acceleration_cpu),
-                    com.handy.app.settings.AccelerationBackend.Vulkan to stringResource(R.string.acceleration_vulkan),
-                    com.handy.app.settings.AccelerationBackend.NNAPI to stringResource(R.string.acceleration_nnapi),
-                ),
-                selected = accelerationBackend,
-                onSelect = { app.settingsStore.accelerationBackend = it },
-                enabled = uiState.experimentalEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            SettingsRowDivider()
-            SettingsRow(
-                title = stringResource(R.string.settings_post_processing),
-                subtitle = stringResource(R.string.settings_post_processing_desc),
-                trailing = {
-                    Switch(
-                        checked = uiState.postProcessingEnabled,
-                        onCheckedChange = { viewModel.setPostProcessingEnabled(it) },
-                    )
-                },
-            )
+        // (customWordsRaw + accelerationBackend state vars hoisted to
+        // function top; see the Sprint 30c-#1 note above.)
+        item {
+            SettingsGroup(title = stringResource(R.string.advanced_section_experimental_features)) {
+                SettingsRow(
+                    title = stringResource(R.string.advanced_custom_words_title),
+                    subtitle = stringResource(R.string.advanced_custom_words_subtitle),
+                )
+                OutlinedTextField(
+                    value = customWordsRaw,
+                    onValueChange = { app.settingsStore.customWordsRaw = it },
+                    minLines = 3,
+                    maxLines = 5,
+                    enabled = uiState.experimentalEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Buffy, iPhone, Llama") },
+                )
+                SettingsRowDivider()
+                SettingsRow(
+                    title = stringResource(R.string.advanced_acceleration_title),
+                    subtitle = stringResource(R.string.advanced_acceleration_subtitle),
+                )
+                HandySegmentedButton(
+                    options = listOf(
+                        com.handy.app.settings.AccelerationBackend.CPU to stringResource(R.string.acceleration_cpu),
+                        com.handy.app.settings.AccelerationBackend.Vulkan to stringResource(R.string.acceleration_vulkan),
+                        com.handy.app.settings.AccelerationBackend.NNAPI to stringResource(R.string.acceleration_nnapi),
+                    ),
+                    selected = accelerationBackend,
+                    onSelect = { app.settingsStore.accelerationBackend = it },
+                    enabled = uiState.experimentalEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                SettingsRowDivider()
+                SettingsRow(
+                    title = stringResource(R.string.settings_post_processing),
+                    subtitle = stringResource(R.string.settings_post_processing_desc),
+                    trailing = {
+                        Switch(
+                            checked = uiState.postProcessingEnabled,
+                            onCheckedChange = { viewModel.setPostProcessingEnabled(it) },
+                        )
+                    },
+                )
+            }
         }
     }
 }

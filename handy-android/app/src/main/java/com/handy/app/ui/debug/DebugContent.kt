@@ -27,6 +27,7 @@ import com.handy.app.ui.debug.components.LiveLogViewer
 import com.handy.app.ui.debug.components.LogLevelSelector
 import com.handy.app.ui.debug.components.PasteDelaySlider
 import com.handy.app.ui.debug.components.RecordingBufferSlider
+import com.handy.app.ui.debug.components.RecordingDualWriteToggle
 import com.handy.app.ui.debug.components.UpdateChecksToggle
 import com.handy.app.ui.settings.components.SoundPicker
 import kotlinx.coroutines.launch
@@ -183,6 +184,7 @@ internal fun DebugContent(
                 PasteDelaySlider(app = app)
                 RecordingBufferSlider(app = app)
                 AlwaysOnMicrophoneSwitch(app = app)
+                RecordingDualWriteToggle(app = app)
             }
         }
 

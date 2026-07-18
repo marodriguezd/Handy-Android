@@ -26,6 +26,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowEnvironment
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Text
+import com.handy.app.ui.components.HandyListItem
+import com.handy.app.ui.components.SettingsGroup
+import com.handy.app.ui.components.Spacing
 
 /**
  * End-to-end regression guard for the Sprint 28b-v8..v14 / Sprint 28c migrations.
@@ -170,6 +177,41 @@ class DestinationInfinityGuardTest {
     @Test
     fun postProcessScreen_rendersWithoutInfinityCrash() {
         runInfinityGuardTest { PostProcessScreen() }
+    }
+
+    // ── Sprint 30c-#4 guard ─────────────────────────────────────────────
+    // HandyListItem was migrated from M3 ListItem to Surface+Row+Column in
+    // Sprint 30c-#4 because M3 1.3.1's ListItem uses a SubcomposeLayout
+    // internally that produces maxWidth(-N) during intrinsic-min-height
+    // queries with width=0 (which AnimatedContent supplies during
+    // transitions). This test locks in the migration: if any future Agent
+    // reintroduces M3 ListItem inside the SettingsGroup -> HandyListItem
+    // chain, the intrinsic-cascade crash resurfaces here under Infinity.
+
+    @Test
+    fun intrinsicCascade_lazyColumnToHandyListItem_rendersWithoutInfinityCrash() {
+        runInfinityGuardTest { IntrinsicCascadeTestContent() }
+    }
+
+    @Composable
+    private fun IntrinsicCascadeTestContent() {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+        ) {
+            item {
+                SettingsGroup(title = "Regression Test Group") {
+                    HandyListItem(
+                        title = "Test Item 1",
+                        subtitle = "With subtitle",
+                        trailing = { Text(">") },
+                    )
+                    HandyListItem(title = "Test Item 2")
+                    HandyListItem(title = "Test Item 3")
+                }
+            }
+        }
     }
 
     /**

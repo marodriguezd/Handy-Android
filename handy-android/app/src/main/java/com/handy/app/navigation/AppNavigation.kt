@@ -430,17 +430,70 @@ private fun SettingsTabsScreen(
                 )
             }
         }
-        // Sprint 28b-v15 — wrap the `when` body in `Box(Modifier.weight(1f))`
-        // so the active tab body receives bounded `maxHeight`. Without the
-        // weight, the parent Column passes `Constraints.Infinity` for
-        // `maxHeight` to whichever composable the `when` selects — and
-        // MainActivity wraps both `generalTabContent` and
-        // `advancedTabContent` in their own `Modifier.verticalScroll(...)`,
-        // making those lambdas the runtime-check target on tab navigation.
-        // With `weight(1f)`, the Box receives the remaining column height
-        // (= parent - TabRow) as `maxHeight` and any inner verticalScroll
-        // is bounded. Defense-in-depth for the Settings→General and
-        // Settings→Advanced routes.
+        // Sprint 30c-#2 (thinker re-diagnosis 2026-07-18 — replaces the
+        // Sprint 30c-#1 KDoc block that claimed the OPPOSITE mechanism).
+        //
+        // CRASH (full stack at handy-android/logs/sprint30c/full_crash_BEFORE_fix.log):
+        //   `IllegalArgumentException: maxWidth(-83) must be >= than minWidth(0)`
+        //   at `androidx.compose.material3.ListItemMeasurePolicy.measure-3p2s80s(ListItem.kt:234)`.
+        //
+        // ROOT CAUSE (Compose foundation 1.7.x source-level contract):
+        // `Column.minIntrinsicHeight(width)` in
+        // `RowColumnMeasurePolicy.kt` sums the intrinsic heights of the
+        // **UNWEIGHTED** entries only. Entries with `Modifier.weight(1f)`
+        // are flex-resolved at measure time and contribute `0` to the
+        // intrinsic-height sum. Therefore a `weight(1f)` Box wrapping
+        // the `when {}` body severs the cascade:
+        //
+        //   AnimatedContent (NavHost inner) measure pass at width=0
+        //   → SettingsTabsScreen `Column.fillMaxSize()`
+        //   → `Column.minIntrinsicHeight(0)` sums [TabRow.intrinsicHeight(0)] only
+        //     (the `weight(1f)` Box returns 0 → LazyColumn SKIPPED)
+        //   → no negative-width intrinsic query reaches ListItem.
+        //
+        // WITHOUT the `weight(1f)` Box (the Sprint 30c-#1 wrong-hypothesis
+        // attempt that REMOVED this wrapper), the cascade fires:
+        //   `Column.minIntrinsicHeight(0)` queries LazyColumn.intrinsicHeight(0)
+        //     → ListItem.intrinsicHeight(0)
+        //     → ListItemMeasurePolicy subtracts its internal horizontal
+        //       padding (~83dp total for 2-line ListItem with trailing icon)
+        //       from incoming maxWidth=0
+        //     → `Constraints(maxWidth=-83, ...)`
+        //     → assert fails: `maxWidth(-83) must be >= than minWidth(0)`.
+        //
+        // This `Box(Modifier.fillMaxWidth().weight(1f))` is the **PRIMARY
+        // defense** against that cascade. Companion fixes (MainActivity
+        // drops the outer `Column.fillMaxSize().verticalScroll(...)`
+        // wrappers; SettingsScreen.kt migrates GeneralSettingsContent +
+        // AdvancedSettingsContent to LazyColumn internally) are secondary:
+        // they close the **`Vertical scrollable component was measured
+        // with an infinity maximum height constraints`** runtime check
+        // (the Slider/verticalScroll drop) and the **`verticalScroll`
+        //-inside-Column-when-Infinity-supplied** check (the LazyColumn
+        // migration), but they do NOT close the `maxWidth(-N)` intrinsic
+        // cascade — only THIS `weight(1f)` Box does.
+        //
+        // Sprint 28b-v15 introduced this same wrapper as
+        // `Box(Modifier.fillMaxWidth().weight(1f))` with narrowed
+        // justification — the original was insufficient because it
+        // didn't explain WHY the weight was needed. The Sprint 30c-#1
+        // removal (followed by Sprint 30c-#2 restoration) cycled through
+        // the same loop twice; this KDoc closes the loop with the source
+        // citation so the next agent doesn't repeat the cycle. See
+        // `app/src/test/java/com/handy/app/ui/debug/DebugLayoutRegressionTest.kt`
+        // for the Robolectric test that locks in this contract (future
+        // extension via `DestinationInfinityGuardTest.kt` to add an
+        // `intrinsicHeight(0)` assertion on this exact shape).
+        //
+        // DEFENSIVE NOTE: DO NOT remove this Box, do not remove the
+        // `weight(1f)`, do not swap to `fillMaxSize()`/`fillMaxHeight()`.
+        // The A059 `IllegalArgumentException: maxWidth(-N) must be >=
+        // than minWidth(0)` runtime crash returns IMMEDIATELY. Modifying
+        // the wrapper requires re-running the on-device cold-launch
+        // verify with `--ez skip_onboarding true` and confirming the
+        // crash log at `handy-android/logs/sprint30c/` does NOT contain
+        // `IllegalArgumentException: maxWidth(`. See AGENTS.md Sprint
+        // 30c-#2 closure for the diagnostic journey.
         Box(
             modifier = Modifier
                 .fillMaxWidth()

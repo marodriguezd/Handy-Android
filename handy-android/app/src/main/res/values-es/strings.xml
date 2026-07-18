@@ -1,36 +1,321 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Sprint 29spa Phase 2: Spanish locale overrides for Sprint 25/Sprint 23/Settings translated strings. -->
-    <!-- These mirror the originally-Spanish content of keys whose values have been translated to English in the default locale file (values/strings.xml). -->
+    <!-- Sprint 29spa Phase 3: override de locale completo (Español) — 256 keys. -->
+    <!-- Fuente de verdad: values/strings.xml. Comentarios de sección espejean el default file. -->
+    <!-- Convenciones de escape AAPT2: apostrofes como \\'; em-dash — y comillas angulares « » válidos UTF-8 sin escape. -->
+    <!-- Brand names preservados verbatim: Handy, Shizuku, OpenAI, Anthropic, Ollama, Parakeet, Material You. -->
+    <!-- Model IDs preservados verbatim: whisper-large-v3, parakeet-tdt-0.6b-v3, canary-180m-flash, Qwen3-ASR-1.7B. -->
+    <!-- Identificadores XML no permiten acentos (settings_section_aplicacion, _salida, _transcripcion) — los valores sí. -->
 
+    <!-- ─── Core / Top-level (IME pill, Recording service) ─── -->
+    <string name="app_name">Handy</string>
+    <string name="dictation_button">Dictar</string>
+    <string name="stop_dictation">Detener</string>
+    <string name="switch_keyboard">Cambiar teclado</string>
+    <string name="text_copied_to_clipboard">Texto copiado al portapapeles</string>
+    <string name="insert_text">Insertar</string>
+    <string name="retry">Reintentar</string>
+    <string name="discard">Descartar</string>
+    <string name="ime_subtype">Handy Dictado</string>
+    <string name="ime_loading_model">Cargando modelo…</string>
+    <string name="ime_transcribing">Transcribiendo…</string>
+    <string name="ime_tap_insert_to_use">Toca Insertar para usar</string>
+    <string name="recording_channel_name">Grabación</string>
+    <string name="recording_channel_description">Notificación de grabación del micrófono</string>
+    <string name="recording_notification_title">Dictando…</string>
+    <string name="recording_notification_text">Escuchando</string>
+    <string name="recording_stop_action">Detener</string>
+
+    <!-- ─── Models Screen ─── -->
+    <string name="models_title">Modelos</string>
+    <string name="models_empty">No hay modelos disponibles</string>
+    <string name="models_download">Descargar</string>
+    <string name="models_cancel">Cancelar descarga</string>
+    <string name="models_delete">Eliminar</string>
+    <string name="models_use">Establecer activo</string>
+    <string name="models_active">Activo</string>
+    <string name="models_downloading">Descargando…</string>
+    <string name="models_refresh">Actualizar</string>
+    <string name="models_confirm_delete">¿Eliminar este modelo?</string>
+    <string name="models_confirm_delete_message">Necesitarás descargarlo otra vez para usarlo.</string>
+    <string name="models_retry">Reintentar</string>
+
+    <!-- ─── Settings Screen ─── -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_injection">Inserción de texto</string>
+    <string name="settings_shizuku">Inserción con Shizuku</string>
+    <string name="settings_shizuku_description">Requiere la app Shizuku. Permite pegar texto directamente en cualquier app.</string>
+    <string name="settings_shizuku_dialog_title">Shizuku requerido</string>
+    <string name="settings_shizuku_dialog_message">La inserción con Shizuku requiere que la app Shizuku esté instalada y en ejecución. Por favor instala Shizuku desde la fuente oficial, habilítala en los ajustes de desarrollador y concede el permiso.</string>
+    <string name="settings_switch_keyboard">Cambiar teclado</string>
+    <string name="settings_section_aplicacion">APLICACIÓN</string>
+    <string name="settings_section_salida">SALIDA</string>
+    <string name="settings_section_transcripcion">TRANSCRIPCIÓN</string>
+    <string name="settings_post_processing">Post-Procesamiento</string>
+    <string name="settings_post_processing_desc">Procesa la transcripción con un LLM</string>
+    <string name="settings_github">GitHub</string>
+    <string name="settings_github_url">github.com/handy-org/handy</string>
+
+    <!-- ─── Common Content Descriptions ─── -->
+    <string name="content_desc_toggle">Alternar</string>
+    <string name="content_desc_save">Guardar</string>
+    <string name="content_desc_delete">Eliminar</string>
+    <string name="content_desc_clear">Limpiar búsqueda</string>
+    <string name="settings_refresh">Actualizar</string>
+
+    <!-- ─── Quick Dictate Notification ─── -->
+    <string name="quick_dictate_channel_name">Dictado rápido</string>
+    <string name="quick_dictate_channel_description">Acceso rápido para iniciar el dictado</string>
+    <string name="quick_dictate_notification_title">Handy Dictado</string>
+    <string name="quick_dictate_notification_text">Toca para iniciar el dictado</string>
+    <string name="quick_dictate_action">Dictar</string>
+    <string name="settings_switch">Cambiar</string>
+    <string name="settings_postproc">Post-Procesamiento</string>
+    <string name="settings_llm_endpoint">Endpoint del LLM</string>
+    <string name="settings_api_key">Clave API</string>
+    <string name="settings_about">Acerca de</string>
+    <string name="settings_version">Versión</string>
+    <string name="settings_licenses">Licencias de código abierto</string>
+
+    <!-- ─── Sprint 20: Models search + language filter ─── -->
+    <string name="models_search_placeholder">Buscar modelos por nombre o descripción</string>
+    <string name="models_filter_all_languages">Todos los idiomas</string>
+    <string name="models_section_your_models">Tus modelos</string>
+    <string name="models_section_available_models">Modelos disponibles</string>
+    <string name="models_filter_recommended_only">Recomendados para este dispositivo</string>
+    <string name="models_empty_search">Ningún modelo coincide con tus criterios</string>
+
+    <!-- ─── History Screen ─── -->
+    <string name="history_title">Historial</string>
+    <string name="history_empty">Aún no hay transcripciones. Empieza a dictar para ver tu historial aquí.</string>
+    <string name="history_load_more">Cargar más</string>
+    <string name="history_delete_confirm">¿Eliminar esta transcripción?</string>
+    <string name="history_delete_confirm_message">Esta acción no se puede deshacer.</string>
+    <string name="history_show_more">Mostrar más</string>
+    <string name="history_show_less">Mostrar menos</string>
+    <string name="history_post_processed">Post-procesado</string>
+
+    <!-- ─── Onboarding Screen ─── -->
+    <string name="onboarding_welcome_title">Handy Dictado</string>
+    <string name="onboarding_welcome_subtitle">Voz a texto sin conexión en tu dispositivo. Privado, rápido y gratis.</string>
+    <string name="onboarding_get_started">Empezar</string>
+    <string name="onboarding_skip_all">Omitir todo</string>
+    <string name="onboarding_skip">Omitir por ahora</string>
+    <string name="onboarding_next">Siguiente</string>
+    <string name="onboarding_back">Atrás</string>
+    <string name="onboarding_mic_title">Acceso al micrófono</string>
+    <string name="onboarding_mic_body">Handy necesita tu micrófono para escucharte. Todo el procesamiento de audio ocurre 100%% en el dispositivo. Nunca se sube nada.</string>
+    <string name="onboarding_grant">Conceder permiso</string>
+    <string name="onboarding_permission_granted">Permiso concedido</string>
+    <string name="onboarding_ime_title">Activa el teclado Handy</string>
+    <string name="onboarding_ime_body">Para escribir con tu voz en cualquier app, activa Handy como método de entrada.</string>
+    <string name="onboarding_ime_open">Abrir ajustes de teclado</string>
+    <string name="onboarding_model_title">Descargar modelo de voz</string>
+    <string name="onboarding_model_body">Handy necesita un modelo de lenguaje para transcribir tu voz. Recomendado: Parakeet TDT 0.6B v3 (485 MB).</string>
+    <string name="onboarding_model_download">Descargar modelo recomendado</string>
+    <string name="onboarding_model_ready">¡Modelo listo!</string>
+    <string name="onboarding_model_canceled">Descarga cancelada</string>
+    <string name="onboarding_ready_title">¡Todo listo!</string>
+    <string name="onboarding_ready_body">Empieza a dictar en cualquier parte cambiando al teclado Handy. Toca el botón del micrófono para empezar.</string>
+    <string name="onboarding_start">Empezar a usar Handy</string>
+    <string name="onboarding_continue_anyway">Continuar de todas formas</string>
+
+    <!-- ─── Common Dialogs ─── -->
+    <string name="dialog_cancel">Cancelar</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_delete">Eliminar</string>
+
+    <!-- ─── IME Error Mode ─── -->
+    <string name="ime_error_generic">Ocurrió un error</string>
+    <string name="error_no_model_downloaded">No hay modelo descargado. Ve a Modelos para descargar uno.</string>
+    <string name="error_insertion_failed">La inserción falló</string>
+
+    <!-- ─── Battery Optimization ─── -->
+    <string name="settings_battery">Batería</string>
+    <string name="settings_battery_exemption">Exención de optimización de batería</string>
+    <string name="settings_battery_exemption_description">Evita que Doze mate el servicio de grabación</string>
+
+    <!-- ─── Download Progress (format: %d%%) ─── -->
+    <string name="download_progress_percent">Descargando %1$d%%</string>
+
+    <!-- ─── App Navigation ─── -->
     <string name="settings_advanced">Avanzado</string>
     <string name="tab_models">Modelos</string>
-    <string name="tab_post_process">Post Proceso</string>
+    <string name="tab_post_process">Post-Proceso</string>
+
+    <!-- ─── Device Capability UI ─── -->
+    <string name="header_tier_low">BAJO (≤ 1.5 GB)</string>
+    <string name="header_tier_mid">MEDIO (≤ 3.5 GB)</string>
+    <string name="header_tier_high">ALTO (≤ 6.5 GB)</string>
+    <string name="header_tier_flagship">PREMIUM (≤ 12.5 GB)</string>
+    <string name="header_tier_tablet">TABLET (≥ 12.5 GB)</string>
+    <string name="capability_header_subtitle">Modelos optimizados hasta %1$d MB</string>
+    <string name="capability_refresh">Re-evaluar capacidad del dispositivo</string>
+    <string name="show_experimental_models">Mostrar modelos experimentales (sin verificar)</string>
+
+    <!-- ─── Capability Badges ─── -->
+    <string name="badge_experimental">EXPERIMENTAL</string>
+    <string name="badge_heavy">REQUIERE ATENCIÓN</string>
+    <string name="badge_exceeds_ram">EXCEDE RAM</string>
+    <string name="badge_large_heap">REQUIERE largeHeap</string>
+
+    <!-- ─── Heavy Model Warning Dialog ─── -->
+    <string name="heavy_dialog_title">Modelo pesado seleccionado</string>
+    <string name="heavy_dialog_title_extreme">Modelo extremo — confirmación obligatoria</string>
+    <string name="heavy_dialog_body">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.\n\nEl modelo funcionará pero tardará más en descargar, podría congelar la app o cerrarla.</string>
+    <string name="heavy_dialog_body_extreme">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.\n\nEste modelo requiere al menos 12 GB de RAM y largeHeap=true en el manifest para ejecutarse de manera estable. En un dispositivo con menos recursos:\n• Descargará %2$s GB extra de almacenamiento.\n• Probablemente la app se cerrará durante la carga.\n• El dispositivo puede quedar inutilizable mientras corre.\n\n¿Continuar bajo tu responsabilidad?</string>
+    <string name="heavy_dialog_consent">Entiendo los riesgos y quiero continuar</string>
+
+    <string name="model_unavailable_on_device">Este modelo excede la capacidad de tu dispositivo</string>
+
+    <!-- ─── Sprint 19: General settings (mic, audio, model) ─── -->
+    <string name="settings_audio_section_label">Audio</string>
+    <string name="settings_microphone_label">Micrófono</string>
+    <string name="settings_microphone_default">Predeterminado del sistema</string>
+    <string name="settings_microphone_desc">Elige el dispositivo de entrada desde el que Handy grabará.</string>
+    <string name="settings_audio_feedback_label">Retroalimentación sonora</string>
+    <string name="settings_audio_feedback_desc">Reproduce un tono cuando el dictado inicia y termina.</string>
+    <string name="settings_sound_picker_label">Tema de sonido</string>
+    <string name="settings_sound_picker_desc">Marimba, campanada suave o señal del narrador.</string>
+    <string name="settings_sound_normal">Marimba</string>
+    <string name="settings_sound_soft">Campanada suave</string>
+    <string name="settings_sound_narrator">Señal del narrador</string>
+    <string name="settings_volume_label">Volumen</string>
+    <string name="settings_volume_desc">Volumen del sonido de inicio/parada del dictado.</string>
+    <string name="settings_model_section_label">Modelo activo</string>
+    <string name="settings_model_section_desc">Modelo de voz actualmente cargado. Descárgalo para liberar memoria.</string>
+    <string name="settings_no_active_model">Sin modelo cargado</string>
+    <string name="settings_unload_model">Descargar ahora</string>
+    <string name="settings_shortcuts_label">Atajos de teclado</string>
+
+    <!-- ─── Sprint 20: Experimental features & validation (residue from Sprint 25b carryover) ─── -->
     <string name="settings_experimental_features">Funciones Experimentales</string>
     <string name="settings_experimental_features_desc">Activa funciones experimentales inestables</string>
     <string name="settings_auto_send">Envío automático</string>
     <string name="settings_auto_send_ime">Auto (IME)</string>
     <string name="settings_auto_send_disabled">Desactivado</string>
-    <string name="settings_vad">Voice Activity Detection</string>
+    <string name="settings_vad">Detección de actividad de voz</string>
     <string name="settings_vad_desc">Detección de actividad de voz</string>
     <string name="settings_add_final_space">Agregar Espacio Final</string>
     <string name="settings_add_final_space_desc">Añade un espacio al final de la transcripción</string>
-    <string name="show_experimental_models">Mostrar modelos experimentales (sin verificar)</string>
-    <string name="capability_header_subtitle">Modelos optimizados hasta %1$d MB</string>
-    <string name="heavy_dialog_title">Modelo pesado seleccionado</string>
-    <string name="heavy_dialog_title_extreme">Modelo extremo — verificación obligatoria</string>
-    <string name="heavy_dialog_body">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.
 
-El modelo funcionará pero tardará más en descargar, podría congelar la app o cerrarla.</string>
-    <string name="heavy_dialog_body_extreme">El modelo «%1$s» pesa %2$s GB. Tu dispositivo tiene %3$s GB de RAM.
+    <!-- ─── Sprint 23: About + ThemeSelector + LocaleSelector ─── -->
+    <string name="about_section_appearance">APARIENCIA</string>
+    <string name="about_section_language">IDIOMA</string>
+    <string name="about_section_about">ACERCA DE</string>
+    <string name="about_theme_label">Tema</string>
+    <string name="about_theme_subtitle">Sistema, Siempre claro o Siempre oscuro.</string>
+    <string name="about_theme_system">Sistema</string>
+    <string name="about_theme_light">Claro</string>
+    <string name="about_theme_dark">Oscuro</string>
+    <string name="about_dynamic_color">Color dinámico</string>
+    <string name="about_dynamic_color_desc">Usa los colores Material You de tu fondo de pantalla (Android 12+).</string>
+    <string name="about_locale_label">Idioma de la app</string>
+    <string name="about_locale_subtitle">Afecta a todas las cadenas de Handy, incluyendo el IME.</string>
+    <string name="about_locale_system">Predeterminado del sistema</string>
+    <string name="about_locale_en">Inglés</string>
+    <string name="about_locale_es">Español</string>
+    <string name="about_app_data_dir">Directorio de datos de la app</string>
+    <string name="about_log_dir">Directorio de logs</string>
+    <string name="about_log_dir_missing">La carpeta de logs se creará en el primer uso.</string>
+    <string name="about_acknowledgments_text">Handy Android está bajo licencia Apache 2.0. Transcribe-cpp / ggml / whisper.cpp tienen licencia MIT. Consulta el repositorio de GitHub para la lista completa de dependencias.</string>
 
-Este modelo requiere al menos 12 GB de RAM y largeHeap=true en el manifest para ejecutarse de manera estable. En un dispositivo con menos recursos:
-• Descargará %2$s GB extra de storage.
-• Probablemente la app se cerrará durante la carga.
-• El dispositivo puede quedar inutilizable mientras corre.
+    <!-- ─── Sprint 24: History con audio + retry (MD3 refactor) ─── -->
+    <string name="content_desc_copy">Copiar</string>
+    <string name="history_retry">Reintentar transcripción</string>
+    <string name="history_audio_play">Reproducir</string>
+    <string name="history_audio_pause">Pausar</string>
 
-¿Continuar bajo tu responsabilidad?</string>
-    <string name="heavy_dialog_consent">Entiendo los riesgos y quiero continuar</string>
-    <string name="model_unavailable_on_device">Este modelo excede la capacidad de tu dispositivo</string>
+    <!-- ─── Sprint 26: Post-Process top-level destination ─── -->
+    <string name="postprocess_section_provider">PROVEEDOR</string>
+    <string name="postprocess_section_endpoint">ENDPOINT</string>
+    <string name="postprocess_provider_label">Proveedor</string>
+    <string name="postprocess_provider_openai">OpenAI</string>
+    <string name="postprocess_provider_anthropic">Anthropic</string>
+    <string name="postprocess_provider_ollama">Ollama (local)</string>
+    <string name="postprocess_provider_custom">Personalizado</string>
+    <string name="postprocess_baseurl_label">URL base</string>
+    <string name="postprocess_baseurl_hint_openai">https://api.openai.com/v1/chat/completions</string>
+    <string name="postprocess_baseurl_hint_anthropic">https://api.anthropic.com/v1/messages</string>
+    <string name="postprocess_baseurl_hint_ollama">http://10.0.2.2:11434/api/chat</string>
+    <string name="postprocess_baseurl_hint_custom">https://</string>
+    <string name="postprocess_baseurl_supporting">HTTPS requerido para proveedores alojados; HTTP permitido para Ollama en loopback.</string>
+    <string name="postprocess_apikey_label">Clave API</string>
+    <string name="postprocess_apikey_placeholder">sk-</string>
+    <string name="postprocess_apikey_required">Requerido para proveedores alojados.</string>
+    <string name="postprocess_apikey_optional">Opcional para Ollama local.</string>
+    <string name="postprocess_model_label">ID de modelo</string>
+    <string name="postprocess_prompts_section">PROMPTS</string>
+    <string name="postprocess_prompts_empty_state">Aún no hay prompts. Toca abajo para añadir uno.</string>
+    <string name="postprocess_prompt_add">Añadir prompt</string>
+    <string name="postprocess_prompt_editor_title_new">Nuevo prompt</string>
+    <string name="postprocess_prompt_editor_title_edit">Editar prompt</string>
+    <string name="postprocess_prompt_name_label">Nombre</string>
+    <string name="postprocess_prompt_text_label">Texto del prompt</string>
+    <string name="content_desc_edit">Editar</string>
+    <string name="dialog_save">Guardar</string>
+
+    <!-- ─── Sprint 25b Phase C: Advanced Settings controls (MD3) ─── -->
+    <string name="advanced_section_history_retention">HISTORIAL Y RETENCIÓN</string>
+    <string name="advanced_section_experimental_features">FUNCIONES EXPERIMENTALES</string>
+    <string name="advanced_history_limit_title">Límite de historial</string>
+    <string name="history_limit_unlimited">Sin límite</string>
+    <string name="history_limit_5">5 entradas</string>
+    <string name="history_limit_10">10 entradas</string>
+    <string name="history_limit_25">25 entradas</string>
+    <string name="history_limit_50">50 entradas</string>
+    <string name="history_limit_100">100 entradas</string>
+    <string name="history_limit_250">250 entradas</string>
+    <string name="advanced_retention_title">Retención de grabaciones</string>
+    <string name="retention_never">Nunca</string>
+    <string name="retention_one_day">1 día</string>
+    <string name="retention_one_week">1 semana</string>
+    <string name="retention_one_month">1 mes</string>
+    <string name="retention_one_year">1 año</string>
+    <string name="advanced_custom_words_title">Palabras personalizadas (experimental)</string>
+    <string name="advanced_custom_words_subtitle">Separadas por coma o nueva línea. Sesga al reconocedor hacia nombres propios.</string>
+    <string name="advanced_acceleration_title">Backend de inferencia</string>
+    <string name="advanced_acceleration_subtitle">Reinicia para aplicar. Vulkan/NNAPI requieren la bandera experimental.</string>
+    <string name="acceleration_cpu">CPU</string>
+    <string name="acceleration_vulkan">Vulkan</string>
+    <string name="acceleration_nnapi">NNAPI</string>
+
+    <!-- ─── Sprint 27a: Onboarding MD3 refinement - StepIndicator label ─── -->
+    <string name="onboarding_step_label_format">Paso %1$d de %2$d</string>
+
+    <!-- ─── Sprint 28 ─ Debug panel ─── -->
+    <string name="debug_screen_title">Depuración</string>
+    <string name="debug_section_logging">Logs</string>
+    <string name="debug_section_updates">Actualizaciones e información</string>
+    <string name="debug_section_audio">Audio</string>
+    <string name="debug_log_loglevel_label">Nivel de log</string>
+    <string name="debug_log_liveviewer_label">Visor de logs en vivo</string>
+    <string name="debug_updates_check_label">Buscar actualizaciones al iniciar</string>
+    <string name="debug_whatsnew_label">Previsualizar el modal «What\'s New»</string>
+    <string name="debug_audio_pastedelay_label">Retardo de pegado</string>
+    <string name="debug_audio_recordingbuffer_label">Tamaño del búfer de grabación</string>
+    <string name="debug_audio_alwaysonmicrophone_label">Micrófono siempre activo</string>
+    <string name="debug_panel_gated_hint">Herramientas de desarrollador. Ocultas por defecto en builds de release.</string>
+
+    <!-- ─── Sprint 28b ─ Sprint 28b MD3 components ─── -->
+    <string name="debug_mode_toggle_label">Herramientas de desarrollador</string>
+    <string name="debug_mode_toggle_subtitle">Desactiva el panel de Depuración y lo oculta del raíl de navegación.</string>
+    <string name="debug_screen_disabled_body">Las herramientas de desarrollador están desactivadas. Reabre la sección Ajustes → Experimental o cambia esto mediante el broadcast SET_DEBUG_MODE de TestCommandReceiver.</string>
+    <string name="debug_loglevel_subtitle">Verbosidad para el visor de logs dentro de la app.</string>
+    <string name="debug_loglevel_verbose">Detallado</string>
+    <string name="debug_loglevel_debug">Depuración</string>
+    <string name="debug_loglevel_info">Información</string>
+    <string name="debug_loglevel_warn">Advertencia</string>
+    <string name="debug_loglevel_error">Error</string>
+    <string name="debug_log_liveviewer_subtitle">Cola del ring buffer en memoria (últimas 50 líneas).</string>
+    <string name="debug_log_liveviewer_empty">Aún no hay líneas de log. Inicia una grabación para poblarlo.</string>
+    <string name="debug_updates_check_subtitle">Cuando está desactivado, se omite la verificación de actualizaciones al iniciar.</string>
+    <string name="debug_audio_alwaysonmicrophone_subtitle">Mantiene la captura AAudio caliente entre dictados.</string>
+
+    <!-- ─── Sprint 28b-v11: Toggle flip feedback (Snackbar) ─── -->
+    <string name="debug_toggle_enabled_feedback">Herramientas de desarrollador activadas. El panel de Depuración ahora está en el raíl de navegación.</string>
+    <string name="debug_toggle_disabled_feedback">Herramientas de desarrollador desactivadas. El panel de Depuración está oculto en el raíl de navegación.</string>
+    <string name="debug_audio_dualwrite_label">Dual-write WAV files</string>
+    <string name="debug_audio_dualwrite_subtitle">Persist recording audio to disk for retry/replay. Requires restart.</string>
 </resources>
