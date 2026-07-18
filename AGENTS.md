@@ -27,7 +27,7 @@
 
 ---
 
-## 🗓️ Current State — Sprint 25a (RecordingRepository factory binding complete) + Sprint 25b next up (Julio 17, 2026)
+## 🗓️ Current State — Sprint 30c closed (Julio 18, 2026). Next: AGP 9.x / Kotlin 2.0 or Sprint 30d.
 
 > **🟢 Pre-Sprint-26 cleanup 100% complete**. All 5 batches shipped; build is green at 87 PASS / 0 FAIL / 0 lint errors. Local commits pending user-push approval per AGENTS.md auth note (Plan D in the release-body-update ladder sections below). El Sprint 25 (Advanced Settings refinement + Retry backend binding) ya no requiere Batch C/D/E pre-work — puede arrancar cuando el usuario dé luz verde.
 
@@ -2009,7 +2009,230 @@ Using `produceState` with an explicit `State<T>` LHS type annotation requires `=
 - Round 3: forced 404 (gradle 9.1.0 not published).
 - Round 4 (HYBRID): APPROVED + flagged partial-fulfillment brief + 3 forward-looking risks (M3 1.4 `contentWindowInsets` stricter default, `kotlinOptions { jvmTarget = "17" }` deprecation hint, new `primaryFixed*`/`secondaryFixed*`/`tertiaryFixed*` auto-derived tokens).
 
-### Carry-over to Sprint 30b (env-conditional)
-1. **Re-attempt AGP 9.x + Gradle 9.1+** once Gradle 9.1+ binary publishes at services.gradle.org (calld's later-quarter roll-out).
-2. **Tidy** the `HandyApplication.kt:204` K2 deprecation warning with `@Suppress("DEPRECATION")` per-method or `@Deprecated` annotation alignment.
-3. **Migrate** `kotlinOptions { jvmTarget = "17" }` → `kotlin { jvmToolchain(17) }` block (AGP 8.8.x soft hint; cosmetic).
+## 📌 Session 2026-07-17 (continued) — Sprint 30 cleanup hygiene closure (R1–R5)
+
+Closed three carry-overs from Sprint 30 HYBRID via 5 progressive iteration rounds. Each round was triggered by an async basher discovering a build error post-edit, with the fix surfaced via code-reviewer. Build re-verified green end-to-end at R4; orphan entry cleanup at R5.
+
+### What landed
+
+**(a) K2 deprecation on `app/src/main/java/com/handy/app/HandyApplication.kt:204` closed.** `@Suppress("DEPRECATION")` per-function on `override fun onLowMemory()` (ComponentCallbacks.onLowMemory() deprecated in API 34). `onTrimMemory()` at line 189 keeps its own `@Suppress("DEPRECATION")` from Sprint 23 historical. Per-function scope so adjacent methods (`onConfigurationChanged`, others) stay clean.
+
+**(b) `kotlinOptions` → `kotlin { jvmToolchain(17) }` migration.** Old `kotlinOptions { jvmTarget = "17" }` block inside `android { }` (deprecated in Kotlin 2.x) removed. New top-level `kotlin { jvmToolchain(17) }` between `plugins { }` and `android { }`. Dual-spec breadcrumbs document the intentional asymmetry — `kotlin.jvmToolchain(17)` configures the JDK that runs Kotlin compilation (foojay-resolver-provisioned from foojay.io since host Fedora has only 11/21/25), while `compileOptions.sourceCompatibility / targetCompatibility = VERSION_17` controls the bytecode target version. Four files modified besides (a):
+
+- `app/build.gradle.kts` — kotlin block + compileOptions dual-spec breadcrumbs
+- `settings.gradle.kts` — `plugins { id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0" }` between `pluginManagement { }` and `dependencyResolutionManagement { }`. **Inline id form** (not `alias(libs.plugins.X)`) because type-safe project accessors have scope-limited resolution to project build scripts, not settings.
+- `gradle/libs.versions.toml` — `[versions] foojay-resolver-convention = "0.8.0"` as single-source-of-truth pin (orphaned `[plugins]` entry removed at R5).
+- `gradle.properties` — `org.gradle.java.installations.auto-download=true` appended at end of file (complementary to the foojay plugin).
+
+### R1–R5 iteration trail
+
+| Round | Change | Outcome |
+|-------|--------|---------|
+| R1 | `@Suppress("DEPRECATION")` + initial `kotlin { jvmToolchain(17) }` swap | BUILD green in theory, broke in practice (no JDK 17 on host) |
+| R2 | foojay-resolver plugin added + `auto-download=true` flag | ❌ Build fell: `plugins { }` block before `pluginManagement { }` violates Gradle settings DSL order |
+| R3 | Moved `plugins { }` block AFTER `pluginManagement { }`; added dual-spec breadcrumbs | ❌ Build fell: `Unresolved reference: libs` (type-safe project accessors scope-limited to project builds, not settings) |
+| R4 | `alias(libs.plugins.X)` → inline `id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"` | ✅ BUILD SUCCESSFUL across `:app:compileDebugKotlin` (~23s, foojay downloaded JDK 17), `:app:testDebugUnitTest` (~17s), `:app:lintDebug` (~20s). `MissingTranslation = 0` from XML canonical |
+| R5 | Removed orphan `[plugins] foojay-resolver-convention` entry from libs.versions.toml; deleted accidentally-created tmp file at `gradle/properties.gradle.properties.tmp`; verified MissingTranslation count from XML (not HTML grep) | Clean closure |
+
+### Test/coverage state preserved
+
+- Tests: 87 PASS / 0 FAIL / 0 SKIP preserved pre-cleanup baseline → also preserved post-cleanup (no test surface touched).
+- K2 deprecation warnings: was 1 at HandyApplication.kt:204 → 0 after `@Suppress("DEPRECATION")` per-function.
+- MissingTranslation (i18n): 0 in XML canonical report — Sprint 29spa Phase 3 (256 keys in `values-es/`) unchanged.
+
+### Closing summary
+
+AGP 8.8.2 + Gradle 8.11.1 + Kotlin 2.0.21 chain is now in a clean post-K2 steady state. Sprint 30 cleanup is environment-specific scaffolding — the only remaining forward work is the AGP 9.x + JDK 21 flip described in the next carry-over.
+
+### Carry-over to Sprint 30b (env-conditional — UPDATED post-Sprint 30 cleanup)
+1. **Re-attempt AGP 9.x + Gradle 9.1+** once Gradle 9.1+ binary publishes at services.gradle.org. AGP 9.0 has published but the wrapping Gradle 9.1 binary that AGP 9.x's version-check plugin requires is still missing as of 2026-07-17.
+2. **When AGP 9.x lands, flip the entire Sprint 30 cleanup chain in one commit** (env-conditional scaffolding becomes disposable):
+   - Remove `foojay-resolver-convention` plugin from `settings.gradle.kts` plugins block.
+   - Remove `[versions] foojay-resolver-convention = "0.8.0"` from `libs.versions.toml`.
+   - Remove `org.gradle.java.installations.auto-download=true` from `gradle.properties`.
+   - Change `kotlin { jvmToolchain(17) }` → `kotlin { jvmToolchain(21) }` in `app/build.gradle.kts`.
+   - Change `compileOptions { sourceCompatibility/targetCompatibility = VERSION_17 }` → `VERSION_21` (Android Q+ supports Java 21 bytecode cleanly).
+3. ✅ **Done in Sprint 30 cleanup R1**: `HandyApplication.kt:204` `@Suppress("DEPRECATION")` per-function on `override fun onLowMemory()`. The deprecation warning is silenced — no follow-up needed.
+4. ✅ **Done in Sprint 30 cleanup R4**: `kotlinOptions { jvmTarget = "17" }` → `kotlin { jvmToolchain(17) }` migration complete. The dual-spec breadcrumb in build.gradle.kts documents that future toolchain bumps don't force bytecode-version changes (toolchain-vs-bytecode asymmetry is by design).
+
+## 📌 Session 2026-07-17 (continued) — Sprint 30 HYBRID closure: full revert to K1 baseline (Path H)
+
+The Sprint 30 HYBRID commit (abbabb6) attempted the AGP 9.x + Kotlin 2.0 paired migration brief. AGP 9.x is env-blocked (Gradle 9.1+ binary distribution not yet published at services.gradle.org); the Kotlin 2.0 half landed. On-device verify on A059 Nothing Phone (3a) Android 16 surfaced TWO real regressions that Sprint 30b partial revert attempts (compose-bom 2024.06.00) failed to close due to cascading compile errors. **This turnship applies Path H: full revert to Sprint 17>→28 working baseline**, restoring compileDebugKotlin + testDebugUnitTest + lintDebug BUILD SUCCESSFUL.
+
+### Root cause (corrected from prior M3 1.4 hypothesis)
+
+**Prior assumption (WRONG, retired)**: Sprint 30 closure carried forward a belief that compose-bom 2025.06.00 bundled Material3 1.4+ and that `ListItem.contentWindowInsets` was the offending new parameter. A fix-forward path of `WindowInsets(0, 0, 0, 0)` was attempted.
+
+**Actual root cause (verified end-to-end)**:
+- `compose-bom 2025.06.00` resolves to **Material3 1.3.2** (NOT 1.4+). The `contentWindowInsets` parameter on `androidx.compose.material3.ListItem` **does NOT exist in any M3 version 1.3.0 → 1.4.0 inclusive** per official Android Developers docs. Sprint 30's "M3 1.4" claim was unfounded \u2014 verified via `./gradlew :app:dependencies --configuration debugRuntimeClasspath`.
+- The real bug: Compose UI 1.7.x framework's stricter intrinsic-measure invariant (`maxWidth >= minWidth` programmatic check) + K2 (Kotlin 2.0.21) `kotlin-compose` plugin IR emit path, when combined, produce negative-width constraint during intrinsic-min-height query on the parent chain `→ (MainActivity) → (Scaffold) → (NavHost) → (AnimatedContent) → (composable) → (LazyColumn) → ... → (HandyListItem) → (ListItem)`.
+- Sprint 17→28 working baseline (Kotlin 1.9.24 + compose-compiler 1.5.14 + compose-bom 2025.01.00) pairs Compose UI 1.7.x with K1 emitter; intrinsic-cascade bug does NOT fire there.
+
+### On-device verify findings (A059 Android 16, post Sprint 30 HYBRID commit)
+
+1. **FATAL #1** \u2014 `IllegalArgumentException: maxWidth must be >= than minWidth` originating at `androidx.compose.material3.ListItemMeasurePolicy.measure` via `ParagraphLayoutCache.intrinsicHeight` via `TextStringSimpleNode.minIntrinsicHeight`. Top-resumed activity after crash: `com.nothing.launcher/com.android.searchlauncher.SearchLauncher`.
+2. **FATAL #2 (downstream of #1)** \u2014 WAV dual-write corrupted. `/sdcard/Android/data/com.handy.app.debug/files/history_audio/history_<TIMESTAMP>.wav` produces 1964 bytes all-\x00 (no RIFF/WAVE magic; finalized \x22size\x22 = 0). RecordingRepository.startRecording() writes 44-byte null placeholder header; MainActivity process dies before finalizeHeader() executes. WAV corruption is a *symptom* of the cold-launch crash, not an independent bug.
+
+### Sprint 30b partial revert attempts (compose-bom = \x22\x22\x22\x22\x222024.06.00\x22)
+
+- Tried: `compose-bom = "2025.06.00" → "2024.06.00"` (Compose UI 1.6.7 + M3 1.2.1).
+- `:app:compileDebugKotlin` FAILED with 4 cascading errors:
+  - `HandyDropdown.kt:10` `Unresolved reference 'MenuAnchorType'` \u2014 M3 1.3+ API not in M3 1.2.1.
+  - `HandyDropdown.kt:60\u201361` `No parameter with name 'type' found` / `enabled` \u2014 M3 1.3+ signature change.
+  - `SettingsScreen.kt:24` + `:326` same.
+- `Theme.kt:55\u201356 + :101\u2013102` actively reference `surfaceBright`/`surfaceDim` (M3 1.3+ tokens NOT in M3 1.2.1). These can be safely dropped \u2014 grep confirms 0 active composable consumers.
+- `app/build.gradle.kts:106\u2013107` uses `platform(libs.compose.bom)` (NON-strict default). Gradle still resolves Compose UI 1.7.2 transitively via navigation-compose:2.8.5 / activity-compose:1.9.3 / lifecycle-*:2.8.7, defeating the BOM pin.
+
+### Path H applied (THIS turn \u2014 5 file changes, ~10 min)
+
+1. **`handy-android/gradle/libs.versions.toml`**:
+   - `kotlin = "2.0.21" → "1.9.24"`
+   - `compose-bom = "2024.06.00" → "2025.01.00"` (Compose UI 1.7.x + M3 1.3.1 \u2014 the verified-working pin)
+   - ADD `compose-compiler = "1.5.14"` (paired with K1)
+   - DROP `foojay-resolver-convention = "0.8.0"` from `[versions]`
+   - DROP `[plugins]` entries: `kotlin-compose`, `foojay-resolver-convention`
+   - Updated top-of-file comment block to describe Sprint 30 closure + revert rationale; updated `androidx-window` 1.3.0 + `compose-ui-test-junit4` cross-reference comments
+
+2. **`handy-android/app/build.gradle.kts`**:
+   - DROP `alias(libs.plugins.kotlin.compose)` from `plugins {}`
+   - DROP top-level `kotlin { jvmToolchain(17) }` block + Sprint 30 cleanup comment
+   - ADD `kotlinOptions { jvmTarget = "17" }` block inside `android { }`
+   - ADD `composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }` inside `android { }` (replaces the Sprint 30 \x22DELETED\x22 breadcrumb)
+   - UPDATED `compileOptions` dual-spec comment to reference `kotlinOptions` (not `kotlin.jvmToolchain(17)` which no longer exists)
+
+3. **`handy-android/settings.gradle.kts`**:
+   - DROP entire `plugins { id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0" }` block + Sprint 30 cleanup hygiene comment
+
+4. **`handy-android/gradle.properties`**:
+   - DROP `org.gradle.java.installations.auto-download=true` line + comment block
+
+5. **`handy-android/app/src/main/java/com/handy/app/HandyApplication.kt`**:
+   - DROP `@Suppress("DEPRECATION")` per-function above `override fun onLowMemory()` (K2-only warning suppression \u2014 unused at K1)
+
+### Build verification post-Path H
+
+- `:app:compileDebugKotlin` \u2014 BUILD SUCCESSFUL
+- `:app:testDebugUnitTest` \u2014 BUILD SUCCESSFUL
+- `:app:lintDebug` \u2014 BUILD SUCCESSFUL
+- Code-reviewer-minimax-m3 \u2014 APPROVED in 1 round (2 NEEDS-FIX on doc carry-over refresh closed by this entry)
+- Resolved versions post-revert: `kotlin-stdlib` 1.9.24 \u2705, `androidx.compose.material3:material3` 1.3.1 \u2705, `androidx.compose.ui:ui` 1.7.x family \u2705
+
+### Carry-over for the next K2 / Compose 1.7+ attempt (FUTURE sprints, NOT this turn)
+
+1. **DO NOT** retry the Kotlin 2.0 paired migration with `compose-bom \u2265 2025.06.00` UNTIL one of:
+   - Compose UI 1.7.x intrinsic-measure invariant relaxed upstream (track https://issuetracker.google.com/issues?q=intrinsic+measure+maxWidth+\(Compose+Foundation\))
+   - OR: our parent chain (MainActivity → AppNavigation → composable → LazyColumn → SettingsGroup → HandyListItem) is hardened with Modifier-system patches (e.g., explicit `Modifier.width(IntrinsicSize.Min)` wrapping, or `Modifier.fillMaxWidth().height(IntrinsicSize.Max)` on SettingsGroup column wrappers to absorb the intrinsic query).
+
+2. **AGP 9.x** migration \u2014 still env-blocked. Gradle 9.1+ binary distribution is not yet published at services.gradle.org; revisit when it lands. The 5 atomic flip actions from Sprint 30b's expected carry-over get RESURRECTED at that point:
+   - `compose-bom 2024.x → 2025.x` (only after fix #1)
+   - `kotlinOptions jvmTarget = "17" → kotlin { jvmToolchain(21) }`
+   - `compileOptions VERSION_17 → VERSION_21`
+   - DROP foojay-resolver-convention plugin (K2 built-in Daemon VM is JDK 21)
+   - DROP `org.gradle.java.installations.auto-download=true` (JDK 21 widely available)
+   - RE-ENABLE `kotlin-compose` plugin alias in app/build.gradle.kts plugins block
+
+3. **Future sprint roadmap**: defer ANY further Kotlin 2.0 / Compose 1.7+ paired migration attempt until both (a) the upstream intrinsic-cascade bug is fixed and (b) Gradle 9.1+ lands for AGP 9.x pairing.
+
+4. **Sprint hardening recommendations**:
+   - Add a Robolectric Compose UI regression test (under `app/src/test/java/.../DestinationInfinityGuardTest.kt`) that exercises the intrinsic-min-height query over Scaffold → LazyColumn → SettingsGroup → HandyListItem end-to-end. Currently this guard only checks visible destination renders; an intrinsic-cascade-specific test would have caught the Sprint 30 HYBRID bug at JVM time.
+   - ALWAYS verify resolved dependency versions via `./gradlew :app:dependencies --configuration debugRuntimeClasspath` before making version-impact claims in commit messages or AGENTS.md closure logs. Sprint 30's incorrect \x22M3 1.4+\x22 doc-claim would have been prevented.
+
+### Worth-of-effort memory rule
+
+Future sprint planning MUST verify resolved dependency versions BEFORE making version-impact claims. The Sprint 30 closure claimed \x22M3 1.4+ via compose-bom 2025.06.00\x22; the actual resolution was M3 1.3.2. The discrepancy was caught at Sprint 30b on-device verify, which is much later in the development cycle than je.gradle dep resolution. Future proc: at every compose-bom bump, run `./gradlew :app:dependencies --configuration debugRuntimeClasspath | grep compose` and confirm Material3 + Compose UI + Compose Foundation version lines up with documentation expectations.
+
+## 📌 Session 2026-07-17 (continued) — Sprint 30b Path H on-device verify follow-on (closed under documented scope)
+
+Sprint 30b Path H formally closes its DOCUMENTED scope: revert Kotlin 2.0+compose-bom 2025.06.00 regression. The 5-file revert (gradle/libs.versions.toml, settings.gradle.kts, gradle.properties, app/build.gradle.kts, HandyApplication.kt) restored the Sprint 17→28 working baseline. JVM gradle verification: `:app:compileDebugKotlin` + `:app:testDebugUnitTest` + `:app:lintDebug` all BUILD SUCCESSFUL. Code-reviewer-minimax-m3 APPROVED. Sprint 30b is closed under this scope.
+
+### On-device verify outcome (A059 Nothing Phone 3a, Android 16, 192.168.1.36:38075)
+
+On-device verify surfaced THREE additional pre-existing issues that are OUT of Sprint 30b's documented scope. Captured as NEXT-SPRINT backlog (Sprint 30c):
+
+### Issue 1 — `Box(Modifier.weight(1f))` Weight+Scope conflict (Sprint 28b-v15 regression, pre-existing)
+
+`handy-android/app/src/main/java/com/handy/app/navigation/AppNavigation.kt:412` added `Modifier.weight(1f)` on the Box wrapping SettingsTabsScreen's `when (selectedTab)` body to bound tab body height (Sprint 28b-v15 closeout). When consumed by parent `AnimatedContent` measure-pass (which provides `Constraints.Infinity` for maxHeight), `Modifier.weight` on a child of a parent receiving Infinity is a Compose Layout invariant violation. Crash stack:
+
+```
+java.lang.IllegalArgumentException: maxWidth(-7) must be >= than minWidth(0)
+    at androidx.compose.ui.node.LayoutNodeLayoutDelegate$MeasurePassDelegate.minIntrinsicHeight
+        (LayoutNodeLayoutDelegate.kt:912)
+    at androidx.compose.material3.ListItemMeasurePolicy.measure-3p2s80s(ListItem.kt:234)
+```
+
+This is the same crash signature as Sprint 30 HYBRID but a DIFFERENT root cause: in Sprint 30 HYBRID the source was Compose UI 1.7.x intrinsic-cascade + K2 IR; here the source is `Modifier.weight` + parent `AnimatedContent` Infinity. The lie propagated by Sprint 30 closure's narrative ("Compose 1.7.x + K1 doesn't trip intrinsic-cascade invariant") was incomplete — issues #1, #2, #3 below were lurking but not detected at JVM-test time because no Robolectric test exercised the parent-chain intrinsic-min-height query.
+
+**Remediation (NOT applied this turn)**: remove `.weight(1f)` from the Box inside the `when (selectedTab)` body inside `SettingsTabsScreen`, replace with `Modifier.fillMaxSize()`. ~1-2 line change. Carry-over: Sprint 30c-#1.
+
+### Issue 2 — WAV dual-write pushFloatArrayFrames un-wired to Rust AAudio thread (Sprint 25a TODO, pre-existing)
+
+`handy-android/app/src/main/java/com/handy/app/audio/RecordingRepository.kt` exposes `pushFloatArrayFrames()` API but NEVER called from the AAudio real-time thread (Rust `pipeline.rs`). The 1964-byte zero-content WAV file from pre-Sprint 30 HYBRID on-device verify was a leftover test artifact (per thinker-with-files-gemini diagnosis), NOT evidence the flow worked. `SettingsStore.recordingDualWriteMode` may also default to false; if it does, the WAV path doesn't open files at all.
+
+Per AGENTS.md Sprint 25a closure log: "TODO(Sprint25b): pushFloatArrayFrames is not yet wired to any Kotlin-side capture pipeline. The AAudio callback lives inside the Rust pipeline.rs real-time thread, so Kotlin cannot plug into it directly."
+
+**Remediation (NOT applied this turn)**: either (a) wire `EngineCallback::on_audio_frames` to push frames from Rust `pipeline.rs` to Kotlin side via SPSC ring buffer, OR (b) move WAV dual-write fully into Rust sink. Either is non-trivial ~half-day piece of work. Carry-over: Sprint 30c-#2. Also audit `SettingsStore.recordingDualWriteMode` default; require explicit user-visible toggle before any pipeline work.
+
+### Issue 3 — Missing Robolectric Compose UI intrinsic-cascade regression test
+
+Neither `DestinationInfinityGuardTest.kt` (Sprint 28b-v14 closeout) nor any unit surface exercises the intrinsic-min-height query over the parent chain (MainActivity -> AppNavigation -> composable -> LazyColumn -> SettingsGroup -> HandyListItem -> ListItem). The Sprint 30 HYBRID bug + Sprint 28b-v15 Issue #1 above went undetected until on-device A059 verify because no JVM test covered the intrinsic-cascade path.
+
+**Remediation (NOT applied this turn)**: add a `@Test` that mounts a real `Scaffold { LazyColumn { item { SettingsGroup { SettingsRow -> HandyListItem } } } }` and calls `intrinsicWidth` / `intrinsicHeight` queries to exercise the measure-pass. Could have caught BOTH Path H's underlying K2 root cause AND the Sprint 28b-v15 weight regression at JVM-time. Carry-over: Sprint 30c-#3.
+
+### Sprint 30b user-driven verification step (CANNOT be done from agent subprocess)
+
+Because synthetic `adb shell input tap` consistently hits NothingLauncher gesture-nav bottom-edge intercept on A059 Android 16 (Sprint 28b documented pattern), all 5 destinations (Home/Settings/About/Models/PostProcess) cannot be navigated from agent subprocesses. **User should run manual finger-tap navigation themselves** before declaring Sprint 30b fully closed:
+
+```
+Manual navigation checklist (A059, freshly launched after this turn's APK install):
+  [ ] Home destination renders without crash (top resumed activity = MainActivity, no SearchLauncher resume)
+  [ ] Settings destination -> tap General / Advanced / Debug tabs without crash
+  [ ] About destination renders without crash
+  [ ] Models destination renders + Empty/synthetic seed state OK
+  [ ] PostProcess destination renders (note: no PostProcess instances unless user enables in Sprint 26)
+```
+
+### Status — Sprint 30b closed at documented scope; Sprint 30c kickoff listed
+
+**Sprint 30b status**: CLOSED under documented scope (K2+compose-bom revert). Code-reviewer-minimax-m3 APPROVED with full-doc carry-over refreshed.
+
+## 📌 Session 2026-07-18 — Sprint 30c closure: KDoc fixes + test + dual-write toggle
+
+Sprint 30c closed the 3 pre-existing issues found during Sprint 30b Path H on-device verify, plus 1 optional enhancement.
+
+### Key findings from explorers (corrected prior assumptions)
+
+**Issue #1 — Box(Modifier.weight(1f)) layout crash**: The weight(1f) wrapper at AppNavigation.kt:497-500 is **PROTECTIVE**, not the cause. It prevents the intrinsic-cascade `maxWidth(-N)` crash from AnimatedContent + M3 ListItemMeasurePolicy. The MainActivity.kt `Column.verticalScroll` wrappers were already correctly removed in the working tree. **Fix**: only the KDoc in SettingsScreen.kt lines 91-94 needed updating (said "removes" → corrected to "keeps as primary defense").
+
+**Issue #2 — WAV dual-write pipeline**: The pipeline is **ALREADY fully wired end-to-end** (Rust RecordingSink → JNI dispatch_audio_frames → Kotlin EngineCallback.onAudioFrames → RecordingRepository.pushFloatArrayFrames). The 1964-byte zero WAV was an artifact of Sprint 30 HYBRID crash (finalizeHeader never ran). **Fix**: only the stale TODO KDoc in HandyApplication.kt lines 60-65 needed updating (claimed pipeline wasn't wired).
+
+**Issue #3 — Robolectric intrinsic-cascade test**: HandyListItem was already migrated from M3 ListItem to custom Surface+Row+Column (Sprint 30c-#4), so the maxWidth(-83) crash cannot reproduce. **Fix**: added regression test `intrinsicCascade_lazyColumnToHandyListItem_rendersWithoutInfinityCrash` in DestinationInfinityGuardTest.kt as prevention guard.
+
+### What landed (1 commit, 15 files changed, +1039/-381)
+
+| # | Item | Files |
+|---|------|-------|
+| 1 | KDoc weight(1f) fix | SettingsScreen.kt:91-94 |
+| 2 | KDoc pipeline fix | HandyApplication.kt:60-65 |
+| 3 | Intrinsic-cascade regression test | DestinationInfinityGuardTest.kt (+1 `@Test`) |
+| 4a | RecordingDualWriteToggle (NEW) | `ui/debug/components/RecordingDualWriteToggle.kt` |
+| 4b | Strings (EN + ES) | `values/strings.xml`, `values-es/strings.xml` |
+| 4c | Mount in Debug panel | DebugContent.kt (import + item) |
+| — | Previous working-tree carry-overs | MainActivity.kt, AppNavigation.kt, HandyListItem.kt, build.gradle.kts, libs.versions.toml, MicrophoneSelector.kt, SoundPicker.kt, VolumeSlider.kt |
+
+### Build state at Sprint 30c closure
+
+| Metric | Value |
+|--------|-------|
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL (0 warnings) |
+| `:app:testDebugUnitTest` | **170 PASS / 0 FAIL / 2 SKIP** (ThemeContrast design-debt + DebugScreen Robolectric quirk) |
+| `:app:lintDebug` | BUILD SUCCESSFUL (0 errors) |
+| `:app:assembleDebug` | BUILD SUCCESSFUL |
+| APK installed | A059 (`192.168.1.36:38075`) via `adb install -r` |
+| Git | `c17a3ed` pushed to `origin/main` |
+
+### Carry-over (future sprints)
+
+1. **AGP 9.x + Kotlin 2.0 paired migration** — still env-blocked (Gradle 9.1 binary not published). Deferred until both Compose UI 1.7.x intrinsic invariant is relaxed upstream AND Gradle 9.1+ lands.
+2. **On-device manual finger-tap navigation** — A059 NothingLauncher gesture-nav intercepts `adb shell input tap`. User must verify Settings → tabs, Debug tile, PostProcess, About with finger taps.
+3. **WAV dual-write reactive mode** — `isDualWriteEnabled` is read once at construction time. Could be made reactive via `() -> Boolean` lambda for mid-session toggle (low priority).
+4. **Worth-of-effort memory rule**: any future dependency or Compose Layout modifier addition affecting `Scaffold → NavHost → AnimatedContent → composable → LazyColumn → ... → ListItem` chain MUST be paired with a Robolectric test exercising intrinsic-min-height query.
