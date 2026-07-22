@@ -1,6 +1,19 @@
-# Handy Android — Progress & Current State
+# Handy Android — Progress & Checkpoints
 
-**Last updated: 2026-07-18 (Sprint 30c closure).
+> **Última actualización:** 22 de Julio de 2026  
+> **Estado:** 🟢 **Pre-release `v1.0.0-alpha3` creada y publicada en GitHub**. Porteo 100% completado, 182 tests unitarios pasando, y verificación automatizada al 100% vía ADB en dispositivo real.
+
+---
+
+## 📌 Checkpoints Recientes
+
+### Pre-release `v1.0.0-alpha3` (22 Julio 2026)
+- **Tag & Release**: `v1.0.0-alpha3` publicada en GitHub con el binario APK compilado (`app-debug.apk`).
+- **Verificación ADB**: 100% de características automatizadas y comprobadas en runtime.
+- **Suite de Pruebas**: 182/182 tests unitarios JVM en verde (`:app:testDebugUnitTest`).
+- **Corrección Fonética**: Corrección de bug de vocales en Soundex dentro de `WordCorrector.kt`.
+
+### Sprint 30c (18 Julio 2026)
 **Current checkpoint:** **Sprint 30c closed end-to-end** — KDoc fixes + intrinsic-cascade regression test + RecordingDualWriteToggle. Build: 170 PASS / 0 FAIL / 2 SKIP, lint 0 errors, APK installed on A059. Git `c17a3ed` pushed to `origin/main`. Next step: AGP 9.x + Kotlin 2.0 paired migration (env-blocked until Gradle 9.1+ publishes) or on-device manual finger-tap navigation verification of all 5 destinations.
 
 > **🚀 Fresh replan (post-Sprint 24)**: The canonical executable plan for Sprints 25 → 29 (with concrete work items, carry-over resolution, lint trajectory expectations, on-device success criteria, and the "Definition of MD3 Native Complete" checklist) lives at the end of `handy-android/MIGRATION_PLAN_MD3.md` under the section "🛠 Corrección suplementaria — Plan ejecutable 2026-07-17 (post-Sprint 24)". This `PROGRESS.md` plus `AGENTS.md` reference that block as the source of truth and inline the per-sprint summary.
