@@ -18,7 +18,10 @@ Integración y porteo de los módulos funcionales clave desarrollados en `androi
 - **`PromptsRepository.kt`** — Repositorio de prompts de sistema personalizables persistido en JSON atómico (`prompts.json`).
 - **`PostProcessor.kt` & `PostProcessProvider.kt`** — Cliente HTTP para refinamiento de texto ASR con servicios LLM compatibles con OpenAI/Ollama, **añadiendo presets para MiniMax y Cohere**.
 
-### 🛠️ Correcciones de Estabilidad y Rendimiento Upstream
+### 🛠️ Correcciones y Paridad de Funcionalidades PC en Android
+- **Burbuja Flotante del Sistema (`FloatingDictationOverlayService.kt`)** — Widget/píldora flotante arrastrable sobre cualquier aplicación usando el permiso `SYSTEM_ALERT_WINDOW` para iniciar/detener dictado (paridad nativa con `overlay.rs` de PC).
+- **Feedback Auditivo de Audio (`AudioFeedbackPlayer.kt`)** — Generación de tonos PCM nativos para eventos de Inicio, Parada y Error en respuesta a las opciones de `SettingsStore` (`audioFeedbackEnabled`, `audioFeedbackVolume`, `soundTheme`).
+- **Seguimiento de Aplicación Objetivo en Historial (`targetPackage`)** — Captura automática del paquete de la app de destino (`EditorInfo.packageName`) desde el IME e inclusión del campo `targetPackage` en `HistoryEntry.kt` (paridad con el tracking de apps activas en PC `utils.rs`).
 - **Paginación & Retención de Historial** — Métodos `enforce_retention_limit(max_entries)` y `clear_unsaved_history()` en `handy-core` (`history/manager.rs`) para prevenir crecimiento desmedido de la BD SQLite (`upstream/history-perf`).
 - **Reproductor de Audio de Historial Único** — Gestión de `playingAudioId` en `HistoryViewModel.kt` para pausar automáticamente cualquier reproductor activo al iniciar otro audio (`upstream #1665`).
 - **Normalización Chino** — Método `normalizeChinesePunctuation` en `WordCorrector.kt` para convertir puntuación ASCII a ancho completo en chino (`upstream/chinese-post-process`).
