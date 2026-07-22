@@ -248,7 +248,25 @@ class WordCorrector(
             }
             result = REPEATED_WORD_PATTERN.matcher(result).replaceAll("$1")
             result = MULTI_SPACE_PATTERN.matcher(result).replaceAll(" ").trim()
+            if (lang?.lowercase()?.startsWith("zh") == true) {
+                result = normalizeChinesePunctuation(result)
+            }
             return result
+        }
+
+        /**
+         * Normalizes half-width ASCII punctuation into Chinese full-width punctuation marks.
+         */
+        @JvmStatic
+        fun normalizeChinesePunctuation(text: String): String {
+            if (text.isEmpty()) return text
+            return text
+                .replace(",", "，")
+                .replace(".", "。")
+                .replace("?", "？")
+                .replace("!", "！")
+                .replace(":", "：")
+                .replace(";", "；")
         }
 
         private fun removeFillerWords(text: String, lang: String?): String {

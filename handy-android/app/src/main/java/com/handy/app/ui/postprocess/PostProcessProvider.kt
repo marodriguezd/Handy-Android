@@ -30,6 +30,14 @@ enum class PostProcessProvider(
         defaultBaseUrl = "http://10.0.2.2:11434/api/chat",
         requiresApiKey = false,
     ),
+    MiniMax(
+        defaultBaseUrl = "https://api.minimax.io/v1/text/chatprocessing_v2",
+        requiresApiKey = true,
+    ),
+    Cohere(
+        defaultBaseUrl = "https://api.cohere.com/v2/chat",
+        requiresApiKey = true,
+    ),
     Custom(
         defaultBaseUrl = "",
         requiresApiKey = false,
@@ -47,6 +55,8 @@ enum class PostProcessProvider(
             "openai" -> OpenAI
             "anthropic" -> Anthropic
             "ollama" -> Ollama
+            "minimax" -> MiniMax
+            "cohere" -> Cohere
             else -> Custom
         }
 

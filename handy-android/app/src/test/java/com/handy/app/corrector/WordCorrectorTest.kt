@@ -35,4 +35,11 @@ class WordCorrectorTest {
         val result = corrector.applyCustomWords(text)
         assertEquals("¿PARAKEET?", result)
     }
+
+    @Test
+    fun testNormalizeChinesePunctuation() {
+        val input = "你好,世界.这是测试?"
+        val output = WordCorrector.filterTranscriptionOutput(input, "zh")
+        assertEquals("你好，世界。这是测试？", output)
+    }
 }

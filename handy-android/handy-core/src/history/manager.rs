@@ -239,4 +239,33 @@ impl HistoryManager {
         info!("Updated history entry {id} (post_processed={})", post_processed.is_some());
         Ok(())
     }
+
+    /// Purges unsaved history entries exceeding max_entries to prevent unlimited DB growth.
+    pub fn enforce_retention_limit(&self, max_entries: usize) -> Result<usize, HistoryError> {
+        let db = self.db.lock().map_err(|e| {
+            HistoryError::DatabaseError(format!("db lock poisoned: {e}"))
+        })?;
+        let affected = db.execute(
+            "DELETE FROM history WHERE saved = 0 AND id NOT IN (
+                SELECT id FROM history ORDER BY timestamp DESC LIMIT ?1
+            )",
+            params![max_entries as i64],
+        ).map_err(|e| HistoryError::DatabaseError(format!("enforce_retention_limit: {e}")))?;
+
+        if affected > 0 {
+            info!("Pruned {affected} old history entries beyond retention limit of {max_entries}");
+        }
+        Ok(affected)
+    }
+
+    /// Deletes all unsaved history entries from the database.
+    pub fn clear_unsaved_history(&self) -> Result<usize, HistoryError> {
+        let db = self.db.lock().map_err(|e| {
+            HistoryError::DatabaseError(format!("db lock poisoned: {e}"))
+        })?;
+        let affected = db.execute("DELETE FROM history WHERE saved = 0", [])
+            .map_err(|e| HistoryError::DatabaseError(format!("clear_unsaved_history: {e}")))?;
+        info!("Cleared all {affected} unsaved history entries");
+        Ok(affected)
+    }
 }
