@@ -14,6 +14,7 @@ data class HistoryEntry(
     val timestamp: Long,
     val isSaved: Boolean,
     val audioPath: String?,
+    val targetPackage: String? = null,
 ) {
     companion object {
         fun fromJsonArray(json: String): List<HistoryEntry> {
@@ -32,6 +33,8 @@ data class HistoryEntry(
                         isSaved = obj.getBoolean("is_saved"),
                         audioPath = if (obj.isNull("audio_path")) null
                             else obj.optString("audio_path"),
+                        targetPackage = if (obj.has("target_package") && !obj.isNull("target_package"))
+                            obj.optString("target_package") else null,
                     )
                 )
             }

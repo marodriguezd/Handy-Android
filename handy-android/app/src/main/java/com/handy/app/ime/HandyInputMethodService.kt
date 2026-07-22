@@ -109,6 +109,10 @@ class HandyInputMethodService :
     @Volatile
     private var lastInputConnection: InputConnection? = null
 
+    @Volatile
+    var lastTargetPackage: String? = null
+        private set
+
     /**
      * Height in pixels of the visible IME content panel, measured
      * dynamically via `onGloballyPositioned` and consumed by
@@ -199,6 +203,7 @@ class HandyInputMethodService :
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         lastInputConnection = currentInputConnection
+        lastTargetPackage = attribute?.packageName
         engineViewModel.clearPartialText()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }
