@@ -172,7 +172,7 @@ class FloatingDictationOverlayService : Service(),
 
 @Composable
 fun FloatingOverlayContent(
-    audioFeedbackPlayer: AudioFeedbackPlayer?,
+    audioFeedbackPlayer: AudioFeedbackPlayer?
 ) {
     var isRecording by remember { mutableStateOf(false) }
 
