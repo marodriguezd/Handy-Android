@@ -1824,3 +1824,51 @@ Sprint 30c closed the 3 issues from the Sprint 30b Path H on-device verify backl
 | Git | `c17a3ed` pushed to `origin/main` |
 
 **Carry-over**: AGP 9.x + Kotlin 2.0 migration (env-blocked); on-device manual finger-tap verification.
+
+---
+
+##  Session 2026-07-22 — Cross-platform parity batch: ASR language, acceleration backend, post-processor roles, Silero VAD architecture
+
+Continuation of the in-progress turn that was interrupted. Implemented four cross-platform parity fixes aligning Android with the desktop/Tauri source of truth.
+
+### What shipped
+
+| # | Item | Files |
+|---|------|-------|
+| 1 | Post-Processor LLM roles | `postprocess/PostProcessor.kt` |
+| 2 | ASR language Android → Rust | `SettingsStore.kt`, `EngineBridge.kt`, `EngineViewModel.kt`, `RecognizeActivity.kt`, `FloatingDictationOverlayService.kt`, `HandyVoiceRecognitionService.kt`, `transcription/periodic.rs`, `transcription/worker.rs`, `jni_bridge.rs` |
+| 3 | Acceleration backend wiring | `transcription/engine.rs`, `jni_bridge.rs`, `EngineBridge.kt`, `EngineViewModel.kt`, `SettingsScreen.kt`, `MainActivity.kt` |
+| 4 | Silero VAD architecture (feature-gated) | `Cargo.toml`, `audio/vad_silero.rs`, `audio/mod.rs`, `audio/pipeline.rs` |
+
+### Issue #1 — Post-Processor LLM roles
+- `PostProcessor` now sends separate `system` and `user` messages, matching the desktop/Tauri `llm_client.rs` pattern.
+
+### Issue #2 — ASR language from Android → Rust
+- Added `SettingsStore.selectedLanguage` (default `"auto"`).
+- Changed `EngineBridge.nativeStartRecording` signature to accept a language string.
+- Updated `EngineViewModel`, `RecognizeActivity`, `FloatingDictationOverlayService`, and `HandyVoiceRecognitionService` to pass the selected language.
+- Plumbed the language through `EngineState.selected_language` into `TranscriptionEngine::run`, `start_stream`, and `start_periodic`.
+
+### Issue #3 — Acceleration backend wiring
+- Added `backend` field + `set_backend()` to Rust `TranscriptionEngine`; `load_model()` now uses `self.backend`.
+- Added `EngineBridge.nativeSetAccelerationBackend(token: String)` and the JNI binding.
+- Maps: `CPU → Backend::Cpu`, `Vulkan → Backend::Vulkan`, `NNAPI → Backend::Cpu` (with a clarifying comment).
+- Added `EngineViewModel.applyAccelerationBackend(...)` which sets the backend and reloads the model only if loaded **and** not currently recording.
+- Updated `SettingsScreen` and `MainActivity` to propagate `EngineViewModel` so the UI can apply backend changes immediately.
+
+### Issue #4 — Silero VAD architecture
+- Added disabled-by-default Cargo feature `silero` in `Cargo.toml`.
+- Added `src/audio/vad_silero.rs` implementing the existing `VoiceActivityDetector` trait, with a placeholder inference path that falls back to `EnergyVad`.
+- Wired `AudioPipeline::new()` to instantiate `SileroVad` only when the feature is enabled; `EnergyVad` remains the default.
+
+### Validation
+- **Code-reviewer-kimi**: reviewed twice, final pass approved with minor caveats.
+- **Rust `cargo check`**: blocked by environment — `cmake` not installed and `transcribe-cpp-sys` build script fails; this is an environment/CI issue, not a code regression.
+- **Kotlin `:app:compileDebugKotlin`**: blocked by environment — AIDL process fails to start (`'/root/android-sdk/build-tools/35.0.0/aidl'`).
+- **Unit tests**: blocked by the same AIDL environment failure.
+- No code-level compile errors were reported by the reviewers. The build blockers are missing host tooling (`cmake`, `aidl`) and need to be resolved in the CI/development environment before the next verification pass.
+
+### Carry-over to next session
+1. Resolve host tooling (`cmake`, Android SDK `aidl`) so `cargo check` and `:app:compileDebugKotlin` can run.
+2. Re-run Rust `cargo check` (with and without `--features silero`) and Kotlin compile/tests.
+3. On-device verify backend change + language selection + post-processor roles + VAD behavior on A059.

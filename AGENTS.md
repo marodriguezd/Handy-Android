@@ -2240,3 +2240,53 @@ Sprint 30c closed the 3 pre-existing issues found during Sprint 30b Path H on-de
 2. **On-device manual finger-tap navigation** — A059 NothingLauncher gesture-nav intercepts `adb shell input tap`. User must verify Settings → tabs, Debug tile, PostProcess, About with finger taps.
 3. **WAV dual-write reactive mode** — `isDualWriteEnabled` is read once at construction time. Could be made reactive via `() -> Boolean` lambda for mid-session toggle (low priority).
 4. **Worth-of-effort memory rule**: any future dependency or Compose Layout modifier addition affecting `Scaffold → NavHost → AnimatedContent → composable → LazyColumn → ... → ListItem` chain MUST be paired with a Robolectric test exercising intrinsic-min-height query.
+
+##  Session 2026-07-22 — Cross-platform parity batch: ASR language, acceleration backend, post-processor roles, Silero VAD architecture
+
+Continuation of the in-progress turn that was interrupted. Implemented four cross-platform parity fixes aligning Android with the desktop/Tauri source of truth.
+
+### Issue #1 — Post-Processor LLM roles (`PostProcessor.kt`)
+- Kotlin `PostProcessor` now sends separate `system` and `user` messages, matching the desktop/Tauri `llm_client.rs` pattern.
+
+### Issue #2 — ASR language from Android → Rust
+- Added `SettingsStore.selectedLanguage` (default `"auto"`).
+- Changed `EngineBridge.nativeStartRecording` signature to accept a language string.
+- Updated `EngineViewModel`, `RecognizeActivity`, `FloatingDictationOverlayService`, and `HandyVoiceRecognitionService` to pass the selected language.
+- Plumbed the language through `EngineState.selected_language` into `TranscriptionEngine::run`, `start_stream`, and `start_periodic`.
+
+### Issue #3 — Acceleration backend wiring
+- Added `backend` field + `set_backend()` to Rust `TranscriptionEngine`; `load_model()` now uses `self.backend`.
+- Added `EngineBridge.nativeSetAccelerationBackend(token: String)` and the JNI binding.
+- Maps: `CPU → Backend::Cpu`, `Vulkan → Backend::Vulkan`, `NNAPI → Backend::Cpu` (with a clarifying comment).
+- Added `EngineViewModel.applyAccelerationBackend(...)` which sets the backend and reloads the model only if loaded **and** not currently recording.
+- Updated `SettingsScreen` and `MainActivity` to propagate `EngineViewModel` so the UI can apply backend changes immediately.
+
+### Issue #4 — Silero VAD architecture
+- Added disabled-by-default Cargo feature `silero` in `Cargo.toml`.
+- Added `src/audio/vad_silero.rs` implementing the existing `VoiceActivityDetector` trait, with a placeholder inference path that falls back to `EnergyVad`.
+- Wired `AudioPipeline::new()` to instantiate `SileroVad` only when the feature is enabled; `EnergyVad` remains the default.
+
+### Files touched
+- `handy-android/handy-core/src/transcription/engine.rs`
+- `handy-android/handy-core/src/jni_bridge.rs`
+- `handy-android/handy-core/src/transcription/periodic.rs`
+- `handy-android/handy-core/src/transcription/worker.rs`
+- `handy-android/handy-core/src/audio/vad_silero.rs`
+- `handy-android/handy-core/src/audio/mod.rs`
+- `handy-android/handy-core/src/audio/pipeline.rs`
+- `handy-android/handy-core/Cargo.toml`
+- `handy-android/app/src/main/java/com/handy/app/SettingsStore.kt`
+- `handy-android/app/src/main/java/com/handy/app/bridge/EngineBridge.kt`
+- `handy-android/app/src/main/java/com/handy/app/viewmodel/EngineViewModel.kt`
+- `handy-android/app/src/main/java/com/handy/app/ui/recognize/RecognizeActivity.kt`
+- `handy-android/app/src/main/java/com/handy/app/service/FloatingDictationOverlayService.kt`
+- `handy-android/app/src/main/java/com/handy/app/service/HandyVoiceRecognitionService.kt`
+- `handy-android/app/src/main/java/com/handy/app/ui/settings/SettingsScreen.kt`
+- `handy-android/app/src/main/java/com/handy/app/MainActivity.kt`
+
+### Validation
+- **Code-reviewer-kimi**: reviewed twice, final pass approved with minor caveats.
+- **Rust `cargo check`**: blocked by environment — `cmake` not installed and `transcribe-cpp-sys` build script fails; this is an environment/CI issue, not a code regression.
+- **Kotlin `:app:compileDebugKotlin`**: blocked by environment — AIDL process fails to start (`'/root/android-sdk/build-tools/35.0.0/aidl'`).
+- **Unit tests**: blocked by the same AIDL environment failure.
+- No code-level compile errors were reported by the reviewers. The build blockers are missing host tooling (`cmake`, `aidl`) and need to be resolved in the CI/development environment before the next verification pass.
