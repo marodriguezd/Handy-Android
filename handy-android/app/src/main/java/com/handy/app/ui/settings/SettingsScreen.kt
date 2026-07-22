@@ -169,6 +169,21 @@ fun GeneralSettingsContent(
                         )
                     }
                 )
+                SettingsRowDivider()
+                var fillerEnabled by remember { mutableStateOf(app.settingsStore.fillerWordsEnabled) }
+                SettingsRow(
+                    title = "Eliminar Muletillas",
+                    subtitle = "Filtra automáticamente palabras de relleno (uh, um, ehm, este, o sea) durante la transcripción",
+                    trailing = {
+                        Switch(
+                            checked = fillerEnabled,
+                            onCheckedChange = { checked ->
+                                fillerEnabled = checked
+                                app.settingsStore.fillerWordsEnabled = checked
+                            }
+                        )
+                    }
+                )
             }
         }
 

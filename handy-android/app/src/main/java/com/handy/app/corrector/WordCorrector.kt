@@ -229,14 +229,23 @@ class WordCorrector(
         private val MULTI_SPACE_PATTERN = Pattern.compile("\\s{2,}")
 
         /**
-         * Cleans transcription output by removing filler words, collapsing stutters,
+         * Cleans transcription output by removing filler words (if enabled), collapsing stutters,
          * and removing redundant spaces.
          */
         @JvmStatic
-        fun filterTranscriptionOutput(text: String?, lang: String?): String {
+        @JvmOverloads
+        fun filterTranscriptionOutput(
+            text: String?,
+            lang: String?,
+            enableFillerRemoval: Boolean = true
+        ): String {
             if (text.isNullOrEmpty()) return text.orEmpty()
 
-            var result = removeFillerWords(text, lang)
+            var result = if (enableFillerRemoval) {
+                removeFillerWords(text, lang)
+            } else {
+                text
+            }
             result = REPEATED_WORD_PATTERN.matcher(result).replaceAll("$1")
             result = MULTI_SPACE_PATTERN.matcher(result).replaceAll(" ").trim()
             return result

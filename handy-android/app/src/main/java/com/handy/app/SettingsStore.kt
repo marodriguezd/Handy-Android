@@ -33,6 +33,10 @@ class SettingsStore(context: Context) {
         get() = prefs.getStringSet("custom_words", emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet("custom_words", value).apply()
 
+    var fillerWordsEnabled: Boolean
+        get() = prefs.getBoolean("filler_words_enabled", true)
+        set(value) = prefs.edit().putBoolean("filler_words_enabled", value).apply()
+
     var shizukuEnabled: Boolean
         get() = prefs.getBoolean("shizuku_enabled", false)
         set(value) = prefs.edit().putBoolean("shizuku_enabled", value).apply()

@@ -100,7 +100,9 @@ class HandyVoiceRecognitionService : RecognitionService() {
     fun onResults(rawText: String, lang: String? = null, customWords: List<String> = emptyList()) {
         mainHandler.post {
             val cb = currentCallback ?: return@post
-            val filtered = WordCorrector.filterTranscriptionOutput(rawText, lang)
+            val app = applicationContext as? com.handy.app.HandyApplication
+            val fillerEnabled = app?.settingsStore?.fillerWordsEnabled ?: true
+            val filtered = WordCorrector.filterTranscriptionOutput(rawText, lang, enableFillerRemoval = fillerEnabled)
             val corrector = WordCorrector(customWords)
             val processed = corrector.applyCustomWords(filtered)
 
