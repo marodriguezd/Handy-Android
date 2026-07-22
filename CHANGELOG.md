@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.3.0-preview (Handy Android — Feature Porting from android_transcribe_app, 22 Julio 2026)
+
+Integración y porteo de los módulos funcionales clave desarrollados en `android_transcribe_app` hacia `Handy-Android`:
+
+### 🎤 Servicio de Voz del Sistema (System SpeechRecognizer)
+- **`HandyVoiceRecognitionService.kt`** — Implementación de `android.speech.RecognitionService` que permite a teclados del sistema (Gboard, SwiftKey) y aplicaciones externas solicitar dictado offline mediante `SpeechRecognizer`.
+- **`RecognizeActivity.kt`** — Interfaz nativa en Jetpack Compose (`ModalBottomSheet`) activada por el Intent `android.speech.action.RECOGNIZE_SPEECH`, con indicador VAD en tiempo real, estado de procesamiento y vista previa.
+- **`AndroidManifest.xml`** — Registro oficial de servicios e intents para integración transparente en todo el SO Android.
+
+### 📚 Diccionario Personalizado & Corrector Fonético (WordCorrector)
+- **`WordCorrector.kt`** — Motor de corrección fonética en Kotlin que combina el algoritmo **Soundex** y la distancia **Levenshtein** normalizada para reemplazar transcripciones erróneas por palabras del usuario, preservando puntuación y mayúsculas/minúsculas. Incluye filtro de muletillas ("uh", "um", "ehm", "este", "o sea") y contracción de tartamudeos.
+- **`DictionaryScreen.kt`** — Pantalla visual en Jetpack Compose para gestionar palabras y términos técnicos.
+- **`SettingsStore.kt` & `SettingsScreen.kt`** — Persistencia de palabras en `SharedPreferences` e integración de la sección "Diccionario & Corrección" en los Ajustes Generales.
+
+### 🤖 Post-Procesamiento Multi-Prompt LLM
+- **`PromptsRepository.kt`** — Repositorio de prompts de sistema personalizables persistido en JSON atómico (`prompts.json`).
+- **`PostProcessor.kt`** — Cliente HTTP para refinamiento de texto ASR con servicios LLM compatibles con OpenAI/Ollama (Ollama, LM Studio, Groq, OpenAI).
+
+---
+
 ## v0.2.0-preview (Handy Android — Second Pre-Release, 17 Julio 2026)
 
 > **Nota sobre versionado:** el codebase interno `versionName="1.0.0-alpha2"` estuvo en uso desde Sprint 16 (cuando se bumpó de alpha1 a alpha2 para reflejar el started-MD3 work) pero **nunca llegó a publicarse** como CHANGELOG entry ni como GitHub release. `v0.2.0-preview` es el segundo pre-release público bajo este naming scheme (mismo esquema `-preview` que v0.1.0-preview). Los `v1.x.0-alpha*` entries arriba (v1.2.0-alpha, v1.1.0-alpha4, etc.) corresponden al fork de PC sincronizado antes de la separación Android-only en Julio 2026 y NO están en línea semver directa con este.

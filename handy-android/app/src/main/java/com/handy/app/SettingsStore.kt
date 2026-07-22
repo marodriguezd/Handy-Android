@@ -29,6 +29,10 @@ class SettingsStore(context: Context) {
     )
     val dynamicColorFlow: StateFlow<Boolean> = _dynamicColorFlow.asStateFlow()
 
+    var customWords: Set<String>
+        get() = prefs.getStringSet("custom_words", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("custom_words", value).apply()
+
     var shizukuEnabled: Boolean
         get() = prefs.getBoolean("shizuku_enabled", false)
         set(value) = prefs.edit().putBoolean("shizuku_enabled", value).apply()

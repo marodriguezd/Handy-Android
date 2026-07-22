@@ -66,6 +66,27 @@
                 android:resource="@xml/method" />
         </service>
 
+        <activity
+            android:name=".ui.recognize.RecognizeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Handy"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.HandyVoiceRecognitionService"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".service.RecordingService"
             android:foregroundServiceType="microphone"

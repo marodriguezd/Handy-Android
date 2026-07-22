@@ -27,11 +27,15 @@
 
 ---
 
-## 🗓️ Current State — Sprint 30c closed (Julio 18, 2026). Next: AGP 9.x / Kotlin 2.0 or Sprint 30d.
+## 🗓️ Current State — Feature Porting from android_transcribe_app completed (Julio 22, 2026).
 
-> **🟢 Pre-Sprint-26 cleanup 100% complete**. All 5 batches shipped; build is green at 87 PASS / 0 FAIL / 0 lint errors. Local commits pending user-push approval per AGENTS.md auth note (Plan D in the release-body-update ladder sections below). El Sprint 25 (Advanced Settings refinement + Retry backend binding) ya no requiere Batch C/D/E pre-work — puede arrancar cuando el usuario dé luz verde.
+> **🟢 Porteo de android_transcribe_app 100% completado**. Se han integrado:
+> - `HandyVoiceRecognitionService` + `RecognizeActivity` (Compose `ModalBottomSheet` para `android.speech.RecognitionService` e Intent `RECOGNIZE_SPEECH`).
+> - `WordCorrector.kt` (Soundex + Levenshtein + N-gramas + muletillas) + `DictionaryScreen.kt` + `SettingsStore` / `SettingsScreen` integration.
+> - `PromptsRepository.kt` + `PostProcessor.kt` (LLM multi-prompt post-processing para APIs compatibles con OpenAI/Ollama).
+> - `WordCorrectorTest.kt` (Unit tests pasando).
 
-### ✅ Completed — Sprints 16 → 24 (full MD3 backbone + lint sweep + History MD3) + pre-Sprint-26 Batches A + B + C + D + E
+### ✅ Completed — Sprints 16 → 30c + Porting Batch (android_transcribe_app)
 
 #### Pre-Sprint-26 Batch A — Hygiene (`2425d7d`)
 

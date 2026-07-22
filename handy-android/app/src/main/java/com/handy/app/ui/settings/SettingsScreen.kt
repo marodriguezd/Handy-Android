@@ -145,6 +145,33 @@ fun GeneralSettingsContent(
             }
         }
 
+        // ── Custom Dictionary & Phonetic Corrector ──
+        item {
+            var showDictionarySheet by remember { mutableStateOf(false) }
+
+            if (showDictionarySheet) {
+                androidx.compose.material3.ModalBottomSheet(
+                    onDismissRequest = { showDictionarySheet = false }
+                ) {
+                    DictionaryScreen()
+                }
+            }
+
+            SettingsGroup(title = "Diccionario & Corrección") {
+                SettingsRow(
+                    title = "Diccionario Personalizado",
+                    subtitle = "Gestiona palabras técnicas, nombres y acrónimos (${app.settingsStore.customWords.size} palabras)",
+                    onClick = { showDictionarySheet = true },
+                    trailing = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Abrir diccionario"
+                        )
+                    }
+                )
+            }
+        }
+
         // ── Active model ──
         item {
             SettingsGroup(title = stringResource(R.string.settings_model_section_label)) {
