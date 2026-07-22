@@ -134,24 +134,24 @@ class WordCorrector(
 
     private fun soundex(s: String): String {
         if (s.isEmpty()) return ""
-        val result = CharArray(4) { '0' }
-        result[0] = s[0].uppercaseChar()
-        var resultIdx = 1
-        var prevCode = '0'
-        for (i in 1 until s.length) {
-            if (resultIdx >= 4) break
-            val c = s[i].uppercaseChar()
-            val code = soundexCode(c)
-            if (code != '0') {
-                if (code != prevCode) {
-                    result[resultIdx++] = code
-                    prevCode = code
-                }
-            } else {
-                prevCode = '0'
+        val first = s[0].uppercaseChar()
+        val tail = s.substring(1)
+        val encoded = StringBuilder().append(first)
+        var lastCode = soundexCode(first)
+
+        for (ch in tail) {
+            val lower = ch.lowercaseChar()
+            if (lower in listOf('a', 'e', 'i', 'o', 'u', 'y')) {
+                lastCode = '0'
+                continue
+            }
+            val code = soundexCode(ch)
+            if (code != '0' && code != lastCode) {
+                encoded.append(code)
+                lastCode = code
             }
         }
-        return String(result)
+        return encoded.toString().padEnd(4, '0').take(4)
     }
 
     private fun soundexCode(c: Char): Char {
