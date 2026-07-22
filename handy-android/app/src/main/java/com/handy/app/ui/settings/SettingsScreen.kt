@@ -10,9 +10,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import rikka.shizuku.Shizuku
@@ -34,8 +46,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -72,26 +86,15 @@ import com.handy.app.viewmodel.SettingsViewModel
  *
  * Sprint 30c-#1 migration: outer body migrated from
  *   `Column(modifier = modifier.fillMaxSize()) { ... }` to
- *   `LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.lg)) { item { ... } }`.
+ *   `LazyColumn(...)`.
  *
- * Why LazyColumn:
- *   - Compose's `verticalScroll` modifier on a Column trips the runtime
- *     check `"Vertically scrollable component was measured with an
- *     infinity maximum height constraints"` whenever the parent
- *     constraint chain supplies `Constraints.Infinity` for maxHeight.
- *     This is exactly what `AnimatedContent`'s measure-pass does during
- *     destination transitions AND during intrinsic-min-height queries
- *     that propagate through the parent chain
- *     (Scaffold → NavHost → AnimatedContent → composable → SettingsTabsScreen
- *      → Column → verticalScroll).
- *   - LazyColumn measures only the items visible in the viewport, so it
- *     accepts `Infinity` bounds gracefully. This mirrors the canonical
- *     fix that Sprint 28c-#1 (PostProcessScreen) and Sprint 28c-#2
- *     (AboutContent) used to close the same family of crash pre-Sprint 29.
-     *   - Companion fix in AppNavigation.kt **keeps** the `Modifier.weight(1f)`
-     *     wrapper in `SettingsTabsScreen` as the **primary defense** against
-     *     the intrinsic-query cascade (produces `maxWidth(-N)` at
-     *     `ListItemMeasurePolicy.measure`). See AGENTS.md Sprint 30c closure.
+ * Settings redesign (2026-07-22):
+ *   - Content is centered and capped at 640 dp to mirror the PC sidebar's
+ *     `max-w-3xl` centered column.
+ *   - Groups are rendered as compact outlined cards with reduced internal
+ *     padding and optional header icons.
+ *   - `LazyColumn` keeps its crash-safe role; the `SettingsTabsScreen`
+ *     `Modifier.weight(1f)` wrapper is left untouched.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,12 +118,19 @@ fun GeneralSettingsContent(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(Spacing.lg),
+        contentPadding = PaddingValues(Spacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.lg),
     ) {
+        val groupModifier = Modifier.widthIn(max = 640.dp).fillMaxWidth()
+
         // ── Audio group ──
         item {
-            SettingsGroup(title = stringResource(R.string.settings_audio_section_label)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_audio_section_label),
+                icon = Icons.Default.Mic,
+                modifier = groupModifier,
+            ) {
                 MicrophoneSelector(
                     selected = app.settingsStore.selectedMicrophone,
                     onSelect = { app.settingsStore.selectedMicrophone = it },
@@ -157,23 +167,30 @@ fun GeneralSettingsContent(
                 }
             }
 
-            SettingsGroup(title = "Diccionario & Corrección") {
+            SettingsGroup(
+                title = stringResource(R.string.settings_section_dictionary),
+                icon = Icons.Default.Book,
+                modifier = groupModifier,
+            ) {
                 SettingsRow(
-                    title = "Diccionario Personalizado",
-                    subtitle = "Gestiona palabras técnicas, nombres y acrónimos (${app.settingsStore.customWords.size} palabras)",
+                    title = stringResource(R.string.settings_custom_dictionary_title),
+                    subtitle = stringResource(
+                        R.string.settings_custom_dictionary_subtitle,
+                        app.settingsStore.customWords.size,
+                    ),
                     onClick = { showDictionarySheet = true },
                     trailing = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Abrir diccionario"
+                            contentDescription = stringResource(R.string.content_desc_open_dictionary),
                         )
                     }
                 )
                 SettingsRowDivider()
                 var fillerEnabled by remember { mutableStateOf(app.settingsStore.fillerWordsEnabled) }
                 SettingsRow(
-                    title = "Eliminar Muletillas",
-                    subtitle = "Filtra automáticamente palabras de relleno (uh, um, ehm, este, o sea) durante la transcripción",
+                    title = stringResource(R.string.settings_filler_removal_title),
+                    subtitle = stringResource(R.string.settings_filler_removal_subtitle),
                     trailing = {
                         Switch(
                             checked = fillerEnabled,
@@ -189,7 +206,11 @@ fun GeneralSettingsContent(
 
         // ── Active model ──
         item {
-            SettingsGroup(title = stringResource(R.string.settings_model_section_label)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_model_section_label),
+                icon = Icons.Default.Memory,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 ModelSettingsCard(
                     currentModelId = app.settingsStore.selectedModel,
                     onUnload = {
@@ -201,7 +222,11 @@ fun GeneralSettingsContent(
 
         // ── Keyboard shortcuts / IME shortcuts ──
         item {
-            SettingsGroup(title = stringResource(R.string.settings_shortcuts_label)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_shortcuts_label),
+                icon = Icons.Default.Keyboard,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 SettingsRow(
                     title = stringResource(R.string.settings_switch_keyboard),
                     trailing = {
@@ -222,7 +247,11 @@ fun GeneralSettingsContent(
 
         // ── Text injection (Shizuku) ──
         item {
-            SettingsGroup(title = stringResource(R.string.settings_injection)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_injection),
+                icon = Icons.Default.Share,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 if (!BuildConfig.DEBUG) {
                     SettingsRow(
                         title = stringResource(R.string.settings_shizuku),
@@ -257,7 +286,11 @@ fun GeneralSettingsContent(
 
         // ── Battery optimization ──
         item {
-            SettingsGroup(title = stringResource(R.string.settings_battery)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_battery),
+                icon = Icons.Default.BatteryFull,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 SettingsRow(
                     title = stringResource(R.string.settings_battery_exemption),
                     subtitle = stringResource(R.string.settings_battery_exemption_description),
@@ -412,11 +445,16 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(Spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+        contentPadding = PaddingValues(Spacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xl),
     ) {
         item {
-            SettingsGroup(title = stringResource(R.string.settings_section_aplicacion)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_section_application),
+                icon = Icons.Default.Science,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 SettingsRow(
                     title = stringResource(R.string.settings_experimental_features),
                     subtitle = stringResource(R.string.settings_experimental_features_desc),
@@ -430,7 +468,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
             }
         }
         item {
-            SettingsGroup(title = stringResource(R.string.settings_section_salida)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_section_output),
+                icon = Icons.AutoMirrored.Filled.Send,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 SettingsRow(
                     title = stringResource(R.string.settings_auto_send),
                     trailing = {
@@ -471,7 +513,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
             }
         }
         item {
-            SettingsGroup(title = stringResource(R.string.settings_section_transcripcion)) {
+            SettingsGroup(
+                title = stringResource(R.string.settings_section_transcription),
+                icon = Icons.Default.Mic,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 SettingsRow(
                     title = stringResource(R.string.settings_vad),
                     subtitle = stringResource(R.string.settings_vad_desc),
@@ -500,7 +546,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
         // Compose-side direct read of [SettingsStore] flows (now hoisted
         // to the function top per the Sprint 30c-#1 LazyColumn migration).
         item {
-            SettingsGroup(title = stringResource(R.string.advanced_section_history_retention)) {
+            SettingsGroup(
+                title = stringResource(R.string.advanced_section_history_retention),
+                icon = Icons.Default.History,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 HandyDropdown(
                     label = stringResource(R.string.advanced_history_limit_title),
                     options = listOf(
@@ -514,7 +564,9 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                     ),
                     selected = historyLimit,
                     onSelect = { app.settingsStore.historyLimit = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 )
                 SettingsRowDivider()
                 HandyDropdown(
@@ -528,7 +580,9 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                     ),
                     selected = retentionPeriod,
                     onSelect = { app.settingsStore.retentionPeriod = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 )
             }
         }
@@ -537,7 +591,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
         // (customWordsRaw + accelerationBackend state vars hoisted to
         // function top; see the Sprint 30c-#1 note above.)
         item {
-            SettingsGroup(title = stringResource(R.string.advanced_section_experimental_features)) {
+            SettingsGroup(
+                title = stringResource(R.string.advanced_section_experimental_features),
+                icon = Icons.Default.Bolt,
+                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+            ) {
                 SettingsRow(
                     title = stringResource(R.string.advanced_custom_words_title),
                     subtitle = stringResource(R.string.advanced_custom_words_subtitle),
@@ -548,8 +606,10 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                     minLines = 3,
                     maxLines = 5,
                     enabled = uiState.experimentalEnabled,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Buffy, iPhone, Llama") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                    placeholder = { Text(stringResource(R.string.advanced_custom_words_placeholder)) },
                 )
                 SettingsRowDivider()
                 SettingsRow(
@@ -565,7 +625,9 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                     selected = accelerationBackend,
                     onSelect = { app.settingsStore.accelerationBackend = it },
                     enabled = uiState.experimentalEnabled,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 )
                 SettingsRowDivider()
                 SettingsRow(

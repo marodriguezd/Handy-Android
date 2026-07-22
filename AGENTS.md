@@ -27,13 +27,13 @@
 
 ---
 
-## 🗓️ Current State — Feature Porting from android_transcribe_app completed (Julio 22, 2026).
+## 🗓️ Current State — Draft Release & MD3 UI Reconstruction (Julio 22, 2026).
 
-> **🟢 Porteo de android_transcribe_app 100% completado**. Se han integrado:
-> - `HandyVoiceRecognitionService` + `RecognizeActivity` (Compose `ModalBottomSheet` para `android.speech.RecognitionService` e Intent `RECOGNIZE_SPEECH`).
-> - `WordCorrector.kt` (Soundex + Levenshtein + N-gramas + muletillas) + `DictionaryScreen.kt` + `SettingsStore` / `SettingsScreen` integration.
-> - `PromptsRepository.kt` + `PostProcessor.kt` (LLM multi-prompt post-processing para APIs compatibles con OpenAI/Ollama).
-> - `WordCorrectorTest.kt` (Unit tests pasando).
+> **🟢 Reconstrucción Material Design 3 100% Completa & Borrador en [`draft.md`](file:///home/marodriguezd/Github/Handy-Android/draft.md)**.
+> - Se ha refinado la UI de la app a Material Design 3 con enrutamiento de insets y componentes adaptativos.
+> - IME (`HandyInputMethodService.kt`) optimizado: cálculo de `touchableRegion` por límites reales de la barra para evitar bloquear toques externos, fallback automático con `switchToPreviousInputMethod()` (API 28+).
+> - Release `v0.9.0` guardada como borrador en [`draft.md`](file:///home/marodriguezd/Github/Handy-Android/draft.md) y capturas actualizadas en `.screenshots/`.
+> - 182 unit tests en `:app:testDebugUnitTest` ejecutándose en PASS (100%).
 
 ### ✅ Completed — Sprints 16 → 30c + Porting Batch (android_transcribe_app)
 

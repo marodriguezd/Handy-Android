@@ -40,14 +40,11 @@
     <string name="settings_shizuku_dialog_title">Shizuku Required</string>
     <string name="settings_shizuku_dialog_message">Shizuku injection requires the Shizuku app to be installed and running. Please install Shizuku from the official source, enable it in developer settings, and grant permission.</string>
     <string name="settings_switch_keyboard">Switch Keyboard</string>
-    <string name="settings_section_aplicacion">APLICACIÓN</string>
     <string name="settings_experimental_features">Experimental Features</string>
     <string name="settings_experimental_features_desc">Enables unstable experimental features</string>
-    <string name="settings_section_salida">SALIDA</string>
     <string name="settings_auto_send">Auto-submit</string>
     <string name="settings_auto_send_disabled">Disabled</string>
     <string name="settings_auto_send_ime">Auto (IME)</string>
-    <string name="settings_section_transcripcion">TRANSCRIPCIÓN</string>
     <string name="settings_vad">Voice Activity Detection</string>
     <string name="settings_vad_desc">Voice activity detection</string>
     <string name="settings_add_final_space">Add Final Space</string>
@@ -143,6 +140,16 @@
     <string name="settings_advanced">Advanced</string>
     <string name="tab_models">Models</string>
     <string name="tab_post_process">Post-Process</string>
+    <string name="settings_section_dictionary">Dictionary &amp; Correction</string>
+    <string name="settings_section_output">Output</string>
+    <string name="settings_section_transcription">Transcription</string>
+    <string name="settings_section_application">Application</string>
+    <string name="settings_custom_dictionary_title">Custom Dictionary</string>
+    <string name="settings_custom_dictionary_subtitle">Manage technical words, names, and acronyms</string>
+    <string name="settings_filler_removal_title">Remove Filler Words</string>
+    <string name="settings_filler_removal_subtitle">Automatically filter filler words during transcription</string>
+    <string name="content_desc_open_dictionary">Open dictionary</string>
+    <string name="advanced_custom_words_placeholder">Buffy, iPhone, Llama</string>
 
     <!-- Device Capability UI -->
     <string name="header_tier_low">LOW (≤ 1.5 GB)</string>

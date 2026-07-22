@@ -49,13 +49,15 @@
     <string name="settings_shizuku_dialog_title">Shizuku requerido</string>
     <string name="settings_shizuku_dialog_message">La inserción con Shizuku requiere que la app Shizuku esté instalada y en ejecución. Por favor instala Shizuku desde la fuente oficial, habilítala en los ajustes de desarrollador y concede el permiso.</string>
     <string name="settings_switch_keyboard">Cambiar teclado</string>
-    <string name="settings_section_aplicacion">APLICACIÓN</string>
-    <string name="settings_section_salida">SALIDA</string>
-    <string name="settings_section_transcripcion">TRANSCRIPCIÓN</string>
+    <string name="settings_section_application">Aplicación</string>
+    <string name="settings_section_output">Salida</string>
+    <string name="settings_section_transcription">Transcripción</string>
     <string name="settings_post_processing">Post-Procesamiento</string>
     <string name="settings_post_processing_desc">Procesa la transcripción con un LLM</string>
     <string name="settings_github">GitHub</string>
     <string name="settings_github_url">github.com/handy-org/handy</string>
+    <string name="content_desc_open_dictionary">Abrir diccionario</string>
+    <string name="advanced_custom_words_placeholder">Buffy, iPhone, Llama</string>
 
     <!-- ─── Common Content Descriptions ─── -->
     <string name="content_desc_toggle">Alternar</string>

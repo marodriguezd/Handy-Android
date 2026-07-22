@@ -67,6 +67,9 @@ import androidx.compose.ui.Modifier
  *  - Subtitle (when present) = `bodyMedium` + `onSurfaceVariant`.
  *  - `Modifier.fillMaxWidth()` retained; layout sizes 100% of available
  *    width regardless of intrinsic cascades.
+ *  - Reduced padding (Settings redesign 2026-07-22): horizontal
+ *    `Spacing.md`, vertical `Spacing.sm` with subtitle / `Spacing.xs`
+ *    without. Keeps rows compact inside the new bordered cards.
  *
  * Backwards compat: `SettingsRow` / `SettingsRowDivider` in
  * [SettingsGroup.kt] still delegate to this file so existing call sites
@@ -97,8 +100,8 @@ fun HandyListItem(
     ) {
         Row(
             modifier = Modifier.padding(
-                horizontal = Spacing.lg,
-                vertical = if (subtitle != null) Spacing.md else Spacing.sm,
+                horizontal = Spacing.md,
+                vertical = if (subtitle != null) Spacing.sm else Spacing.xs,
             ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -142,13 +145,12 @@ fun HandyListItem(
  * [HorizontalDivider] tinted to `outlineVariant` so dark/light follow
  * automatically.
  *
- * NO change vs pre-Sprint 30c — dividers only use `Modifier.padding(start
- * = Spacing.lg)` and `HorizontalDivider`; no SubcomposeLayout cascade risk.
+ * Dividers align with the row content's horizontal padding (`Spacing.md`).
  */
 @Composable
 fun HandyListItemDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(
-        modifier = modifier.padding(start = Spacing.lg),
+        modifier = modifier.padding(start = Spacing.md),
         color = MaterialTheme.colorScheme.outlineVariant,
     )
 }
