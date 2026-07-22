@@ -16,7 +16,12 @@ Integración y porteo de los módulos funcionales clave desarrollados en `androi
 
 ### 🤖 Post-Procesamiento Multi-Prompt LLM
 - **`PromptsRepository.kt`** — Repositorio de prompts de sistema personalizables persistido en JSON atómico (`prompts.json`).
-- **`PostProcessor.kt`** — Cliente HTTP para refinamiento de texto ASR con servicios LLM compatibles con OpenAI/Ollama (Ollama, LM Studio, Groq, OpenAI).
+- **`PostProcessor.kt` & `PostProcessProvider.kt`** — Cliente HTTP para refinamiento de texto ASR con servicios LLM compatibles con OpenAI/Ollama, **añadiendo presets para MiniMax y Cohere**.
+
+### 🛠️ Correcciones de Estabilidad y Rendimiento Upstream
+- **Paginación & Retención de Historial** — Métodos `enforce_retention_limit(max_entries)` y `clear_unsaved_history()` en `handy-core` (`history/manager.rs`) para prevenir crecimiento desmedido de la BD SQLite (`upstream/history-perf`).
+- **Reproductor de Audio de Historial Único** — Gestión de `playingAudioId` en `HistoryViewModel.kt` para pausar automáticamente cualquier reproductor activo al iniciar otro audio (`upstream #1665`).
+- **Normalización Chino** — Método `normalizeChinesePunctuation` en `WordCorrector.kt` para convertir puntuación ASCII a ancho completo en chino (`upstream/chinese-post-process`).
 
 ---
 
