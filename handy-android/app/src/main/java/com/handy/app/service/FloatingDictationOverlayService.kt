@@ -135,8 +135,7 @@ class FloatingDictationOverlayService : Service(),
                     dynamicColorState = dynamicColorState,
                 ) {
                     FloatingOverlayContent(
-                        audioFeedbackPlayer = audioFeedbackPlayer,
-                        onClose = { stopSelf() }
+                        audioFeedbackPlayer = audioFeedbackPlayer
                     )
                 }
             }
@@ -174,7 +173,6 @@ class FloatingDictationOverlayService : Service(),
 @Composable
 fun FloatingOverlayContent(
     audioFeedbackPlayer: AudioFeedbackPlayer?,
-    onClose: () -> Unit
 ) {
     var isRecording by remember { mutableStateOf(false) }
 

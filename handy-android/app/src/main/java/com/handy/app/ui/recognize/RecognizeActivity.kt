@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.handy.app.HandyApplication
 import com.handy.app.R
 import com.handy.app.bridge.EngineBridge
 import com.handy.app.corrector.WordCorrector
@@ -46,7 +47,7 @@ class RecognizeActivity : ComponentActivity() {
         }
 
         setContent {
-            val app = (applicationContext as com.handy.app.HandyApplication)
+            val app = (applicationContext as HandyApplication)
             val themeModeState = app.settingsStore.themeModeFlow.collectAsState()
             val dynamicColorState = app.settingsStore.dynamicColorFlow.collectAsState()
             HandyTheme(
