@@ -1,5 +1,6 @@
 package com.handy.app.ui.debug.components
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,6 +33,7 @@ fun PasteDelaySlider(
         valueRange = 0f..1000f,
         steps = 19, // 0, 50, 100, ... 1000
         enabled = enabled,
-        modifier = modifier,
+        // Standalone slider in Debug screen: fill the parent width.
+        modifier = modifier.fillMaxWidth(),
     )
 }

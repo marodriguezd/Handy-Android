@@ -19,14 +19,15 @@ class WordCorrector(
         val list = mutableListOf<NormalizedEntry>()
         for (word in customWords) {
             if (word.isBlank()) continue
+            val wordCount = word.trim().split(Regex("\\s+")).size
             val normalized = normalize(word)
             if (normalized.isNotEmpty()) {
-                list.add(NormalizedEntry(normalized, word, soundex(normalized)))
+                list.add(NormalizedEntry(normalized, word, soundex(normalized), wordCount))
             }
             if (word.contains("&")) {
                 val expanded = normalizeExpanded(word)
                 if (expanded.isNotEmpty() && expanded != normalized) {
-                    list.add(NormalizedEntry(expanded, word, soundex(expanded)))
+                    list.add(NormalizedEntry(expanded, word, soundex(expanded), wordCount))
                 }
             }
         }
@@ -35,19 +36,25 @@ class WordCorrector(
 
     /**
      * Applies custom word replacements to the input text using N-gram (n=3..1) matching.
+     *
+     * IMPORTANT: a custom entry with `wordCount = k` is only ever compared against a
+     * token window of the same size. Single-word entries (e.g. "Parakeet") no longer
+     * match multi-token windows such as "probando el modelo", which previously caused
+     * greedy over-substitution.
      */
     fun applyCustomWords(text: String?): String {
         if (text.isNullOrBlank()) return text.orEmpty()
         val tokens = text.trim().split(Regex("\\s+")).toTypedArray()
+        val availableNs = entries.map { it.wordCount }.toSortedSet().sortedDescending()
         val result = StringBuilder()
         var i = 0
         while (i < tokens.size) {
             if (result.isNotEmpty()) result.append(' ')
             var matched = false
-            for (n in 3 downTo 1) {
+            for (n in availableNs) {
                 if (i + n > tokens.size) continue
                 val joined = joinWithoutPunct(tokens, i, n)
-                val best = findBestMatch(joined)
+                val best = findBestMatch(joined, n)
                 if (best != null) {
                     val raw = StringBuilder(tokens[i])
                     for (j in i + 1 until i + n) {
@@ -84,13 +91,14 @@ class WordCorrector(
         return sb.toString().lowercase().replace(Regex("[^a-z0-9&]"), "")
     }
 
-    private fun findBestMatch(joined: String): BestMatch? {
+    private fun findBestMatch(joined: String, wordCount: Int): BestMatch? {
         if (joined.isEmpty()) return null
         var best: BestMatch? = null
         var bestScore = threshold
         val joinedSoundex = soundex(joined)
 
         for (entry in entries) {
+            if (entry.wordCount != wordCount) continue
             val maxLen = maxOf(joined.length, entry.length)
             if (maxLen == 0) continue
             val lenDiff = Math.abs(joined.length - entry.length).toDouble() / maxLen.toDouble()
@@ -155,7 +163,7 @@ class WordCorrector(
     }
 
     private fun soundexCode(c: Char): Char {
-        return when (c) {
+        return when (c.uppercaseChar()) {
             'B', 'F', 'P', 'V' -> '1'
             'C', 'G', 'J', 'K', 'Q', 'S', 'X', 'Z' -> '2'
             'D', 'T' -> '3'
@@ -203,7 +211,8 @@ class WordCorrector(
     private data class NormalizedEntry(
         val normalized: String,
         val original: String,
-        val soundexCode: String
+        val soundexCode: String,
+        val wordCount: Int
     ) {
         val length: Int = normalized.length
     }

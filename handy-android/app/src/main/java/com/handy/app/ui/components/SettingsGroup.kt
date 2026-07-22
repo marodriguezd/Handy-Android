@@ -56,7 +56,7 @@ fun SettingsGroup(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(24.dp)
                         .padding(end = Spacing.sm),
                 )
             }

@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 /**
  * MD3-native list item wrapper.
@@ -97,6 +98,7 @@ fun HandyListItem(
     Surface(
         modifier = rowModifier,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 1.dp,
     ) {
         Row(
             modifier = Modifier.padding(

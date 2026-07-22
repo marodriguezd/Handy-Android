@@ -1,5 +1,6 @@
 package com.handy.app.ui.about.components
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -43,7 +44,8 @@ fun LocaleSelector(
         ),
         selected = selected,
         onSelect = onSelect,
-        modifier = modifier,
+        // Standalone dropdown in About screen: fill the parent width.
+        modifier = modifier.fillMaxWidth(),
         enabled = enabled,
     )
 }

@@ -2,6 +2,7 @@ package com.handy.app.ui.components
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -17,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 /**
  * MD3-native `ExposedDropdownMenuBox` wrapper.  Replaces every setting
@@ -47,7 +49,15 @@ fun <T> HandyDropdown(
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { if (enabled) expanded = !expanded },
-        modifier = modifier,
+        // Sprint 30c-#6: do NOT force the dropdown to fill all available
+        // width. Inside `HandyListItem`'s trailing slot a forced
+        // `fillMaxWidth()` consumes the entire parent Row's width and
+        // starves the title/subtitle `Column(weight=1f)` to 0dp,
+        // causing the text to wrap one character per line and producing
+        // the huge empty SettingsGroup card observed on A059.
+        // `widthIn(min = 144.dp)` keeps the field wide enough for typical
+        // labels while letting the outer Row distribute width correctly.
+        modifier = modifier.widthIn(min = 144.dp),
     ) {
         OutlinedTextField(
             value = selectedLabel,

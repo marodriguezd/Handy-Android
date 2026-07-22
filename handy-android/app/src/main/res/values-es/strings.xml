@@ -52,12 +52,14 @@
     <string name="settings_section_application">Aplicación</string>
     <string name="settings_section_output">Salida</string>
     <string name="settings_section_transcription">Transcripción</string>
+    <string name="settings_filler_removal_title">Eliminar muletillas</string>
+    <string name="settings_filler_removal_subtitle">Filtra automáticamente palabras de relleno (uh, um, ehm, este, o sea) durante la transcripción</string>
+    <string name="content_desc_open_dictionary">Abrir diccionario</string>
+    <string name="advanced_custom_words_placeholder">Buffy, iPhone, Llama</string>
     <string name="settings_post_processing">Post-Procesamiento</string>
     <string name="settings_post_processing_desc">Procesa la transcripción con un LLM</string>
     <string name="settings_github">GitHub</string>
     <string name="settings_github_url">github.com/handy-org/handy</string>
-    <string name="content_desc_open_dictionary">Abrir diccionario</string>
-    <string name="advanced_custom_words_placeholder">Buffy, iPhone, Llama</string>
 
     <!-- ─── Common Content Descriptions ─── -->
     <string name="content_desc_toggle">Alternar</string>

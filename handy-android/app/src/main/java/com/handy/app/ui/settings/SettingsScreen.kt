@@ -59,6 +59,7 @@ import com.handy.app.R
 import com.handy.app.ui.components.HandyDropdown
 import com.handy.app.ui.components.HandyInfoDialog
 import com.handy.app.ui.components.HandySegmentedButton
+import com.handy.app.ui.components.HandySwitchRow
 import com.handy.app.ui.components.SettingsGroup
 import com.handy.app.ui.components.SettingsRow
 import com.handy.app.ui.components.SettingsRowDivider
@@ -106,6 +107,7 @@ fun GeneralSettingsContent(
     val app = context.applicationContext as HandyApplication
     val uiState by viewModel.uiState.collectAsState()
     var showShizukuDialog by remember { mutableStateOf(false) }
+    var showDictionarySheet by remember { mutableStateOf(false) }
 
     if (showShizukuDialog) {
         HandyInfoDialog(
@@ -114,6 +116,14 @@ fun GeneralSettingsContent(
             onDismiss = { showShizukuDialog = false },
             okLabel = stringResource(R.string.dialog_ok),
         )
+    }
+
+    if (showDictionarySheet) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showDictionarySheet = false }
+        ) {
+            DictionaryScreen()
+        }
     }
 
     LazyColumn(
@@ -157,16 +167,6 @@ fun GeneralSettingsContent(
 
         // ── Custom Dictionary & Phonetic Corrector ──
         item {
-            var showDictionarySheet by remember { mutableStateOf(false) }
-
-            if (showDictionarySheet) {
-                androidx.compose.material3.ModalBottomSheet(
-                    onDismissRequest = { showDictionarySheet = false }
-                ) {
-                    DictionaryScreen()
-                }
-            }
-
             SettingsGroup(
                 title = stringResource(R.string.settings_section_dictionary),
                 icon = Icons.Default.Book,
@@ -245,14 +245,16 @@ fun GeneralSettingsContent(
             }
         }
 
-        // ── Text injection (Shizuku) ──
-        item {
-            SettingsGroup(
-                title = stringResource(R.string.settings_injection),
-                icon = Icons.Default.Share,
-                modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
-            ) {
-                if (!BuildConfig.DEBUG) {
+        // ── Text injection (Shizuku) — debug-only; hidden in release because the
+        // only supported injection strategy currently requires Shizuku, which is
+        // gated by debug builds.
+        if (BuildConfig.DEBUG) {
+            item {
+                SettingsGroup(
+                    title = stringResource(R.string.settings_injection),
+                    icon = Icons.Default.Share,
+                    modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
+                ) {
                     SettingsRow(
                         title = stringResource(R.string.settings_shizuku),
                         subtitle = stringResource(R.string.settings_shizuku_description),
@@ -447,7 +449,7 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(Spacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.xl),
+        verticalArrangement = Arrangement.spacedBy(Spacing.lg),
     ) {
         item {
             SettingsGroup(
@@ -455,15 +457,11 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                 icon = Icons.Default.Science,
                 modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
             ) {
-                SettingsRow(
+                HandySwitchRow(
                     title = stringResource(R.string.settings_experimental_features),
                     subtitle = stringResource(R.string.settings_experimental_features_desc),
-                    trailing = {
-                        Switch(
-                            checked = uiState.experimentalEnabled,
-                            onCheckedChange = { viewModel.setExperimentalEnabled(it) },
-                        )
-                    },
+                    checked = uiState.experimentalEnabled,
+                    onCheckedChange = { viewModel.setExperimentalEnabled(it) },
                 )
             }
         }
@@ -518,26 +516,18 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                 icon = Icons.Default.Mic,
                 modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
             ) {
-                SettingsRow(
+                HandySwitchRow(
                     title = stringResource(R.string.settings_vad),
                     subtitle = stringResource(R.string.settings_vad_desc),
-                    trailing = {
-                        Switch(
-                            checked = uiState.vadEnabled,
-                            onCheckedChange = { viewModel.setVadEnabled(it) },
-                        )
-                    },
+                    checked = uiState.vadEnabled,
+                    onCheckedChange = { viewModel.setVadEnabled(it) },
                 )
                 SettingsRowDivider()
-                SettingsRow(
+                HandySwitchRow(
                     title = stringResource(R.string.settings_add_final_space),
                     subtitle = stringResource(R.string.settings_add_final_space_desc),
-                    trailing = {
-                        Switch(
-                            checked = uiState.addFinalSpace,
-                            onCheckedChange = { viewModel.setAddFinalSpace(it) },
-                        )
-                    },
+                    checked = uiState.addFinalSpace,
+                    onCheckedChange = { viewModel.setAddFinalSpace(it) },
                 )
             }
         }
@@ -630,15 +620,12 @@ fun AdvancedSettingsContent(viewModel: SettingsViewModel) {
                         .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 )
                 SettingsRowDivider()
-                SettingsRow(
+                HandySwitchRow(
                     title = stringResource(R.string.settings_post_processing),
                     subtitle = stringResource(R.string.settings_post_processing_desc),
-                    trailing = {
-                        Switch(
-                            checked = uiState.postProcessingEnabled,
-                            onCheckedChange = { viewModel.setPostProcessingEnabled(it) },
-                        )
-                    },
+                    checked = uiState.postProcessingEnabled,
+                    onCheckedChange = { viewModel.setPostProcessingEnabled(it) },
+                    enabled = uiState.experimentalEnabled,
                 )
             }
         }

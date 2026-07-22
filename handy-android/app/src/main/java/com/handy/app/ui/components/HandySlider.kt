@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -36,7 +37,14 @@ fun HandySlider(
     steps: Int = 0,
     enabled: Boolean = true,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    // Sprint 30c-#6: do NOT force the outer Column to fill the parent
+    // width. Inside `HandyListItem`'s trailing slot a `fillMaxWidth()`
+    // here consumes the entire Row's width and starves the
+    // title/subtitle `Column(weight=1f)` to 0dp, causing massive text
+    // wrapping and the huge empty SettingsGroup card observed on A059.
+    // `widthIn(min = 196.dp)` keeps the slider usable while letting the
+    // outer Row distribute width correctly.
+    Column(modifier = modifier.widthIn(min = 196.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -46,7 +46,11 @@ fun LogLevelSelector(
                 options = options,
                 selected = selected,
                 onSelect = { app.settingsStore.logLevel = it },
-                modifier = Modifier.fillMaxWidth(),
+                // Sprint 30c-#6: do NOT fill the parent Row here — this is
+                // the trailing slot of a `SettingsRow`/`HandyListItem`. A
+                // greedy width starves the title/subtitle column and causes
+                // the same huge-card bug seen on Settings.
+                modifier = Modifier,
                 enabled = enabled,
             )
         },

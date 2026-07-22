@@ -1,5 +1,6 @@
 package com.handy.app.ui.debug.components
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ fun RecordingBufferSlider(
         valueRange = 8192f..1_048_576f,
         steps = 0,
         enabled = enabled,
-        modifier = modifier,
+        // Standalone slider in Debug screen: fill the parent width.
+        modifier = modifier.fillMaxWidth(),
     )
 }

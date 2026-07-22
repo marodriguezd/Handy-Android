@@ -117,7 +117,6 @@ fun MicrophoneSelector(
                     options = options,
                     selected = resolvedSelected,
                     onSelect = onSelect,
-                    modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { refreshKey++ }) {
                     Icon(
