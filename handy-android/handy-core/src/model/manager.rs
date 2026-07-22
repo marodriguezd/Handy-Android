@@ -65,6 +65,11 @@ fn model_download_url(model_id: &str) -> Option<String> {
             "https://huggingface.co/handy-computer/canary-1b-gguf/resolve/main/canary-1b-Q4_K_M.gguf".into(),
         ),
 
+        // ── SenseVoice (Alibaba, HuggingFace / Blob) ────────────────
+        "sense-voice-int8" => Some(
+            "https://blob.handy.computer/sense-voice-int8.tar.gz".into(),
+        ),
+
         // ── Parakeet (NVIDIA, HuggingFace GGUF) ───────────────────
         "parakeet-tdt-0.6b-v3-Q4_K_M" => Some(
             "https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/main/parakeet-tdt-0.6b-v3-Q4_K_M.gguf".into(),
@@ -557,6 +562,19 @@ impl ModelManager {
                 return;
             }
             drop(file);
+
+            // Verify downloaded file size matches expected size
+            if total_size > 0 && downloaded != total_size {
+                error!("Download incomplete for {model_id}: expected {total_size} bytes, got {downloaded} bytes");
+                let _ = fs::remove_file(&temp_path);
+                complete_cb(
+                    model_id,
+                    false,
+                    Some(format!("Download incomplete: expected {total_size} bytes, got {downloaded} bytes")),
+                );
+                active_download.lock().unwrap().take();
+                return;
+            }
 
             if let Err(e) = fs::rename(&temp_path, &final_path) {
                 error!("Rename error for {model_id}: {e}");

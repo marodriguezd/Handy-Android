@@ -74,6 +74,22 @@ impl ModelInfo {
                 license: "Other".into(),
             },
 
+            // ⚡ SenseVoice Small (INT8) — 160 MB, latencia ultra-baja (Chino, Inglés, Japonés, Coreano, Cantonés)
+            ModelInfo {
+                id: "sense-voice-int8".into(),
+                name: "SenseVoice Small (INT8)".into(),
+                size_bytes: 167_772_160,
+                downloaded: false,
+                active: false,
+                download_progress: 0.0,
+                description: "⚡ ULTRA-RÁPIDO MÓVIL — Alibaba SenseVoice Small: latencia extremadamente baja. Soporta Chino, Inglés, Japonés, Coreano y Cantonés. Solo 160 MB.".into(),
+                recommended: true,
+                requires: "1 GB RAM".into(),
+                language: "zh,en,ja,ko,yue".into(),
+                quant: "INT8".into(),
+                license: "MIT".into(),
+            },
+
             // ──────────────────────────────────────────────────────────
             //  WHISPER (OpenAI) — 99 idiomas, vía whisper.cpp
             // ──────────────────────────────────────────────────────────
