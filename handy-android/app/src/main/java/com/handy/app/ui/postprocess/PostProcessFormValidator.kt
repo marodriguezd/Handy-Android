@@ -48,7 +48,9 @@ internal object PostProcessFormValidator {
         if (trimmed.isBlank()) return false
         return when (provider) {
             PostProcessProvider.OpenAI,
-            PostProcessProvider.Anthropic -> {
+            PostProcessProvider.Anthropic,
+            PostProcessProvider.MiniMax,
+            PostProcessProvider.Cohere -> {
                 trimmed.startsWith("https://", ignoreCase = true) &&
                     trimmed.length > "https://x".length
             }

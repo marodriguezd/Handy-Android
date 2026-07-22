@@ -163,19 +163,6 @@ class SettingsStore(context: Context) {
         get() = prefs.getInt("model_unload_timeout_minutes", 30)
         set(value) = prefs.edit().putInt("model_unload_timeout_minutes", value).apply()
 
-    /** Sprint 25: custom words list used to bias the recognizer. */
-    var customWords: List<String>
-        get() = prefs.getString("custom_words", "")
-            ?.split('\n')
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?: emptyList()
-        set(value) {
-            prefs.edit()
-                .putString("custom_words", value.joinToString("\n"))
-                .apply()
-        }
-
     /** Sprint 25: append trailing space to transcriptions (PC
      *  `append_trailing_space`). */
     var appendTrailingSpace: Boolean

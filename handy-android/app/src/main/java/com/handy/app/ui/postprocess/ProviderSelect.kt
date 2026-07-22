@@ -37,5 +37,7 @@ private fun labelResFor(provider: PostProcessProvider): Int = when (provider) {
     PostProcessProvider.OpenAI -> R.string.postprocess_provider_openai
     PostProcessProvider.Anthropic -> R.string.postprocess_provider_anthropic
     PostProcessProvider.Ollama -> R.string.postprocess_provider_ollama
+    PostProcessProvider.MiniMax -> R.string.postprocess_provider_minimax
+    PostProcessProvider.Cohere -> R.string.postprocess_provider_cohere
     PostProcessProvider.Custom -> R.string.postprocess_provider_custom
 }

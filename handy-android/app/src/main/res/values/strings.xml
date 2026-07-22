@@ -230,11 +230,15 @@ Continue at your own risk?</string>
     <string name="postprocess_provider_openai">OpenAI</string>
     <string name="postprocess_provider_anthropic">Anthropic</string>
     <string name="postprocess_provider_ollama">Ollama (local)</string>
+    <string name="postprocess_provider_minimax">MiniMax</string>
+    <string name="postprocess_provider_cohere">Cohere</string>
     <string name="postprocess_provider_custom">Custom</string>
     <string name="postprocess_baseurl_label">Base URL</string>
     <string name="postprocess_baseurl_hint_openai">https://api.openai.com/v1/chat/completions</string>
     <string name="postprocess_baseurl_hint_anthropic">https://api.anthropic.com/v1/messages</string>
     <string name="postprocess_baseurl_hint_ollama">http://10.0.2.2:11434/api/chat</string>
+    <string name="postprocess_baseurl_hint_minimax">https://api.minimax.io/v1/text/chatprocessing_v2</string>
+    <string name="postprocess_baseurl_hint_cohere">https://api.cohere.com/v2/chat</string>
     <string name="postprocess_baseurl_hint_custom">https://</string>
     <string name="postprocess_baseurl_supporting">HTTPS required for hosted providers; HTTP allowed for Ollama loopback.</string>
     <string name="postprocess_apikey_label">API key</string>

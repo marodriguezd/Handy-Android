@@ -46,7 +46,13 @@ class RecognizeActivity : ComponentActivity() {
         }
 
         setContent {
-            HandyTheme {
+            val app = (applicationContext as com.handy.app.HandyApplication)
+            val themeModeState = app.settingsStore.themeModeFlow.collectAsState()
+            val dynamicColorState = app.settingsStore.dynamicColorFlow.collectAsState()
+            HandyTheme(
+                themeModeState = themeModeState,
+                dynamicColorState = dynamicColorState,
+            ) {
                 RecognizeSheetContent(
                     onStopAndFinish = { text ->
                         if (text.isNotBlank()) {

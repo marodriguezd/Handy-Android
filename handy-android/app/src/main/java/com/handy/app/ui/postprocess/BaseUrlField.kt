@@ -42,5 +42,7 @@ private fun hintResFor(provider: PostProcessProvider): Int = when (provider) {
     PostProcessProvider.OpenAI -> R.string.postprocess_baseurl_hint_openai
     PostProcessProvider.Anthropic -> R.string.postprocess_baseurl_hint_anthropic
     PostProcessProvider.Ollama -> R.string.postprocess_baseurl_hint_ollama
+    PostProcessProvider.MiniMax -> R.string.postprocess_baseurl_hint_minimax
+    PostProcessProvider.Cohere -> R.string.postprocess_baseurl_hint_cohere
     PostProcessProvider.Custom -> R.string.postprocess_baseurl_hint_custom
 }

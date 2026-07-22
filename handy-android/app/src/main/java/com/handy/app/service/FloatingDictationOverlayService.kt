@@ -8,11 +8,9 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,8 +25,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.handy.app.HandyApplication
 import com.handy.app.audio.AudioFeedbackPlayer
@@ -41,8 +47,23 @@ import com.handy.app.ui.theme.HandyTheme
  * over any active app on Android using SYSTEM_ALERT_WINDOW permission.
  *
  * Parallel feature matching the PC desktop version's floating overlay window (overlay.rs).
+ *
+ * Implements LifecycleOwner + ViewModelStoreOwner + SavedStateRegistryOwner so the embedded
+ * ComposeView gets the view-tree owners it requires (ComposeRuntime throws without them
+ * for any composable that uses remember / LaunchedEffect / etc.).
  */
-class FloatingDictationOverlayService : Service() {
+class FloatingDictationOverlayService : Service(),
+    LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle
+        get() = lifecycleRegistry
+
+    override val viewModelStore: ViewModelStore = ViewModelStore()
+
+    private val savedStateController = SavedStateRegistryController.create(this)
+    override val savedStateRegistry: SavedStateRegistry
+        get() = savedStateController.savedStateRegistry
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
@@ -52,6 +73,16 @@ class FloatingDictationOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // SavedState must be attached + restored BEFORE moving the lifecycle to STARTED,
+        // so Compose runtime can read restored state during the first composition.
+        savedStateController.performAttach()
+        savedStateController.performRestore(null)
+        // LifecycleRegistry requires the canonical CREATED→STARTED transition; setting
+        // STARTED directly from initial state skips the CREATED event that repeatOnLifecycle
+        // and LifecycleEventObserver listeners depend on.
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+
         audioFeedbackPlayer = AudioFeedbackPlayer(this)
 
         if (!Settings.canDrawOverlays(this)) {
@@ -61,6 +92,15 @@ class FloatingDictationOverlayService : Service() {
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         setupOverlayView()
+    }
+
+    override fun onDestroy() {
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+        viewModelStore.clear()
+        super.onDestroy()
+        overlayView?.let { windowManager?.removeView(it) }
+        overlayView = null
     }
 
     private fun setupOverlayView() {
@@ -83,12 +123,17 @@ class FloatingDictationOverlayService : Service() {
 
         val app = applicationContext as HandyApplication
         val composeView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(app.engineViewModel)
-            setViewTreeViewModelStoreOwner(app.engineViewModel)
-            setViewTreeSavedStateRegistryOwner(app.engineViewModel)
+            setViewTreeLifecycleOwner(this@FloatingDictationOverlayService)
+            setViewTreeViewModelStoreOwner(this@FloatingDictationOverlayService)
+            setViewTreeSavedStateRegistryOwner(this@FloatingDictationOverlayService)
 
             setContent {
-                HandyTheme {
+                val themeModeState = app.settingsStore.themeModeFlow.collectAsState()
+                val dynamicColorState = app.settingsStore.dynamicColorFlow.collectAsState()
+                HandyTheme(
+                    themeModeState = themeModeState,
+                    dynamicColorState = dynamicColorState,
+                ) {
                     FloatingOverlayContent(
                         audioFeedbackPlayer = audioFeedbackPlayer,
                         onClose = { stopSelf() }
@@ -123,12 +168,6 @@ class FloatingDictationOverlayService : Service() {
 
         overlayView = composeView
         windowManager?.addView(composeView, layoutParams)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        overlayView?.let { windowManager?.removeView(it) }
-        overlayView = null
     }
 }
 

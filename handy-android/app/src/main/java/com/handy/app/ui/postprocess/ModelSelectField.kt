@@ -44,5 +44,7 @@ private fun placeholderFor(provider: PostProcessProvider): String = when (provid
     PostProcessProvider.OpenAI -> "gpt-4o-mini"
     PostProcessProvider.Anthropic -> "claude-3-5-sonnet"
     PostProcessProvider.Ollama -> "llama3.2:3b"
+    PostProcessProvider.MiniMax -> "MiniMax-Text-01"
+    PostProcessProvider.Cohere -> "command-r-plus"
     PostProcessProvider.Custom -> "my-model"
 }
