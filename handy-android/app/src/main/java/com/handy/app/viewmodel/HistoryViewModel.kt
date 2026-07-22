@@ -45,6 +45,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
          *  the History card render an inline `CircularProgressIndicator`
          *  on the Retry button without a separate loading Boolean. */
         val retryingId: Long? = null,
+        /** ID of the history entry currently playing audio, or null if none.
+         *  Ensures only one history item plays audio at a time (upstream #1665). */
+        val playingAudioId: Long? = null,
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -201,5 +204,19 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         } catch (e: Exception) {
             Log.w(TAG, "copyText failed for id=${entry.id}", e)
         }
+    }
+
+    /**
+     * Set active playing audio entry ID, pausing any other playing audio player (upstream #1665).
+     */
+    fun playAudio(entry: HistoryEntry) {
+        _uiState.update { it.copy(playingAudioId = entry.id) }
+    }
+
+    /**
+     * Clear active playing audio entry ID.
+     */
+    fun stopAudio() {
+        _uiState.update { it.copy(playingAudioId = null) }
     }
 }
