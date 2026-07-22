@@ -1,6 +1,5 @@
 # Handy Android 🎙️⚡
 
-> **Official Android Fork**  
 > *Native Android version of Handy (Speech-to-Text), 100% offline and currently in active development.*
 
 **Handy Android** is the native Android port of [Handy](https://github.com/cjpais/Handy), a private, ultra-fast, 100% offline voice dictation and speech recognition application.
