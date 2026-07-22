@@ -16,8 +16,8 @@ android {
         applicationId = "com.handy.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.0-alpha3"  // Second pre-release (Sprint 17-23 + pre-Sprint 24 hygiene, 17 Julio 2026)
+        versionCode = 90
+        versionName = "0.9.0"  // Second pre-release (Sprint 17-23 + pre-Sprint 24 hygiene, 17 Julio 2026)
 
         // Sentry DSN — override via SENTRY_DSN env var (used in CI)
         buildConfigField("String", "SENTRY_DSN", "\"${System.getenv("SENTRY_DSN") ?: "https://examplePublicKey@o0.ingest.sentry.io/0"}\"")
