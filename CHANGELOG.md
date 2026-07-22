@@ -10,9 +10,9 @@ Integración y porteo de los módulos funcionales clave desarrollados en `androi
 - **`AndroidManifest.xml`** — Registro oficial de servicios e intents para integración transparente en todo el SO Android.
 
 ### 📚 Diccionario Personalizado & Corrector Fonético (WordCorrector)
-- **`WordCorrector.kt`** — Motor de corrección fonética en Kotlin que combina el algoritmo **Soundex** y la distancia **Levenshtein** normalizada para reemplazar transcripciones erróneas por palabras del usuario, preservando puntuación y mayúsculas/minúsculas. Incluye filtro de muletillas ("uh", "um", "ehm", "este", "o sea") y contracción de tartamudeos.
-- **`DictionaryScreen.kt`** — Pantalla visual en Jetpack Compose para gestionar palabras y términos técnicos.
-- **`SettingsStore.kt` & `SettingsScreen.kt`** — Persistencia de palabras en `SharedPreferences` e integración de la sección "Diccionario & Corrección" en los Ajustes Generales.
+- **`WordCorrector.kt`** — Motor de corrección fonética en Kotlin que combina el algoritmo **Soundex** y la distancia **Levenshtein** normalizada para reemplazar transcripciones erróneas por palabras del usuario, preservando puntuación y mayúsculas/minúsculas. Incluye filtro dinámico de muletillas ("uh", "um", "ehm", "este", "o sea") y contracción de tartamudeos.
+- **`DictionaryScreen.kt` & `SettingsScreen.kt`** — Pantalla visual en Jetpack Compose para gestionar palabras y **Switch para activar/desactivar el filtro de muletillas** en los Ajustes Generales (`upstream/toggle-filler-cleanup`).
+- **`SettingsStore.kt`** — Persistencia de la preferencia `fillerWordsEnabled` y palabras personalizadas en `SharedPreferences`.
 
 ### 🤖 Post-Procesamiento Multi-Prompt LLM
 - **`PromptsRepository.kt`** — Repositorio de prompts de sistema personalizables persistido en JSON atómico (`prompts.json`).
