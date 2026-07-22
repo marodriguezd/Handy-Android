@@ -1872,3 +1872,39 @@ Continuation of the in-progress turn that was interrupted. Implemented four cros
 1. Resolve host tooling (`cmake`, Android SDK `aidl`) so `cargo check` and `:app:compileDebugKotlin` can run.
 2. Re-run Rust `cargo check` (with and without `--features silero`) and Kotlin compile/tests.
 3. On-device verify backend change + language selection + post-processor roles + VAD behavior on A059.
+
+## 📌 In-progress session (Julio 22, 2026) — Sprint 28b build-fix + cfd2fa7 Spanish locale + bidirectional locale round-trip
+
+Carrying the canonical trail forward from the `c17a3ed` save-state at the top of this file. Two-commits trail (both local, awaiting `git push origin main` from your interactive shell per AGENTS.md Plan-D):
+
+- **`cfd2fa7`** `fix(handy-android): close es-locale i18n gap for new MiniMax+Cohere providers` — 1 file, 4 insertions. Mirrors 4 keys added by Sprint 28b into `values-es/strings.xml`. Brand names preserved as English per existing convention (matches OpenAI, Anthropic, Ollama entries already in `values-es/`); URLs preserved identically to `values/`.
+- **`daba310`** `fix(handy-android): Sprint 28b build-fix batch + NDK 27 pin` — 9 files, 73+/29\u2212. Closes the 21 compile errors that recent cherry-picks from upstream `cjpais/Handy` had landed without all consumers updated.
+
+### Validation
+
+| Step | Outcome |
+|---|---|
+| `./gradlew :app:processDebugResources :app:compileDebugKotlin` (post-daba310) | BUILD SUCCESSFUL in 10s (UP-TO-DATE) |
+| A059 install via `adb install -r` | Success \u2014 versionCode=5, versionName=0.2.0-preview-debug |
+| 5 bottom-nav destinations (Modelos / Historial / Post-Proceso / Acerca de / Depuraci\u00f3n) | All reachable, no `FATAL`/`AndroidRuntime` crashes in session logcat |
+| `cmd locale set-app-locales com.handy.app.debug --locales es` + Post-Proceso \u2192 Proveedor dropdown | Shows: OpenAI, Anthropic, Ollama (local), **MiniMax** (\u2705 cfd2fa7 verified), **Cohere** (\u2705 cfd2fa7 verified), Personalizado |
+| `cmd locale set-app-locales com.handy.app.debug --locales en` + Post-Proceso \u2192 Proveedor dropdown | Shows: OpenAI, Anthropic, Ollama (local), **MiniMax** (\u2705), **Cohere** (\u2705), Custom |
+
+Both locale passes produce identical brand-name lists; the only key that changes between locales is `postprocess_provider_custom` (Personalizado \u2194 Custom). The previously-missing 4 keys are now reachable for both locales. MissingTranslation lint is still disabled in `app/build.gradle.kts`; this should be reconsidered in a future Spanish translation sweep covering the remaining 236 keys.
+
+### Sprint 28b build-fix details (this session)
+
+| Discovery | Resolution |
+|---|---|
+| NDK 28 sysroot lacks `libpthread.a` \u2192 `cargo-ndk` link step fails | `app/build.gradle.kts` `ndkVersion = "27.0.12077973"` |
+| `SettingsStore.kt` `customWords: List<String>` conflicts with `customWords: Set<String>` on same prefs key | Removed the `List<String>` declaration; `customWordsRaw: String` already covers the multiline form |
+| `FloatingDictationOverlayService.kt` setViewTreeXxx callers passed `app.engineViewModel` (a ViewModel, not a LifecycleOwner) | Service now `implements LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner`; direct `override val` for `viewModelStore`; CREATED \u2192 STARTED ordering in onCreate, CREATED \u2192 DESTROYED in onDestroy |
+| `HandyTheme` requires `themeModeState: State<ThemeMode>` + `dynamicColorState: State<Boolean>` not threaded in `RecognizeActivity.kt` | `val app = (applicationContext as com.handy.app.HandyApplication); collectAsState()` on both flows |
+| PostProcessFile*.kt `when` expressions not exhaustive over new MiniMax + Cohere | Added 1 branch per file (4 files total); added 4 brands' hint/placeholder/label resources |
+
+### Carry-over to next session
+
+1. `FloatingOverlayContent` `onClose` parameter unused (\u2192 Kotlin compile warning).
+2. `RecognizeActivity.kt` uses fully-qualified `com.handy.app.HandyApplication` inline rather than via `import` (\u2192 style nit; works).
+3. AGP 9.x + Kotlin 2.0 paired migration deferred (Gradle 9.1+ binary not yet published at services.gradle.org).
+4. Optional `LifecycleService` swap on `FloatingDictationOverlayService` would replace the hand-rolled `LifecycleRegistry` triplet with the platform-tested version (one-line dep add; only needed if a future caller uses `startService`).
