@@ -27,13 +27,13 @@
 
 ---
 
-## 🗓️ Current State — Draft Release & MD3 UI Reconstruction (Julio 22, 2026).
+## 🗓️ Current State — 100% PC & Lateral App Parity Completed (Julio 23, 2026).
 
-> **🟢 Reconstrucción Material Design 3 100% Completa & Borrador en [`draft.md`](file:///home/marodriguezd/Github/Handy-Android/draft.md)**.
-> - Se ha refinado la UI de la app a Material Design 3 con enrutamiento de insets y componentes adaptativos.
-> - IME (`HandyInputMethodService.kt`) optimizado: cálculo de `touchableRegion` por límites reales de la barra para evitar bloquear toques externos, fallback automático con `switchToPreviousInputMethod()` (API 28+).
-> - Release `v0.9.0` guardada como borrador en [`draft.md`](file:///home/marodriguezd/Github/Handy-Android/draft.md) y capturas actualizadas en `.screenshots/`.
-> - 182 unit tests en `:app:testDebugUnitTest` ejecutándose en PASS (100%).
+> **🟢 Paridad 100% Completa & Subida a Git (`origin/main`)**.
+> - Portadas todas las características funcionales de `android_transcribe_app` (VoiceRecognitionService, WordCorrector fonético Soundex+Levenshtein, PostProcessor LLM multi-prompt).
+> - Integrados todos los cherrypicks clave de upstream (`cjpais/Handy`): SenseVoice STT, validación de descargas corruptas, filtro dinámico de muletillas configurable, retención y depuración de historial SQLite, presets MiniMax/Cohere, normalización de puntuación en chino y reproductor único de historial.
+> - Paridad 100% con la versión de PC de escritorio: Burbuja flotante del sistema (`FloatingDictationOverlayService.kt`), audio feedback de tonos nativos (`AudioFeedbackPlayer.kt`), tracking de paquete destino en historial (`targetPackage`), idioma ASR dinámico en Rust (`nativeSetLanguage`), aceleración GPU configurable (`nativeSetAccelerationBackend`), y separación de roles `system`/`user` en el post-procesador LLM.
+> - Todo testeado, compilado y sincronizado en `origin/main`.
 
 ### ✅ Completed — Sprints 16 → 30c + Porting Batch (android_transcribe_app)
 
