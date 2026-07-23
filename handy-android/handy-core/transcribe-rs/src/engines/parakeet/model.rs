@@ -1,0 +1,681 @@
+use ndarray::{Array, Array1, Array2, Array3, ArrayD, ArrayViewD, IxDyn};
+use once_cell::sync::Lazy;
+use ort::ep;
+use ort::inputs;
+use ort::session::builder::GraphOptimizationLevel;
+use ort::session::Session;
+use ort::value::{Tensor, TensorRef};
+use regex::Regex;
+
+use std::fs;
+use std::path::Path;
+
+pub type DecoderState = (Array3<f32>, Array3<f32>);
+
+const SUBSAMPLING_FACTOR: usize = 8;
+const WINDOW_SIZE: f32 = 0.01;
+const MAX_TOKENS_PER_STEP: usize = 10;
+
+/// Maximum audio chunk size in samples (16 kHz).
+/// 25 seconds of audio ≈ 312 encoder frames (8x subsampling), safely under the limit.
+const MAX_CHUNK_SAMPLES: usize = 25 * 16_000; // 25 seconds
+
+/// When chunking long audio, the split point is searched between this many
+/// samples and `MAX_CHUNK_SAMPLES`, at the quietest spot — so chunks break in
+/// a pause rather than mid-word and nothing is duplicated or lost.
+const CHUNK_SPLIT_SEARCH_START: usize = 18 * 16_000; // 18 seconds
+
+/// Energy-window size used when searching for the quietest split point.
+const SPLIT_WINDOW_SAMPLES: usize = 1_600; // 100 ms
+
+static DECODE_SPACE_RE: Lazy<Result<Regex, regex::Error>> =
+    Lazy::new(|| Regex::new(r"\A\s|\s\B|(\s)\b"));
+
+#[derive(Debug, Clone)]
+pub struct TimestampedResult {
+    pub text: String,
+    pub timestamps: Vec<f32>,
+    pub tokens: Vec<String>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ParakeetError {
+    #[error("ONNX Runtime error: {0}")]
+    Ort(#[from] ort::Error),
+    #[error("I/O error")]
+    Io(#[from] std::io::Error),
+    #[error("ndarray shape error")]
+    Shape(#[from] ndarray::ShapeError),
+    #[error("Model input not found: {0}")]
+    InputNotFound(String),
+    #[error("Model output not found: {0}")]
+    OutputNotFound(String),
+    #[error("Failed to get tensor shape for input: {0}")]
+    TensorShape(String),
+}
+
+pub struct ParakeetModel {
+    encoder: Session,
+    decoder_joint: Session,
+    preprocessor: Session,
+    vocab: Vec<String>,
+    blank_idx: i32,
+    vocab_size: usize,
+}
+
+impl Drop for ParakeetModel {
+    fn drop(&mut self) {
+        log::info!("Dropping ParakeetModel (0.6B), releasing ORT sessions");
+    }
+}
+
+impl ParakeetModel {
+    pub fn new<P: AsRef<Path>>(model_dir: P, quantized: bool) -> Result<Self, ParakeetError> {
+        let encoder = Self::init_session(&model_dir, "encoder-model", None, quantized)?;
+        let decoder_joint = Self::init_session(&model_dir, "decoder_joint-model", None, quantized)?;
+        let preprocessor = Self::init_session(&model_dir, "nemo128", None, false)?;
+
+        let (vocab, blank_idx) = Self::load_vocab(&model_dir)?;
+        let vocab_size = vocab.len();
+
+        log::info!(
+            "Loaded vocabulary with {} tokens, blank_idx={}",
+            vocab_size,
+            blank_idx
+        );
+
+        Ok(Self {
+            encoder,
+            decoder_joint,
+            preprocessor,
+            vocab,
+            blank_idx,
+            vocab_size,
+        })
+    }
+
+    pub fn from_memory(
+        encoder_bytes: &[u8],
+        decoder_joint_bytes: &[u8],
+        preprocessor_bytes: &[u8],
+        vocab_content: &str,
+    ) -> Result<Self, ParakeetError> {
+        let encoder = Self::init_session_from_memory(encoder_bytes, None)?;
+        let decoder_joint = Self::init_session_from_memory(decoder_joint_bytes, None)?;
+        let preprocessor = Self::init_session_from_memory(preprocessor_bytes, None)?;
+
+        let (vocab, blank_idx) = Self::parse_vocab(vocab_content)?;
+        let vocab_size = vocab.len();
+
+        log::info!(
+            "Loaded vocabulary from memory with {} tokens, blank_idx={}",
+            vocab_size,
+            blank_idx
+        );
+
+        Ok(Self {
+            encoder,
+            decoder_joint,
+            preprocessor,
+            vocab,
+            blank_idx,
+            vocab_size,
+        })
+    }
+
+    pub fn set_hotwords(&mut self, _words: Vec<String>) {
+        // Logit boosting for hotwords can be implemented here by maintaining a prefix trie
+        // and modifying the greedy search logits in decode_sequence.
+        log::debug!("Parakeet hotwords set, but logic is simplified for compilation.");
+    }
+
+    fn init_session<P: AsRef<Path>>(
+        model_dir: P,
+        model_name: &str,
+        intra_threads: Option<usize>,
+        try_quantized: bool,
+    ) -> Result<Session, ParakeetError> {
+        let mut providers = Vec::new();
+        #[cfg(target_os = "android")]
+        {
+            providers.push(ep::NNAPI::default().build());
+            providers.push(ep::XNNPACK::default().build());
+        }
+        providers.push(ep::CPU::default().build());
+
+        // Try quantized version first if requested, fallback to regular version
+        let model_filename = if try_quantized {
+            let quantized_name = format!("{}.int8.onnx", model_name);
+            let quantized_path = model_dir.as_ref().join(&quantized_name);
+            if quantized_path.exists() {
+                log::info!("Loading quantized model from {}...", quantized_name);
+                quantized_name
+            } else {
+                let regular_name = format!("{}.onnx", model_name);
+                log::info!(
+                    "Quantized model not found, loading regular model from {}...",
+                    regular_name
+                );
+                regular_name
+            }
+        } else {
+            let regular_name = format!("{}.onnx", model_name);
+            log::info!("Loading model from {}...", regular_name);
+            regular_name
+        };
+
+        let mut builder = Session::builder()
+            .map_err(|e| ParakeetError::Ort(e.into()))?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|e| ParakeetError::Ort(e.into()))?
+            .with_execution_providers(providers)
+            .map_err(|e| ParakeetError::Ort(e.into()))?;
+
+        #[cfg(target_os = "android")]
+        {
+            let threads = intra_threads.unwrap_or(4);
+            builder = builder
+                .with_intra_threads(threads)
+                .map_err(|e| ParakeetError::Ort(e.into()))?
+                .with_inter_threads(1)
+                .map_err(|e| ParakeetError::Ort(e.into()))?
+                .with_parallel_execution(false)
+                .map_err(|e| ParakeetError::Ort(e.into()))?;
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            builder = builder
+                .with_parallel_execution(true)
+                .map_err(|e| ParakeetError::Ort(e.into()))?;
+
+            if let Some(threads) = intra_threads {
+                builder = builder
+                    .with_intra_threads(threads)
+                    .map_err(|e| ParakeetError::Ort(e.into()))?
+                    .with_inter_threads(threads)
+                    .map_err(|e| ParakeetError::Ort(e.into()))?;
+            }
+        }
+
+        let session = builder.commit_from_file(model_dir.as_ref().join(&model_filename))
+            .map_err(|e| ParakeetError::Ort(e.into()))?;
+
+        for input in session.inputs() {
+            log::info!(
+                "Model '{}' input: name={}, type={:?}",
+                model_filename,
+                input.name(),
+                input.dtype()
+            );
+        }
+
+        Ok(session)
+    }
+
+    fn init_session_from_memory(
+        model_bytes: &[u8],
+        intra_threads: Option<usize>,
+    ) -> Result<Session, ParakeetError> {
+        let mut providers = Vec::new();
+        #[cfg(target_os = "android")]
+        {
+            providers.push(ep::NNAPI::default().build());
+            providers.push(ep::XNNPACK::default().build());
+        }
+        providers.push(ep::CPU::default().build());
+
+        let mut builder = Session::builder()
+            .map_err(|e| ParakeetError::Ort(e.into()))?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .map_err(|e| ParakeetError::Ort(e.into()))?
+            .with_execution_providers(providers)
+            .map_err(|e| ParakeetError::Ort(e.into()))?;
+
+        #[cfg(target_os = "android")]
+        {
+            let threads = intra_threads.unwrap_or(4);
+            builder = builder
+                .with_intra_threads(threads)
+                .map_err(|e| ParakeetError::Ort(e.into()))?
+                .with_inter_threads(1)
+                .map_err(|e| ParakeetError::Ort(e.into()))?
+                .with_parallel_execution(false)
+                .map_err(|e| ParakeetError::Ort(e.into()))?;
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            builder = builder
+                .with_parallel_execution(true)
+                .map_err(|e| ParakeetError::Ort(e.into()))?;
+
+            if let Some(threads) = intra_threads {
+                builder = builder
+                    .with_intra_threads(threads)
+                    .map_err(|e| ParakeetError::Ort(e.into()))?
+                    .with_inter_threads(threads)
+                    .map_err(|e| ParakeetError::Ort(e.into()))?;
+            }
+        }
+
+        let session = builder.commit_from_memory(model_bytes)
+            .map_err(|e| ParakeetError::Ort(e.into()))?;
+
+        Ok(session)
+    }
+
+    fn parse_vocab(content: &str) -> Result<(Vec<String>, i32), ParakeetError> {
+        let mut max_id = 0;
+        let mut tokens_with_ids: Vec<(String, usize)> = Vec::new();
+        let mut blank_idx: Option<usize> = None;
+
+        for line in content.lines() {
+            let parts: Vec<&str> = line.trim_end().split(' ').collect();
+            if parts.len() >= 2 {
+                let token = parts[0].to_string();
+                if let Ok(id) = parts[1].parse::<usize>() {
+                    if token == "<blk>" {
+                        blank_idx = Some(id);
+                    }
+                    tokens_with_ids.push((token, id));
+                    max_id = max_id.max(id);
+                }
+            }
+        }
+
+        // Create vocab vector with \u2581 replaced with space
+        let mut vocab = vec![String::new(); max_id + 1];
+        for (token, id) in tokens_with_ids {
+            vocab[id] = token.replace('\u{2581}', " ");
+        }
+
+        let blank_idx = blank_idx.ok_or_else(|| {
+            ParakeetError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Missing <blk> token in vocabulary",
+            ))
+        })? as i32;
+
+        Ok((vocab, blank_idx))
+    }
+
+    fn load_vocab<P: AsRef<Path>>(model_dir: P) -> Result<(Vec<String>, i32), ParakeetError> {
+        let vocab_path = model_dir.as_ref().join("vocab.txt");
+        let content = fs::read_to_string(vocab_path)?;
+        Self::parse_vocab(&content)
+    }
+
+    pub fn preprocess(
+        &mut self,
+        waveforms: &ArrayViewD<f32>,
+        waveforms_lens: &ArrayViewD<i64>,
+    ) -> Result<(ArrayD<f32>, ArrayD<i64>), ParakeetError> {
+        log::trace!("Running preprocessor inference...");
+        let inputs = inputs![
+            "waveforms" => TensorRef::from_array_view(waveforms.view())?,
+            "waveforms_lens" => TensorRef::from_array_view(waveforms_lens.view())?,
+        ];
+        let outputs = self.preprocessor.run(inputs)?;
+
+        let features = outputs
+            .get("features")
+            .ok_or_else(|| ParakeetError::OutputNotFound("features".to_string()))?
+            .try_extract_array()?;
+        let features_lens = outputs
+            .get("features_lens")
+            .ok_or_else(|| ParakeetError::OutputNotFound("features_lens".to_string()))?
+            .try_extract_array()?;
+
+        Ok((features.to_owned(), features_lens.to_owned()))
+    }
+
+    pub fn encode(
+        &mut self,
+        audio_signal: &ArrayViewD<f32>,
+        length: &ArrayViewD<i64>,
+    ) -> Result<(ArrayD<f32>, ArrayD<i64>), ParakeetError> {
+        log::trace!("Running encoder inference...");
+        let inputs = inputs![
+            "audio_signal" => TensorRef::from_array_view(audio_signal.view())?,
+            "length" => TensorRef::from_array_view(length.view())?,
+        ];
+        let outputs = self.encoder.run(inputs)?;
+
+        let encoder_output = outputs
+            .get("outputs")
+            .ok_or_else(|| ParakeetError::OutputNotFound("outputs".to_string()))?
+            .try_extract_array()?;
+        let encoded_lengths = outputs
+            .get("encoded_lengths")
+            .ok_or_else(|| ParakeetError::OutputNotFound("encoded_lengths".to_string()))?
+            .try_extract_array()?;
+
+        let encoder_output = encoder_output.permuted_axes(IxDyn(&[0, 2, 1]));
+
+        Ok((encoder_output.to_owned(), encoded_lengths.to_owned()))
+    }
+
+    pub fn create_decoder_state(&self) -> Result<DecoderState, ParakeetError> {
+        // Get input shapes from decoder model
+        let inputs = self.decoder_joint.inputs();
+
+        let state1_shape = inputs
+            .iter()
+            .find(|input| input.name() == "input_states_1")
+            .ok_or_else(|| ParakeetError::InputNotFound("input_states_1".to_string()))?
+            .dtype()
+            .tensor_shape()
+            .ok_or_else(|| ParakeetError::TensorShape("input_states_1".to_string()))?;
+
+        let state2_shape = inputs
+            .iter()
+            .find(|input| input.name() == "input_states_2")
+            .ok_or_else(|| ParakeetError::InputNotFound("input_states_2".to_string()))?
+            .dtype()
+            .tensor_shape()
+            .ok_or_else(|| ParakeetError::TensorShape("input_states_2".to_string()))?;
+
+        // Create zero states with batch_size=1
+        // Shape is [2, -1, 640] so we use [2, 1, 640] for batch_size=1
+        let state1 = Array::zeros((
+            state1_shape[0] as usize,
+            1, // batch_size = 1
+            state1_shape[2] as usize,
+        ));
+
+        let state2 = Array::zeros((
+            state2_shape[0] as usize,
+            1, // batch_size = 1
+            state2_shape[2] as usize,
+        ));
+
+        Ok((state1, state2))
+    }
+
+    pub fn recognize_batch(
+        &mut self,
+        waveforms: &ArrayViewD<f32>,
+        waveforms_len: &ArrayViewD<i64>,
+    ) -> Result<Vec<TimestampedResult>, ParakeetError> {
+        // Preprocess and encode
+        let (features, features_lens) = self.preprocess(waveforms, waveforms_len)?;
+        let (encoder_out, encoder_out_lens) =
+            self.encode(&features.view(), &features_lens.view())?;
+
+        // Decode for each batch item
+        let mut results = Vec::new();
+        for (encodings, &encodings_len) in encoder_out.outer_iter().zip(encoder_out_lens.iter()) {
+            let (tokens, timestamps) =
+                self.decode_sequence(&encodings.view(), encodings_len as usize)?;
+            let result = self.decode_tokens(tokens, timestamps);
+            results.push(result);
+        }
+
+        Ok(results)
+    }
+
+    fn decode_sequence(
+        &mut self,
+        encodings: &ArrayViewD<f32>, // [time_steps, 1024]
+        encodings_len: usize,
+    ) -> Result<(Vec<i32>, Vec<usize>), ParakeetError> {
+        let mut binding = self.decoder_joint.create_binding()?;
+
+        let mut tokens = Vec::new();
+        let mut timestamps = Vec::new();
+
+        let mut t = 0;
+        let mut emitted_tokens = 0;
+
+        let (mut state1, mut state2) = self.create_decoder_state()?;
+        let mut targets = Array2::<i32>::zeros((1, 1));
+        let target_length = Array1::from_vec(vec![1i32]);
+
+        while t < encodings_len {
+            let target_token = tokens.last().copied().unwrap_or(self.blank_idx);
+            targets[[0, 0]] = target_token;
+
+            let encoder_step = encodings.slice(ndarray::s![t, ..]);
+            let encoder_outputs = encoder_step
+                .to_owned()
+                .insert_axis(ndarray::Axis(0))
+                .insert_axis(ndarray::Axis(2));
+
+            let encoder_outputs_ort = Tensor::from_array(encoder_outputs)?;
+            let targets_ort = Tensor::from_array(targets.clone())?;
+            let target_length_ort = Tensor::from_array(target_length.clone())?;
+            let state1_ort = Tensor::from_array(state1.clone())?;
+            let state2_ort = Tensor::from_array(state2.clone())?;
+
+            binding.bind_input("encoder_outputs", &encoder_outputs_ort)?;
+            binding.bind_input("targets", &targets_ort)?;
+            binding.bind_input("target_length", &target_length_ort)?;
+            binding.bind_input("input_states_1", &state1_ort)?;
+            binding.bind_input("input_states_2", &state2_ort)?;
+
+            // Bind outputs to avoid re-allocation
+            binding.bind_output_to_device("outputs", &self.decoder_joint.allocator().memory_info())?;
+            binding.bind_output_to_device("output_states_1", &self.decoder_joint.allocator().memory_info())?;
+            binding.bind_output_to_device("output_states_2", &self.decoder_joint.allocator().memory_info())?;
+
+            let outputs = self.decoder_joint.run_binding(&binding)?;
+
+            let probs = outputs.get("outputs")
+                .ok_or_else(|| ParakeetError::OutputNotFound("outputs".into()))?
+                .try_extract_array()?;
+            let out_state1 = outputs.get("output_states_1")
+                .ok_or_else(|| ParakeetError::OutputNotFound("output_states_1".into()))?
+                .try_extract_array()?;
+            let out_state2 = outputs.get("output_states_2")
+                .ok_or_else(|| ParakeetError::OutputNotFound("output_states_2".into()))?
+                .try_extract_array()?;
+
+            // TDT logic
+            let probs_squeezed = probs.remove_axis(ndarray::Axis(0));
+            let logits: &[f32] = probs_squeezed.as_slice().ok_or_else(|| {
+                ParakeetError::Shape(ndarray::ShapeError::from_kind(ndarray::ErrorKind::IncompatibleShape))
+            })?;
+
+            let (vocab_logits, duration_logits) = if logits.len() > self.vocab_size {
+                logits.split_at(self.vocab_size)
+            } else {
+                (logits, &[][..])
+            };
+
+            let argmax = |xs: &[f32]| {
+                xs.iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(idx, _)| idx)
+            };
+
+            let token = argmax(vocab_logits)
+                .map(|idx| idx as i32)
+                .unwrap_or(self.blank_idx);
+
+            if token != self.blank_idx {
+                state1 = out_state1.to_owned().into_dimensionality()?;
+                state2 = out_state2.to_owned().into_dimensionality()?;
+                tokens.push(token);
+                timestamps.push(t);
+                emitted_tokens += 1;
+            }
+
+            if !duration_logits.is_empty() {
+                let mut jump = argmax(duration_logits).unwrap_or(1);
+                if jump == 0 && (token == self.blank_idx || emitted_tokens >= MAX_TOKENS_PER_STEP) {
+                    jump = 1;
+                }
+                if jump > 0 {
+                    t += jump;
+                    emitted_tokens = 0;
+                }
+            } else {
+                if token == self.blank_idx || emitted_tokens >= MAX_TOKENS_PER_STEP {
+                    t += 1;
+                    emitted_tokens = 0;
+                }
+            }
+        }
+
+        Ok((tokens, timestamps))
+    }
+
+    fn decode_tokens(&self, ids: Vec<i32>, timestamps: Vec<usize>) -> TimestampedResult {
+        let tokens: Vec<String> = ids
+            .iter()
+            .filter_map(|&id| {
+                let idx = id as usize;
+                if idx < self.vocab.len() {
+                    Some(self.vocab[idx].clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let text = match &*DECODE_SPACE_RE {
+            Ok(regex) => regex
+                .replace_all(&tokens.join(""), |caps: &regex::Captures| {
+                    if caps.get(1).is_some() {
+                        " "
+                    } else {
+                        ""
+                    }
+                })
+                .to_string(),
+            Err(_) => tokens.join(""), // Fallback if regex failed to compile
+        };
+
+        let float_timestamps: Vec<f32> = timestamps
+            .iter()
+            .map(|&t| WINDOW_SIZE * SUBSAMPLING_FACTOR as f32 * t as f32)
+            .collect();
+
+        TimestampedResult {
+            text,
+            timestamps: float_timestamps,
+            tokens,
+        }
+    }
+
+    /// Transcribe a single chunk that fits within the encoder's positional
+    /// encoding limit.
+    fn transcribe_chunk(&mut self, samples: Vec<f32>) -> Result<TimestampedResult, ParakeetError> {
+        let batch_size = 1;
+        let samples_len = samples.len();
+
+        let waveforms = Array2::from_shape_vec((batch_size, samples_len), samples)?.into_dyn();
+        let waveforms_lens = Array1::from_vec(vec![samples_len as i64]).into_dyn();
+
+        let results = self.recognize_batch(&waveforms.view(), &waveforms_lens.view())?;
+
+        results.into_iter().next().ok_or_else(|| {
+            ParakeetError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "No transcription result returned",
+            ))
+        })
+    }
+
+    pub fn transcribe_samples(
+        &mut self,
+        samples: Vec<f32>,
+    ) -> Result<TimestampedResult, ParakeetError> {
+        // Guard against empty audio — ORT crashes on zero-length inputs
+        if samples.is_empty() {
+            return Ok(TimestampedResult {
+                text: String::new(),
+                timestamps: Vec::new(),
+                tokens: Vec::new(),
+            });
+        }
+
+        // Short audio: process in a single pass (no chunking overhead)
+        if samples.len() <= MAX_CHUNK_SAMPLES {
+            return self.transcribe_chunk(samples);
+        }
+
+        // Long audio: split into non-overlapping chunks, cutting at the
+        // quietest point near each chunk boundary so we never split mid-word
+        // (and never repeat words, as the previous overlap-based merge did).
+        log::info!(
+            "Audio has {} samples ({:.1}s), chunking into ≤{:.0}s segments",
+            samples.len(),
+            samples.len() as f64 / 16_000.0,
+            MAX_CHUNK_SAMPLES as f64 / 16_000.0,
+        );
+
+        let mut merged_text = String::new();
+        let mut merged_tokens: Vec<String> = Vec::new();
+        let mut merged_timestamps: Vec<f32> = Vec::new();
+
+        let mut offset: usize = 0;
+        while offset < samples.len() {
+            let remaining = samples.len() - offset;
+            let end = if remaining <= MAX_CHUNK_SAMPLES {
+                samples.len()
+            } else {
+                find_quietest_split(
+                    &samples,
+                    offset + CHUNK_SPLIT_SEARCH_START,
+                    offset + MAX_CHUNK_SAMPLES,
+                )
+            };
+            let chunk_time_offset = offset as f32 / 16_000.0;
+
+            log::info!(
+                "Processing chunk at {:.1}s–{:.1}s",
+                chunk_time_offset,
+                end as f32 / 16_000.0,
+            );
+
+            let result = self.transcribe_chunk(samples[offset..end].to_vec())?;
+
+            let trimmed = result.text.trim();
+            if !trimmed.is_empty() {
+                if !merged_text.is_empty() {
+                    merged_text.push(' ');
+                }
+                merged_text.push_str(trimmed);
+                for (token, &ts) in result.tokens.iter().zip(result.timestamps.iter()) {
+                    merged_tokens.push(token.clone());
+                    merged_timestamps.push(ts + chunk_time_offset);
+                }
+            }
+
+            offset = end;
+        }
+
+        Ok(TimestampedResult {
+            text: merged_text,
+            timestamps: merged_timestamps,
+            tokens: merged_tokens,
+        })
+    }
+}
+
+/// Find the centre of the quietest `SPLIT_WINDOW_SAMPLES` window in
+/// `samples[from..to]`, used as a chunk boundary for long audio. Falls back to
+/// `to` if the range is degenerate.
+fn find_quietest_split(samples: &[f32], from: usize, to: usize) -> usize {
+    let to = to.min(samples.len());
+    if from + SPLIT_WINDOW_SAMPLES > to {
+        return to;
+    }
+
+    let mut best_pos = to;
+    let mut best_energy = f32::MAX;
+    let mut i = from;
+    while i + SPLIT_WINDOW_SAMPLES <= to {
+        let energy: f32 = samples[i..i + SPLIT_WINDOW_SAMPLES]
+            .iter()
+            .map(|&x| x * x)
+            .sum();
+        if energy < best_energy {
+            best_energy = energy;
+            best_pos = i + SPLIT_WINDOW_SAMPLES / 2;
+        }
+        i += SPLIT_WINDOW_SAMPLES / 2;
+    }
+    best_pos
+}

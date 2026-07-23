@@ -13,11 +13,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -55,17 +58,39 @@ data class PostProcessPrompt(
 @Composable
 fun PromptList(
     prompts: List<PostProcessPrompt>,
+    activePromptId: String,
     onAdd: () -> Unit,
     onEdit: (PostProcessPrompt) -> Unit,
     onDelete: (PostProcessPrompt) -> Unit,
+    onActivate: (PostProcessPrompt) -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(Spacing.lg)) {
-            Text(
-                text = stringResource(R.string.postprocess_prompts_section),
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.postprocess_prompts_section),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onImport) {
+                    Icon(
+                        imageVector = Icons.Default.FileOpen,
+                        contentDescription = stringResource(R.string.postprocess_prompt_import),
+                    )
+                }
+                IconButton(onClick = onExport) {
+                    Icon(
+                        imageVector = Icons.Default.Save,
+                        contentDescription = stringResource(R.string.postprocess_prompt_export),
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(Spacing.sm))
             if (prompts.isEmpty()) {
                 Text(
@@ -77,8 +102,10 @@ fun PromptList(
                     prompts.forEach { prompt ->
                         PromptRow(
                             prompt = prompt,
+                            isActive = prompt.id == activePromptId,
                             onEdit = { onEdit(prompt) },
                             onDelete = { onDelete(prompt) },
+                            onActivate = { onActivate(prompt) },
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
@@ -111,15 +138,23 @@ fun PromptList(
 @Composable
 private fun PromptRow(
     prompt: PostProcessPrompt,
+    isActive: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onActivate: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = Spacing.sm),
+            .padding(vertical = Spacing.sm)
+            .clickable(onClick = onActivate),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        RadioButton(
+            selected = isActive,
+            onClick = onActivate,
+        )
+        Spacer(modifier = Modifier.width(Spacing.sm))
         Column(modifier = Modifier.weight(1f)) {
             Text(text = prompt.name, style = MaterialTheme.typography.bodyLarge)
             Text(
@@ -127,6 +162,14 @@ private fun PromptRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (isActive) {
+            Text(
+                text = stringResource(R.string.postprocess_prompt_active_label),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.width(Spacing.sm))
         }
         IconButton(onClick = onEdit) {
             Icon(

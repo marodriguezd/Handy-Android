@@ -1,156 +1,119 @@
-# Handy Android Architecture
+# ARCHITECTURE.md — Arquitectura Técnica: Fusión Handy-Android + android_transcribe_app STT Core
 
-## Overview
-Handy Android is an Android port of the Handy desktop app. It is divided into two primary modules:
-1. `handy-core`: A Rust library exposing JNI bindings. It handles heavy lifting like audio capture (AAudio), resampling, Voice Activity Detection (VAD), and Whisper/transcribe-cpp batch inference.
-2. `app`: A Kotlin/Jetpack Compose Android application that provides the user interface, background services, and text injection logic (IME, Shizuku, Clipboard).
+> **Estado:** 🟢 Aprobado  
+> **Fecha:** 23 de Julio de 2026  
+> **Ámbito:** `handy-android/` (Rust cdylib + Kotlin Jetpack Compose MD3)
 
-## User Interface (Jetpack Compose)
+---
 
-### Navigation Hierarchy (Sprint 16)
-- **MainActivity**: The single activity hosting the Compose tree. Uses a `Scaffold` with an `TopAppBar` and adaptive navigation.
-- **Adaptive Navigation:**
-  - **Compact (`screenWidthDp < 600`)**: `NavigationBar` at the bottom.
-  - **Medium/Expanded (`screenWidthDp >= 600`)**: `NavigationRail` on the left, matching the PC sidebar.
-- **Nav Items (4):**
-  1. **General** — `TabRow` with "General" and "Avanzado" tabs
-  2. **Modelos** — `TabRow` with "Modelos" and "Post Proceso" tabs
-  3. **Historial** — Direct, no tabs
-  4. **Acerca de** — Direct, no tabs
-- **Onboarding** — Full-screen flow, shown on first launch (no navigation rail/bar)
+## 1. Visión Arquitectónica Global
 
-### Material Design 3 Theme (`ui/theme/`)
-The UI is built on top of Jetpack Compose Material 3 with a custom color scheme aligned to the Handy PC palette:
-- `Color.kt` defines the full MD3 token set (primary, secondary, tertiary, error, outline, inverse, scrim).
-- `Theme.kt` exposes `HandyTheme(darkTheme, dynamicColor)` with a dark-first default and a static light fallback.
-- `Type.kt` provides the complete MD3 type scale using Roboto.
-- `Shape.kt` provides MD3 corner tokens (`extraSmall` through `extraLarge`).
+La arquitectura combina la capa de presentación **Material Design 3 (MD3)** de Handy-Android con el motor de transcripción e inferencia offline **`transcribe-rs` + ONNX Runtime** de `android_transcribe_app`.
 
-### Screen Composables
-| Composable | Location | Contents |
-|---|---|---|
-| `GeneralSettingsContent` | `ui/settings/SettingsScreen.kt` | Audio (idle timeout), Text Injection (Shizuku toggle, keyboard switch), Battery Optimization |
-| `AdvancedSettingsContent` | `ui/settings/SettingsScreen.kt` | APLICACIÓN (Funciones Experimentales), SALIDA (Envío automático), TRANSCRIPCIÓN (VAD, Espacio Final), EXPERIMENTAL (Post Procesamiento toggle) |
-| `PostProcessContent` | `ui/settings/SettingsScreen.kt` | LLM Endpoint, API Key (with visibility toggle) |
-| `AboutContent` | `ui/settings/SettingsScreen.kt` | Version, Licenses (dialog), GitHub link |
-| `ModelCatalogScreen` | `ui/models/ModelCatalogScreen.kt` | Model list with download/activate/delete, language chips |
-| `HistoryScreen` | `ui/history/HistoryScreen.kt` | Paginated transcription list, delete/save |
-| `OnboardingScreen` | `ui/onboarding/OnboardingScreen.kt` | First-launch setup with model download/skip |
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        KOTLIN / COMPOSE UI LAYER                       │
+│  ┌────────────────────┐ ┌────────────────────┐ ┌────────────────────┐  │
+│  │  HandyVoiceBar     │ │ ModelCatalogScreen │ │ PostProcessScreen  │  │
+│  │  (IME Pill MD3)    │ │ (On-Demand Catalog)│ │ (Multi-prompt/Dict)│  │
+│  └─────────┬──────────┘ └─────────┬──────────┘ └─────────┬──────────┘  │
+│            │                      │                      │             │
+│  ┌─────────▼──────────────────────▼──────────────────────▼──────────┐  │
+│  │                    VIEWMODELS & REPOSITORIES                     │  │
+│  │  EngineViewModel · ModelsViewModel · RecordingRepository · ...   │  │
+│  └────────────────────────────────┬─────────────────────────────────┘  │
+└───────────────────────────────────┼────────────────────────────────────┘
+                                    │ JNI Bridge (EngineBridge.kt)
+┌───────────────────────────────────▼────────────────────────────────────┐
+│                        RUST NATIVE CORE LAYER                          │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  handy-core (cdylib) / jni_bridge.rs                              │  │
+│  ├──────────────────────────┬───────────────────────────────────────┤  │
+│  │  voice_session.rs        │  transcribe-rs Engine                 │  │
+│  │  · Lock-Free Ring Buffer │  · ONNX Runtime 1.25.0 (mmap zero-copy)│  │
+│  │  · AtomicU32 VAD Level   │  · Execution Providers: NNAPI/XNNPACK │  │
+│  │  · CPAL / AAudio Driver  │  · Models: Parakeet 0.6B / Canary 180M│  │
+│  └──────────────────────────┴───────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-### State Management
-- `EngineViewModel`: The central, process-wide singleton that holds the engine state (recording status, transcription results). It lives in the `HandyApplication` class and is shared between `MainActivity` and `HandyInputMethodService`.
-- `SettingsViewModel`: Created once at the Activity scope and shared across `GeneralSettingsContent`, `AdvancedSettingsContent`, and `PostProcessContent`. All settings are persisted to `SharedPreferences` via `SettingsStore`.
-- Other ViewModels (`ModelsViewModel`, `OnboardingViewModel`, `HistoryViewModel`) manage specific screen states.
-- State is exposed as `StateFlow` and consumed via `collectAsState()` in Compose.
+---
 
-### Settings Infrastructure
-- `SettingsStore`: SharedPreferences wrapper with typed getters/setters for all settings.
-- `AppSettings`: Data class for bulk passing settings to the Rust engine via `EngineViewModel.applySettings()`.
-- `SettingsViewModel`: UI state holder that syncs bidirectionally with `SettingsStore` and calls `engineViewModel.applySettings()` with debouncing for network-related settings.
+## 2. Componentes Nativos en Rust (`handy-core`)
 
-## Native Layer (JNI)
-The JNI bridge acts as the communication layer between Kotlin and Rust.
-- `EngineBridge`: All `external fun` declarations (22 functions) for native operations.
-- `EngineCallback`: Interface implemented by `EngineViewModel` for Rust → Kotlin callbacks (state changes, transcription, VAD level, errors, download progress).
-- UI state naturally updates when JNI callbacks alter the `EngineViewModel`.
+### 2.1 Módulo `transcribe-rs`
+- **Ubicación:** `handy-android/handy-core/transcribe-rs`
+- **Función:** Encapsula la inferencia ONNX Runtime para NVIDIA Parakeet TDT 0.6B y Canary 180M Flash.
+- **Mapeo de Memoria (`mmap`):** Los archivos `.onnx` se cargan utilizando la llamada de sistema `mmap`, permitiendo compartir las páginas de memoria directamente con el kernel sin duplicar buffers en el heap de Rust ni en la JVM.
+- **Aceleración por Hardware:** 
+  - `NNAPI` (Android Neural Networks API) para NPU/DSP.
+  - `XNNPACK` como aceleración de fallback de alta eficiencia para CPU ARM64.
 
-### Active Model Persistence (Sprint 13)
-The active model ID is persisted to `model_dir/.active_model` between app restarts:
-- `ModelManager::new()` loads the persisted ID on startup, verifying the `.gguf` exists
-- `set_active_model()` writes the ID to the file on each activation
-- `delete_model()` removes the file when the active model is deleted
-- Stale files (`.gguf` missing) are cleaned up automatically
+### 2.2 Pipeline de Audio Lock-Free (`voice_session.rs`)
+- **Gestión de Nivel VAD:** La energía del audio en tiempo real se calcula en el hilo de captura nativo y se escribe en un entero atómico `AtomicU32` (`f32` convertido a bits con `to_bits()`).
+- **Lectura desde Kotlin:** Kotlin consulta el entero atómico periódicamente o vía callback sin generar asignaciones de memoria (`GC allocations`).
+- **Canal de Muestras PCM:** Transmisión de muestras de audio de 16 kHz mono al motor `transcribe-rs` mediante un buffer circular `crossbeam-channel` no bloqueante.
 
-### Batch Transcription Cancellation (Sprint 13)
-A shared `cancel_flag: Arc<AtomicBool>` allows cancelling in-progress batch transcriptions:
-- `TranscriptionEngine.run()` checks before/after `session.run()`, discarding results when cancelled
-- `PeriodicWorker` checks before each partial `session.run()` (~3s intervals) and exits the loop
-- Flag is reset in `start_stream()`/`start_periodic()` at the start of each new recording
-- `cancel()`, `cancel_stream()`, `cancel_periodic()` all set the flag
+---
 
-## IME — onComputeInsets (Sprint 13)
-The IME now properly reports its content area to the Android framework:
-- Content height measured dynamically via `onGloballyPositioned` in Compose
-- `contentTopInsets` set to the pill's measured height — only the floating pill is "IME content"
-- `TOUCHABLE_INSETS_CONTENT` — touches in the transparent background pass through to the host app
-- Prevents the host app from being pushed up by the full IME window height
+## 3. Puente JNI y Capa Kotlin (`EngineBridge.kt`)
 
-## Mobile Recommended Subset + Capability Tests (Sprint 15)
+### 3.1 Signaturas JNI Clave
+```rust
+// handy-core/src/jni_bridge.rs
 
-### Curated Subset Asset (`app/src/main/assets/mobile_recommended.json`)
-A 19-model curated subset, organized by DeviceTier, co-located conceptually with `src-tauri/src/catalog/catalog.json`. Each tier carries one `primary` plus 1–4 `alternatives` that are promoted above the global catalog when the device belongs to that tier.
+#[no_mangle]
+pub extern "C" fn Java_com_handy_app_bridge_EngineBridge_nativeInitEngine(
+    env: JNIEnv,
+    _class: JClass,
+    model_dir: JString,
+    model_type: JString,
+) -> jboolean;
 
-| Tier | Primary | Alternatives (count) | Why |
-|---|---|---|---|
-| LOW | whisper-base | 3 | Fits ≤100MB, 99 langs, lang_detect |
-| MID | nemotron-3.5-streaming | 4 | Streaming + 28 langs + lang_detect |
-| HIGH | whisper-large-v3-turbo | 3 | 100 langs, fast turbo, replaces Turbo |
-| FLAGSHIP | whisper-large-v3 | 2 | Top accuracy upgrade from turbo |
-| TABLET | cohere-transcribe | 2 | Top accuracy score (92) for tablets |
+#[no_mangle]
+pub extern "C" fn Java_com_handy_app_bridge_EngineBridge_nativeStartRecording(
+    env: JNIEnv,
+    _class: JClass,
+) -> jboolean;
 
-### MobileRecommendations Loader (`capability/MobileRecommendations.kt`)
-- **Singleton loader** with thread-safe double-checked locking (`@Volatile cached` + `synchronized(this)`)
-- `@VisibleForTesting fun parseJson(raw: String)` — pure parsing seam for unit tests on the JVM, no Robolectric or Android Context required
-- `MobileRecommendationsFile.promotionBucket(tier, id)` returns 0 (primary) / 1 (alternative) / 2 (not-promoted)
-- `resetForTesting()` allows tests to invalidate the cache
+#[no_mangle]
+pub extern "C" fn Java_com_handy_app_bridge_EngineBridge_nativeStopAndTranscribe(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring;
 
-### ViewModel Integration
-- **OnboardingViewModel** selects initial download via priority chain: `tier.primary → tier.alternative → catalog.recommended → firstOrNull fitting fitsAndSafe`. Pure helper `computePromotionLabel(target, tierRecs)` emits a `<tier-primary | tier-alternative | global-recommended | fallback>` tag in the existing OnboardingVM logs.
-- **ModelsViewModel.computeVisibleList** sort chain extended:
-  ```kotlin
-  compareBy<Pair<ModelInfo, ModelCompatibility>>(
-      { -it.second.status.ordinal },                         // ACTIVE > FIT > EXCEEDS
-      { recs.promotionBucket(tier, it.first.id) },           // tier primary/alt first
-      { if (it.first.recommended) 0 else 1 },                // global fallback
-      { it.first.sizeBytes },                                  // smallest first within bucket
-  )
-  ```
+#[no_mangle]
+pub extern "C" fn Java_com_handy_app_bridge_EngineBridge_nativeGetVadLevel(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jfloat;
+```
 
-### Slug Normalization (P0 latent fix in ModelCapability)
-- `slugOf(modelId)` strips `"handy-computer/"` prefix and `"-gguf"` suffix (via constants `CATALOG_ID_PREFIX` / `CATALOG_ID_SUFFIX`)
-- `heavyGateSlugs` and `experimentalSlugs` are now bare slugs (`"Voxtral-Small-24B-2507"`, `"moonshine-base-zh"`)
-- Slug normalization is idempotent: both prefixed and bare slug inputs match correctly (proven by positive parity tests)
+---
 
-### Test Infrastructure (`app/src/test/java/com/handy/app/capability/`)
-- **JUnit 4** (4.13.2) + **org.json** (20231013) — pure JVM, no Robolectric, no Android SDK required at test time
-- `build.gradle.kts` exposes both as `testImplementation`
-- **21 total tests** split across `ModelCapabilityTest` (11) and `MobileRecommendationsTest` (10)
-- Pure JSON parsing: tests call `MobileRecommendations.parseJson(raw)` directly with inline fixtures; lazy singleton is bypassed by design
+## 4. Gestor de Descargas y Almacenamiento de Modelos
 
-## Capability-Aware Model Catalog (Sprint 14)
-Prevents OOM fatal crashes and guarantees model integrity across fragmented Android hardware by evaluating device capabilities before inference/download.
+### 4.1 Directorio de Almacenamiento
+Todos los modelos descargados bajo demanda por `ModelDownloadManager` residen en:
+`/data/data/com.handy.app.debug/files/models/` (o variante release).
 
-### Detection Layer (`capability/`)
-- **`DeviceCapabilityDetector.detect(context)`** queries `ActivityManager.MemoryInfo` + `isLowRamDevice` + `Runtime.maxMemory()` → returns an immutable `CapabilitySnapshot`
-- **`CapabilitySnapshot.toTier()`** resolves the tier using fixed RAM bands: ≤1.5GB → LOW, ≤3.5GB → MID, ≤6.5GB → HIGH, ≤12.5GB → FLAGSHIP, >12.5GB → TABLET
-- **`DeviceTier.maxRecommendedModelCapability`** maps each tier to the heaviest model class it can safely run: LOW→ULTRA_LIGHT, MID→LIGHT, HIGH→MEDIUM, FLAGSHIP→HEAVY, TABLET→EXTREME
+### 4.2 Estructura del Archivo de Modelo ONNX
+```
+files/models/parakeet-tdt-0.6b/
+├── encoder.onnx       (Modelo Encoder INT8)
+├── decoder.onnx       (Modelo Decoder INT8)
+├── tokenizer.json     (Tokenizer HuggingFace)
+└── vocab.txt          (Vocabulario de Tokens)
+```
 
-### Resolution Layer
-- **`ModelCapability.fromModel(model)`** classifies a model by `sizeBytes` into ULTRA_LIGHT / LIGHT / MEDIUM / HEAVY / EXTREME
-- **`ModelCapability.heavyGateIds`** = {Voxtral Small 24B, Voxtral Mini 4B Realtime, Voxtral Mini 3B} — always require user consent
-- **`ModelCapability.experimentalIds`** = 7 Moonshine Base monolingual variants — hidden unless `showExperimentalModels=true`
-- **`CompatibilityResolver.computeCompatibility(model, snapshot, showExperimental)`** — pure function returning `ModelCompatibility(tier, status, badges, requiresConsent, hidden)`
+---
 
-### UI Gating
-- **`DeviceCapabilityHeader`** (Card top of catalog) shows total GB, tier, refresh icon, and a conditional Switch for experimental models (visible only at MID+)
-- **`CompatibilityBadgeChip`** visualizes 4 badges (EXPERIMENTAL, HEAVY_GATE, EXCEEDS_RAM, LARGE_HEAP_REQUIRED)
-- **`HeavyModelWarningDialog`** gates HEAVY/EXTREME downloads behind a required Checkbox consent (title/body differentiate HEAVY vs EXTREME)
+## 5. Sistema de Post-Procesamiento con IA y Corrección Fonética
 
-### ViewModel Integration
-- **`ModelsViewModel.attemptDownload(model)`** routes through `computeCompatibility`; sets `showLargeModelDialogFor` when `requiresConsent=true`. The non-gating `downloadModel(modelId)` is preserved for imperative flows (e.g., onboarding auto-download)
-- **`OnboardingViewModel.fitsAndSafe`** filter excludes heavyGate models. Selection chain: `recommended+safe` → `any+safe` → null-dead-end fallback (logs warning + advances wizard with `isDownloadReady=true`). Snapshot is cached via `by lazy` to avoid re-detection on every state emission
+### 5.1 `WordCorrector.kt`
+- Implementa un pipeline de dos etapas para corregir palabras mal transcritas:
+  1. **Algoritmo Soundex:** Compara la representación fonética de la palabra reconocida contra el diccionario de usuario.
+  2. **Distancia de Levenshtein:** Selecciona el candidato con la menor distancia de edición.
 
-### Persistence
-- **`SettingsStore.showExperimentalModels`** (boolean, default `false`) persisted to `show_experimental_models` SharedPreferences key
-
-### Observability
-- **`EngineVM init` log** emitted after `nativeInit(...)`: `EngineVM init; capabilityTier=${tier}; totalMemGB=${gb}; showExperimental=${flag}`
-- **`OnboardingVM`** emits 11 distinct log lines (TAG="OnboardingVM") covering step transitions, model load, target selection, and download events. Failure logs de-dup via a separate `lastLoggedFailureId` sentinel (avoiding collision with `downloadTargetId`)
-
-## Text Injection Strategy
-Handy Android supports multiple mechanisms to insert recognized text into third-party apps:
-1. **IME (Input Method Service):** Acts as a custom keyboard (HandyPC style). Auto-commits text directly to `InputConnection`.
-2. **Shizuku:** Root-like injection using accessibility or input events via Shizuku (requires Shizuku runtime).
-3. **Clipboard:** Fallback method that simply copies text to the Android clipboard.
-
-The `InjectorRouter` automatically selects the best strategy (Shizuku > IME > Clipboard) and falls back to clipboard on failure.
+### 5.2 Cliente HTTP de Post-Procesamiento
+- Realiza llamadas asíncronas no bloqueantes (`OkHttp` / `Ktor`) a endpoints estilo OpenAI (`/v1/chat/completions`) insertando la plantilla activa elegida por el usuario.

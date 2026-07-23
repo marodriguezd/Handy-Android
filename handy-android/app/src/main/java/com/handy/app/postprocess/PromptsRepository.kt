@@ -32,6 +32,52 @@ class PromptsRepository(context: Context) {
         return list
     }
 
+    /**
+     * Export all custom prompts (without the built-in default) as a JSON array.
+     * Caller is responsible for choosing the destination (clipboard, file, etc.).
+     */
+    @Synchronized
+    fun exportToJson(): String {
+        val custom = loadCustomPrompts()
+        val jsonArray = JSONArray()
+        for (p in custom) {
+            val obj = JSONObject().apply {
+                put("id", p.id)
+                put("name", p.name)
+                put("body", p.body)
+            }
+            jsonArray.put(obj)
+        }
+        return jsonArray.toString(2)
+    }
+
+    /**
+     * Import custom prompts from a JSON array string. Each object must contain
+     * at least `name` and `body`; missing `id` is auto-generated. Existing
+     * custom prompts are replaced by the imported list.
+     * @return true if at least one prompt was imported successfully.
+     */
+    @Synchronized
+    fun importFromJson(json: String): Boolean {
+        val imported = mutableListOf<Prompt>()
+        try {
+            val array = JSONArray(json)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val name = obj.optString("name", "").trim()
+                val body = obj.optString("body", "").trim()
+                if (name.isEmpty() || body.isEmpty()) continue
+                val id = obj.optString("id", "").ifEmpty { java.util.UUID.randomUUID().toString() }
+                imported.add(Prompt(id, name, body))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse prompt import JSON", e)
+            return false
+        }
+        writeCustomPrompts(imported)
+        return imported.isNotEmpty()
+    }
+
     @Synchronized
     fun getActivePrompt(): Prompt {
         val activeId = prefs.getString(KEY_ACTIVE_PROMPT_ID, Prompt.BUILTIN_ID) ?: Prompt.BUILTIN_ID

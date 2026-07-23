@@ -91,6 +91,40 @@ impl ModelInfo {
             },
 
             // ──────────────────────────────────────────────────────────
+            //  ONNX Parakeet / Canary (transcribe-rs, directory-based)
+            // ──────────────────────────────────────────────────────────
+
+            ModelInfo {
+                id: "parakeet-tdt-0.6b-v3-int8".into(),
+                name: "Parakeet TDT 0.6B v3 ONNX (INT8)".into(),
+                size_bytes: 650_000_000,
+                downloaded: false,
+                active: false,
+                download_progress: 0.0,
+                description: "NVIDIA Parakeet TDT 0.6B v3 en formato ONNX INT8 (directorio). Recomendado para transcribe-rs. 25 idiomas europeos.".into(),
+                recommended: true,
+                requires: "2 GB RAM".into(),
+                language: "bg,hr,cs,da,nl,en,et,fi,fr,de,el,hu,it,lv,lt,mt,pl,pt,ro,ru,sk,sl,es,sv,uk".into(),
+                quant: "INT8 ONNX".into(),
+                license: "CC-BY-4.0".into(),
+            },
+
+            ModelInfo {
+                id: "canary-180m-flash-int8".into(),
+                name: "Canary 180M Flash ONNX (INT8)".into(),
+                size_bytes: 250_000_000,
+                downloaded: false,
+                active: false,
+                download_progress: 0.0,
+                description: "NVIDIA Canary 180M Flash en formato ONNX INT8 (directorio). Rápido y multilingüe (EN, DE, ES, FR) para transcribe-rs.".into(),
+                recommended: true,
+                requires: "1 GB RAM".into(),
+                language: "en,de,es,fr".into(),
+                quant: "INT8 ONNX".into(),
+                license: "CC-BY-4.0".into(),
+            },
+
+            // ──────────────────────────────────────────────────────────
             //  WHISPER (OpenAI) — 99 idiomas, vía whisper.cpp
             // ──────────────────────────────────────────────────────────
 

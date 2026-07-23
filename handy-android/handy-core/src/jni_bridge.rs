@@ -2,7 +2,7 @@ use crate::engine::{ensure_engine_init, EngineState, ENGINE, JAVA_VM};
 use crate::history::retry as wav_decode;
 use crate::jni_callback;
 use jni::objects::{JByteBuffer, JClass, JObject, JString};
-use jni::sys::{jboolean, jint, jlong, jstring};
+use jni::sys::{jboolean, jfloat, jint, jlong, jstring};
 use jni::JNIEnv;
 use log::{info, warn};
 use std::panic::{self, AssertUnwindSafe};
@@ -654,6 +654,19 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeIsRecording<
 ) -> jboolean {
     with_guard(&mut _env, "nativeIsRecording", |_env| {
         with_engine(|state| state.is_recording) as jboolean
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeGetVadLevel<'local>(
+    mut _env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> jfloat {
+    with_guard(&mut _env, "nativeGetVadLevel", |_env| {
+        with_engine_or(|state| {
+            let bits = state.audio_pipeline.vad_level.load(std::sync::atomic::Ordering::Relaxed);
+            f32::from_bits(bits) as jfloat
+        }, 0.0f32)
     })
 }
 

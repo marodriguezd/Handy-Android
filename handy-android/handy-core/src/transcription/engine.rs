@@ -3,34 +3,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use log::{info, warn};
-use transcribe_cpp::{Backend, Model, ModelOptions, RunOptions, StreamOptions, Task};
 
-use crate::transcription::periodic::PeriodicWorker;
-use crate::transcription::router::{StreamCmd, StreamRouter};
-use crate::transcription::worker::StreamWorker;
-
-/// Union type for either a streaming worker or a periodic batch worker.
-/// Both implement the same channel protocol (Feed/Finalize/Cancel via StreamRouter).
-enum StreamWorkerOrPeriodic {
-    Streaming(StreamWorker),
-    Periodic(PeriodicWorker),
-}
+use crate::transcription::router::StreamRouter;
+use transcribe_rs::engines::parakeet::{ParakeetEngine, ParakeetInferenceParams, ParakeetModelParams, QuantizationType};
+use transcribe_rs::TranscriptionEngine as TranscribeRsEngine;
 
 pub struct TranscriptionEngine {
     active_model_path: Option<PathBuf>,
-    model: Mutex<Option<Model>>,
+    engine: Mutex<Option<ParakeetEngine>>,
     is_loaded: AtomicBool,
     post_process_endpoint: Option<String>,
     post_process_api_key: Option<String>,
     stream_router: Arc<StreamRouter>,
-    stream_worker: Mutex<Option<StreamWorkerOrPeriodic>>,
     is_streaming: AtomicBool,
-    worker_id_counter: std::sync::atomic::AtomicU64,
     selected_language: Mutex<Option<String>>,
     acceleration_backend: Mutex<Option<String>>,
-    /// Shared flag to signal cancellation of a running batch transcription.
-    /// Checked before and after session.run() to skip/discard results when
-    /// the user cancels recording while inference is queued or in progress.
     cancel_flag: Arc<AtomicBool>,
 }
 
@@ -38,14 +25,12 @@ impl TranscriptionEngine {
     pub fn new() -> Self {
         Self {
             active_model_path: None,
-            model: Mutex::new(None),
+            engine: Mutex::new(None),
             is_loaded: AtomicBool::new(false),
             post_process_endpoint: None,
             post_process_api_key: None,
             stream_router: Arc::new(StreamRouter::new()),
-            stream_worker: Mutex::new(None),
             is_streaming: AtomicBool::new(false),
-            worker_id_counter: std::sync::atomic::AtomicU64::new(1),
             selected_language: Mutex::new(None),
             acceleration_backend: Mutex::new(None),
             cancel_flag: Arc::new(AtomicBool::new(false)),
@@ -64,51 +49,33 @@ impl TranscriptionEngine {
         info!("[handy-core] loading model from: {:?}", path);
 
         let backend_str = self.acceleration_backend.lock().unwrap().clone();
-        let backend = match backend_str.as_deref().unwrap_or("auto").to_lowercase().as_str() {
-            "cpu" => Backend::Cpu,
-            "vulkan" => Backend::Vulkan,
-            "opencl" => Backend::OpenCL,
-            "nnapi" => Backend::NNAPI,
-            "metal" => Backend::Metal,
-            "cuda" => Backend::Cuda,
-            _ => Backend::Auto,
+        let backend = backend_str.as_deref().unwrap_or("auto").to_lowercase();
+        info!("[handy-core] requested acceleration backend: {}", backend);
+
+        let quantization = match backend.as_str() {
+            "cpu" => QuantizationType::Int8,
+            "nnapi" | "xnnpack" | "vulkan" => QuantizationType::Int8,
+            _ => QuantizationType::Int8,
         };
 
-        let model_options = ModelOptions {
-            backend,
-            gpu_device: 0,
-        };
-
-        // Check file exists and is readable
-        match std::fs::metadata(path) {
-            Ok(meta) => info!("[handy-core] model file: {} bytes", meta.len()),
-            Err(e) => warn!("[handy-core] model file metadata failed: {e}"),
+        let mut engine = ParakeetEngine::new();
+        let params = ParakeetModelParams { quantization };
+        if let Err(e) = engine.load_model_with_params(path, params) {
+            let err_msg = format!("Failed to load model: {e}");
+            warn!("[handy-core] {}", err_msg);
+            return Err(err_msg);
         }
 
-        let model = match Model::load_with(path, &model_options) {
-            Ok(m) => m,
-            Err(e) => {
-                let err_msg = format!("Failed to load model: {e}");
-                warn!("[handy-core] {err_msg}");
-                return Err(err_msg);
-            }
-        };
-
-        // Log the backend that transcribe-cpp actually bound to. On Android
-        // this is typically "cpu" today, but if the build ever includes
-        // Vulkan/QNN support, Auto will bind to the best available backend.
-        info!("[handy-core] model loaded, backend='{}'", model.backend());
-
         self.active_model_path = Some(path.clone());
-        *self.model.lock().unwrap() = Some(model);
+        *self.engine.lock().unwrap() = Some(engine);
         self.is_loaded.store(true, Ordering::Release);
 
-        info!("[handy-core] model loaded successfully");
+        info!("[handy-core] model loaded successfully from {:?}", path);
         Ok(())
     }
 
     pub fn unload_model(&self) {
-        *self.model.lock().unwrap() = None;
+        *self.engine.lock().unwrap() = None;
         self.is_loaded.store(false, Ordering::Release);
         info!("[handy-core] model unloaded");
     }
@@ -117,238 +84,97 @@ impl TranscriptionEngine {
         self.is_loaded.load(Ordering::Acquire)
     }
 
-    /// Run batch transcription on a full PCM buffer using session.run().
-    /// This is the correct API for Whisper GGUF models (they don't support
-    /// streaming via session.stream()).
-    ///
-    /// Checks `cancel_flag` before and after `session.run()`. If cancellation
-    /// was requested, the call returns early or discards the result.
     pub fn run(&self, pcm: &[f32]) -> Result<String, String> {
-        // Reset cancel flag at the start of a fresh run
         self.cancel_flag.store(false, Ordering::SeqCst);
 
-        // Check cancellation before doing any work
         if self.cancel_flag.load(Ordering::SeqCst) {
             info!("[handy-core] batch run cancelled before inference");
             return Err("Transcription cancelled".to_string());
         }
 
-        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
-        let model = model_guard
+        let mut engine_guard = self.engine.lock().map_err(|e| e.to_string())?;
+        let engine = engine_guard
             .as_mut()
             .ok_or_else(|| "No model loaded".to_string())?;
 
-        let mut session = model
-            .session()
-            .map_err(|e| format!("Failed to create session: {e}"))?;
-        drop(model_guard);
-
-        // Peak-normalize the audio so Whisper gets a full-range signal.
-        let normalized = normalize_peak(pcm);
-        let rms = compute_rms(&normalized);
-
         let lang_guard = self.selected_language.lock().unwrap();
-        let language = match lang_guard.as_deref() {
+        let _language = match lang_guard.as_deref() {
             Some("auto") | None | Some("") => None,
             Some(l) => Some(l.to_string()),
         };
         drop(lang_guard);
+        // TODO(Phase 1b): forward language to ParakeetInferenceParams when
+        // transcribe-rs exposes a language hint parameter.
 
-        let run_options = RunOptions {
-            task: Task::Transcribe,
-            language: language.clone(),
-            target_language: None,
-            ..Default::default()
-        };
-
-        // Check cancellation again before the expensive inference call
         if self.cancel_flag.load(Ordering::SeqCst) {
-            info!("[handy-core] batch run cancelled before session.run()");
+            info!("[handy-core] batch run cancelled before inference");
             return Err("Transcription cancelled".to_string());
         }
 
-        info!("[handy-core] running transcription on {} samples, rms={:.4}, language={:?}", pcm.len(), rms, language);
-        let transcript = session
-            .run(&normalized, &run_options)
-            .map_err(|e| format!("Transcription run failed: {e}"))?;
+        let normalized = normalize_peak(pcm);
+        let rms = compute_rms(&normalized);
+        info!("[handy-core] running transcription on {} samples, rms={:.4}", pcm.len(), rms);
 
-        // Discard the result if cancellation was requested during inference
-        if self.cancel_flag.load(Ordering::SeqCst) {
-            info!("[handy-core] batch run result discarded (cancelled during inference)");
-            return Err("Transcription cancelled".to_string());
+        let params = ParakeetInferenceParams::default();
+        match engine.transcribe_samples(normalized, Some(params)) {
+            Ok(result) => {
+                if self.cancel_flag.load(Ordering::SeqCst) {
+                    info!("[handy-core] batch run result discarded (cancelled during inference)");
+                    return Err("Transcription cancelled".to_string());
+                }
+                info!("[handy-core] transcription complete: {} chars", result.text.len());
+                Ok(result.text)
+            }
+            Err(e) => {
+                warn!("[handy-core] transcription run failed: {e}");
+                Err(format!("Transcription run failed: {e}"))
+            }
         }
-
-        info!("[handy-core] transcription complete: {} chars: '{}'", transcript.text.len(), transcript.text);
-        Ok(transcript.text)
     }
 
     pub fn supports_streaming(&self) -> Result<bool, String> {
-        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
-        let model = model_guard
-            .as_mut()
-            .ok_or_else(|| "No model loaded".to_string())?;
-        let session = model
-            .session()
-            .map_err(|e| format!("Failed to create session: {e}"))?;
-        let caps = session.model().capabilities();
-        Ok(caps.supports_streaming)
+        Ok(false)
     }
 
-    pub fn start_stream<F>(&self, on_partial: F) -> Result<bool, String>
+    pub fn start_stream<F>(&self, _on_partial: F) -> Result<bool, String>
     where
         F: Fn(String) + Send + 'static,
     {
-        if self.is_streaming_active() {
-            return Err("A stream is already active".to_string());
-        }
-
-        // Reset cancel flag for the new recording session
-        self.cancel_flag.store(false, Ordering::SeqCst);
-
-        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
-        let model = model_guard
-            .as_mut()
-            .ok_or_else(|| "No model loaded".to_string())?;
-
-        let mut session = model
-            .session()
-            .map_err(|e| format!("Failed to create session: {e}"))?;
-
-        let arch = session.model().arch();
-        let variant = session.model().variant();
-
-        let lang_guard = self.selected_language.lock().unwrap();
-        let language = match lang_guard.as_deref() {
-            Some("auto") | None | Some("") => None,
-            Some(l) => Some(l.to_string()),
-        };
-        drop(lang_guard);
-
-        let run_options = RunOptions {
-            task: Task::Transcribe,
-            language: language.clone(),
-            target_language: None,
-            family: None,
-            ..Default::default()
-        };
-
-        match session.stream(&run_options, &StreamOptions::default()) {
-            Ok(_) => {
-                info!(
-                    "[handy-core] model supports streaming: arch='{arch}' variant='{variant}'"
-                );
-            }
-            Err(e) => {
-                info!(
-                    "[handy-core] model does not support streaming (arch='{arch}' variant='{variant}'): {e}; using batch"
-                );
-                return Ok(false);
-            }
-        };
-
-        let rx = self.stream_router.open_channel();
-        let worker_id = self.worker_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let mut worker = StreamWorker::new(worker_id);
-        worker.spawn(rx, session, language, on_partial);
-
-        *self.stream_worker.lock().unwrap() = Some(StreamWorkerOrPeriodic::Streaming(worker));
-        self.is_streaming.store(true, std::sync::atomic::Ordering::Release);
-        info!("[handy-core] streaming transcription started");
-        Ok(true)
+        // TODO(Phase 2): implement lock-free streaming over the audio ring buffer
+        // once transcribe-rs exposes a streaming API or chunked inference.
+        info!("[handy-core] streaming not yet implemented with transcribe-rs; falling back to batch");
+        Ok(false)
     }
 
     pub fn finalize_stream(&self) -> Option<String> {
-        use std::time::Duration;
-        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
-        if self.stream_router.send(StreamCmd::Finalize(reply_tx)).is_err() {
-            warn!("[handy-core] finalize_stream: router send failed");
-            self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
-            *self.stream_worker.lock().unwrap() = None;
-            return None;
-        }
-        match reply_rx.recv_timeout(Duration::from_secs(30)) {
-            Ok(result) => {
-                self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
-                *self.stream_worker.lock().unwrap() = None;
-                self.stream_router.close();
-                result
-            }
-            Err(e) => {
-                warn!("[handy-core] finalize_stream: timeout/error waiting for worker: {e}");
-                self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
-                *self.stream_worker.lock().unwrap() = None;
-                self.stream_router.close();
-                None
-            }
-        }
+        self.is_streaming.store(false, Ordering::Release);
+        None
     }
 
     pub fn cancel_stream(&self) {
         self.cancel_flag.store(true, Ordering::SeqCst);
-        let _ = self.stream_router.send(StreamCmd::Cancel);
-        self.is_streaming.store(false, std::sync::atomic::Ordering::Release);
-        *self.stream_worker.lock().unwrap() = None;
-        self.stream_router.close();
+        self.is_streaming.store(false, Ordering::Release);
     }
 
-    // ── Periodic (fallback) Transcription ─────────────────────
-
-    /// Start periodic batch transcription as a fallback when the model
-    /// doesn't support native streaming. Every ~3 seconds, runs
-    /// `session.run()` on the accumulated audio and dispatches the
-    /// result as partial text via `on_partial`.
-    pub fn start_periodic<F>(&self, on_partial: F) -> Result<bool, String>
+    pub fn start_periodic<F>(&self, _on_partial: F) -> Result<bool, String>
     where
         F: Fn(String) + Send + 'static,
     {
-        if self.is_streaming_active() {
-            return Err("A stream is already active".to_string());
-        }
-
-        // Reset cancel flag for the new recording session
-        self.cancel_flag.store(false, Ordering::SeqCst);
-
-        let mut model_guard = self.model.lock().map_err(|e| e.to_string())?;
-        let model = model_guard
-            .as_mut()
-            .ok_or_else(|| "No model loaded".to_string())?;
-
-        let session = model
-            .session()
-            .map_err(|e| format!("Failed to create session: {e}"))?;
-        drop(model_guard);
-
-        let lang_guard = self.selected_language.lock().unwrap();
-        let language = match lang_guard.as_deref() {
-            Some("auto") | None | Some("") => None,
-            Some(l) => Some(l.to_string()),
-        };
-        drop(lang_guard);
-
-        let rx = self.stream_router.open_channel();
-        let worker_id = self.worker_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let mut worker = PeriodicWorker::new(worker_id);
-        worker.spawn(rx, session, self.cancel_flag.clone(), language, on_partial);
-
-        *self.stream_worker.lock().unwrap() = Some(StreamWorkerOrPeriodic::Periodic(worker));
-        self.is_streaming.store(true, std::sync::atomic::Ordering::Release);
-        info!("[handy-core] periodic batch transcription started");
-        Ok(true)
+        // TODO(Phase 2): implement periodic chunked transcription for live feedback.
+        info!("[handy-core] periodic transcription not yet implemented with transcribe-rs; falling back to batch");
+        Ok(false)
     }
 
-    /// Finalize periodic transcription. Sends Finalize command and waits
-    /// for the worker to return the final result.
     pub fn finalize_periodic(&self) -> Option<String> {
-        self.finalize_stream()  // Same channel protocol — Finalize command works for both
+        self.finalize_stream()
     }
 
-    /// Cancel periodic transcription.
     pub fn cancel_periodic(&self) {
-        self.cancel_stream()  // Same channel protocol — Cancel command works for both
+        self.cancel_stream()
     }
 
     pub fn is_streaming_active(&self) -> bool {
-        self.is_streaming.load(std::sync::atomic::Ordering::Acquire)
+        self.is_streaming.load(Ordering::Acquire)
     }
 
     pub fn stream_router(&self) -> &Arc<StreamRouter> {
@@ -376,7 +202,6 @@ impl Default for TranscriptionEngine {
     }
 }
 
-/// Remove common filler words from transcription text.
 pub fn remove_filler_words(text: &str) -> String {
     let fillers = [
         "um", "uh", "hmm", "mm", "ah", "er", "huh",
@@ -456,7 +281,6 @@ pub fn remove_filler_words(text: &str) -> String {
     }
 }
 
-/// Collapse 3+ consecutive identical words into a single word.
 pub fn collapse_stutters(text: &str) -> String {
     let words: Vec<&str> = text.split_whitespace().collect();
     if words.is_empty() {
@@ -481,19 +305,14 @@ pub fn collapse_stutters(text: &str) -> String {
     result.join(" ")
 }
 
-/// Peak-normalize audio samples so the maximum absolute value reaches ~0.95.
-/// This ensures Whisper receives audio with adequate signal level regardless
-/// of microphone sensitivity. Returns a new Vec<f32> with the normalized samples.
 pub fn normalize_peak(samples: &[f32]) -> Vec<f32> {
     if samples.is_empty() {
         return Vec::new();
     }
 
-    // Find the peak (maximum absolute) sample value
     let peak = samples.iter().fold(0.0f32, |max, &s| max.max(s.abs()));
 
     if peak < 0.0001 {
-        // Near-silence — return as-is
         log::warn!("[handy-core] normalize_peak: near-silence (peak={:.6})", peak);
         return samples.to_vec();
     }
@@ -504,14 +323,12 @@ pub fn normalize_peak(samples: &[f32]) -> Vec<f32> {
     log::info!("[handy-core] normalize_peak: peak={:.6}, gain={:.2}x", peak, gain);
 
     if (gain - 1.0).abs() < 0.01 {
-        // Already at good level, no scaling needed
         samples.to_vec()
     } else {
         samples.iter().map(|&s| (s * gain).clamp(-1.0, 1.0)).collect()
     }
 }
 
-/// Compute the RMS (root mean square) energy of audio samples.
 pub fn compute_rms(samples: &[f32]) -> f32 {
     if samples.is_empty() {
         return 0.0;
@@ -520,7 +337,6 @@ pub fn compute_rms(samples: &[f32]) -> f32 {
     (sum_sq / samples.len() as f32).sqrt()
 }
 
-/// Apply both post-processing filters: remove filler words and collapse stutters.
 pub fn post_process(text: &str) -> String {
     let text = remove_filler_words(text);
     collapse_stutters(&text)

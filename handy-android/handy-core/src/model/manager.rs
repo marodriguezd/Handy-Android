@@ -1,6 +1,7 @@
 use crate::model::info::ModelInfo;
 use futures_util::StreamExt;
 use log::{error, info, warn};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,250 +33,288 @@ impl std::fmt::Display for ModelError {
 
 impl std::error::Error for ModelError {}
 
-fn model_download_url(model_id: &str) -> Option<String> {
+/// Describes how a model is packaged and where its files are fetched.
+#[derive(Debug, Clone)]
+pub enum DownloadSpec {
+    /// Single-file model (e.g., a GGUF).
+    SingleFile(String),
+    /// Directory-based model (e.g., ONNX + vocab). Files are downloaded from
+    /// `base_url/<filename>` into `model_dir/<model_id>/<filename>`.
+    Directory {
+        base_url: String,
+        files: Vec<String>,
+    },
+}
+
+fn model_download_spec(model_id: &str) -> Option<DownloadSpec> {
     match model_id {
+        // ── ONNX directory models (transcribe-rs / Parakeet) ─────
+        "parakeet-tdt-0.6b-v3-int8" => Some(DownloadSpec::Directory {
+            base_url: "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main".into(),
+            files: vec![
+                "encoder-model.int8.onnx".into(),
+                "decoder_joint-model.int8.onnx".into(),
+                "nemo128.onnx".into(),
+                "config.json".into(),
+                "vocab.txt".into(),
+            ],
+        }),
+        "canary-180m-flash-int8" => Some(DownloadSpec::Directory {
+            base_url: "https://huggingface.co/istupakov/canary-180m-flash-onnx/resolve/main".into(),
+            files: vec![
+                "encoder-model.int8.onnx".into(),
+                "decoder-model.int8.onnx".into(),
+                "vocab.txt".into(),
+            ],
+        }),
+
         // ── Whisper (handy-computer, HuggingFace GGUF) ────────────
-        "whisper-tiny-Q5_K_M" => Some(
+        "whisper-tiny-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-tiny-gguf/resolve/main/whisper-tiny-Q5_K_M.gguf".into(),
-        ),
-        "whisper-base-Q5_K_M" => Some(
+        )),
+        "whisper-base-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-base-gguf/resolve/main/whisper-base-Q5_K_M.gguf".into(),
-        ),
-        "whisper-small-Q5_K_M" => Some(
+        )),
+        "whisper-small-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-small-gguf/resolve/main/whisper-small-Q5_K_M.gguf".into(),
-        ),
-        "whisper-medium-Q4_K_M" => Some(
+        )),
+        "whisper-medium-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-medium-gguf/resolve/main/whisper-medium-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Canary (NVIDIA, HuggingFace GGUF) ─────────────────────
-        "canary-qwen-2.5b-Q4_K_M" => Some(
+        "canary-qwen-2.5b-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/canary-qwen-2.5b-gguf/resolve/main/canary-qwen-2.5b-Q4_K_M.gguf".into(),
-        ),
-        "canary-180m-flash-Q4_K_M" => Some(
+        )),
+        "canary-180m-flash-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/canary-180m-flash-gguf/resolve/main/canary-180m-flash-Q4_K_M.gguf".into(),
-        ),
-        "canary-1b-flash-Q4_K_M" => Some(
+        )),
+        "canary-1b-flash-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/canary-1b-flash-gguf/resolve/main/canary-1b-flash-Q4_K_M.gguf".into(),
-        ),
-        "canary-1b-v2-Q4_K_M" => Some(
+        )),
+        "canary-1b-v2-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/canary-1b-v2-gguf/resolve/main/canary-1b-v2-Q4_K_M.gguf".into(),
-        ),
-        "canary-1b-Q4_K_M" => Some(
+        )),
+        "canary-1b-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/canary-1b-gguf/resolve/main/canary-1b-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── SenseVoice (Alibaba, HuggingFace / Blob) ────────────────
-        "sense-voice-int8" => Some(
+        "sense-voice-int8" => Some(DownloadSpec::SingleFile(
             "https://blob.handy.computer/sense-voice-int8.tar.gz".into(),
-        ),
+        )),
 
         // ── Parakeet (NVIDIA, HuggingFace GGUF) ───────────────────
-        "parakeet-tdt-0.6b-v3-Q4_K_M" => Some(
+        "parakeet-tdt-0.6b-v3-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/main/parakeet-tdt-0.6b-v3-Q4_K_M.gguf".into(),
-        ),
-        "parakeet-tdt-0.6b-v2-Q4_K_M" => Some(
+        )),
+        "parakeet-tdt-0.6b-v2-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v2-gguf/resolve/main/parakeet-tdt-0.6b-v2-Q4_K_M.gguf".into(),
-        ),
-        "parakeet-unified-en-0.6b-Q4_K_M" => Some(
+        )),
+        "parakeet-unified-en-0.6b-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-unified-en-0.6b-gguf/resolve/main/parakeet-unified-en-0.6b-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Nemotron (NVIDIA, HuggingFace GGUF) ───────────────────
-        "nemotron-3.5-asr-streaming-0.6b-Q4_K_M" => Some(
+        "nemotron-3.5-asr-streaming-0.6b-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf/resolve/main/nemotron-3.5-asr-streaming-0.6b-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Qwen3-ASR (Alibaba, HuggingFace GGUF) ────────────────
-        "Qwen3-ASR-0.6B-Q4_K_M" => Some(
+        "Qwen3-ASR-0.6B-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Qwen3-ASR-0.6B-gguf/resolve/main/Qwen3-ASR-0.6B-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Fun-ASR (FunAudioLLM, HuggingFace GGUF) ──────────────
-        "Fun-ASR-MLT-Nano-2512-Q4_K_M" => Some(
+        "Fun-ASR-MLT-Nano-2512-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Fun-ASR-MLT-Nano-2512-gguf/resolve/main/Fun-ASR-MLT-Nano-2512-Q4_K_M.gguf".into(),
-        ),
-        "Fun-ASR-Nano-2512-Q4_K_M" => Some(
+        )),
+        "Fun-ASR-Nano-2512-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Fun-ASR-Nano-2512-gguf/resolve/main/Fun-ASR-Nano-2512-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── GigaAM (ai-sage, HuggingFace GGUF) ───────────────────
-        "gigaam-v3-ctc-Q4_K_M" => Some(
+        "gigaam-v3-ctc-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/gigaam-v3-ctc-gguf/resolve/main/gigaam-v3-ctc-Q4_K_M.gguf".into(),
-        ),
-        "gigaam-v3-e2e-ctc-Q4_K_M" => Some(
+        )),
+        "gigaam-v3-e2e-ctc-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/gigaam-v3-e2e-ctc-gguf/resolve/main/gigaam-v3-e2e-ctc-Q4_K_M.gguf".into(),
-        ),
-        "gigaam-v3-rnnt-Q4_K_M" => Some(
+        )),
+        "gigaam-v3-rnnt-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/gigaam-v3-rnnt-gguf/resolve/main/gigaam-v3-rnnt-Q4_K_M.gguf".into(),
-        ),
-        "gigaam-v3-e2e-rnnt-Q4_K_M" => Some(
+        )),
+        "gigaam-v3-e2e-rnnt-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/gigaam-v3-e2e-rnnt-gguf/resolve/main/gigaam-v3-e2e-rnnt-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Granite Speech (IBM, HuggingFace GGUF) ────────────────
-        "granite-speech-4.1-2b-nar-Q4_K_M" => Some(
+        "granite-speech-4.1-2b-nar-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/granite-speech-4.1-2b-nar-gguf/resolve/main/granite-speech-4.1-2b-nar-Q4_K_M.gguf".into(),
-        ),
-        "granite-4.0-1b-speech-Q4_K_M" => Some(
+        )),
+        "granite-4.0-1b-speech-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/granite-4.0-1b-speech-gguf/resolve/main/granite-4.0-1b-speech-Q4_K_M.gguf".into(),
-        ),
-        "granite-speech-4.1-2b-Q4_K_M" => Some(
+        )),
+        "granite-speech-4.1-2b-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/granite-speech-4.1-2b-gguf/resolve/main/granite-speech-4.1-2b-Q4_K_M.gguf".into(),
-        ),
-        "granite-speech-4.1-2b-plus-Q4_K_M" => Some(
+        )),
+        "granite-speech-4.1-2b-plus-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/granite-speech-4.1-2b-plus-gguf/resolve/main/granite-speech-4.1-2b-plus-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── MedASR (Google, HuggingFace GGUF) ────────────────────
-        "medasr-Q4_K_M" => Some(
+        "medasr-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/medasr-gguf/resolve/main/medasr-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Moonshine (UsefulSensors, HuggingFace GGUF) ──────────
-        "moonshine-tiny-Q8_0" => Some(
+        "moonshine-tiny-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-tiny-gguf/resolve/main/moonshine-tiny-Q8_0.gguf".into(),
-        ),
-        "moonshine-streaming-tiny-Q8_0" => Some(
+        )),
+        "moonshine-streaming-tiny-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-streaming-tiny-gguf/resolve/main/moonshine-streaming-tiny-Q8_0.gguf".into(),
-        ),
-        "moonshine-tiny-vi-Q8_0" => Some(
+        )),
+        "moonshine-tiny-vi-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-tiny-vi-gguf/resolve/main/moonshine-tiny-vi-Q8_0.gguf".into(),
-        ),
-        "moonshine-tiny-uk-Q8_0" => Some(
+        )),
+        "moonshine-tiny-uk-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-tiny-uk-gguf/resolve/main/moonshine-tiny-uk-Q8_0.gguf".into(),
-        ),
-        "moonshine-tiny-ko-Q8_0" => Some(
+        )),
+        "moonshine-tiny-ko-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-tiny-ko-gguf/resolve/main/moonshine-tiny-ko-Q8_0.gguf".into(),
-        ),
-        "moonshine-tiny-zh-Q8_0" => Some(
+        )),
+        "moonshine-tiny-zh-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-tiny-zh-gguf/resolve/main/moonshine-tiny-zh-Q8_0.gguf".into(),
-        ),
-        "moonshine-tiny-ar-Q8_0" => Some(
+        )),
+        "moonshine-tiny-ar-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-tiny-ar-gguf/resolve/main/moonshine-tiny-ar-Q8_0.gguf".into(),
-        ),
+        )),
 
         // ── Cohere Transcribe (CohereLabs, HuggingFace GGUF) ─────
-        "cohere-transcribe-03-2026-Q4_K_M" => Some(
+        "cohere-transcribe-03-2026-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/cohere-transcribe-03-2026-gguf/resolve/main/cohere-transcribe-03-2026-Q4_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Voxtral (Mistral, HuggingFace GGUF) ──────────────────
-        "Voxtral-Mini-4B-Realtime-2602-Q4_K_M" => Some(
+        "Voxtral-Mini-4B-Realtime-2602-Q4_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Voxtral-Mini-4B-Realtime-2602-gguf/resolve/main/Voxtral-Mini-4B-Realtime-2602-Q4_K_M.gguf".into(),
-        ),
-        "Voxtral-Mini-3B-2507-Q5_K_M" => Some(
+        )),
+        "Voxtral-Mini-3B-2507-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Voxtral-Mini-3B-2507-gguf/resolve/main/Voxtral-Mini-3B-2507-Q5_K_M.gguf".into(),
-        ),
-        "Voxtral-Small-24B-2507-Q5_K_M" => Some(
+        )),
+        "Voxtral-Small-24B-2507-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Voxtral-Small-24B-2507-gguf/resolve/main/Voxtral-Small-24B-2507-Q5_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Moonshine extra (UsefulSensors) ───────────────────────
-        "moonshine-tiny-ja-Q8_0" => Some(
+        "moonshine-tiny-ja-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-tiny-ja-gguf/resolve/main/moonshine-tiny-ja-Q8_0.gguf".into(),
-        ),
-        "moonshine-base-Q8_0" => Some(
+        )),
+        "moonshine-base-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-base-gguf/resolve/main/moonshine-base-Q8_0.gguf".into(),
-        ),
-        "moonshine-base-ar-Q8_0" => Some(
+        )),
+        "moonshine-base-ar-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-base-ar-gguf/resolve/main/moonshine-base-ar-Q8_0.gguf".into(),
-        ),
-        "moonshine-base-ko-Q8_0" => Some(
+        )),
+        "moonshine-base-ko-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-base-ko-gguf/resolve/main/moonshine-base-ko-Q8_0.gguf".into(),
-        ),
-        "moonshine-base-uk-Q8_0" => Some(
+        )),
+        "moonshine-base-uk-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-base-uk-gguf/resolve/main/moonshine-base-uk-Q8_0.gguf".into(),
-        ),
-        "moonshine-base-ja-Q8_0" => Some(
+        )),
+        "moonshine-base-ja-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-base-ja-gguf/resolve/main/moonshine-base-ja-Q8_0.gguf".into(),
-        ),
-        "moonshine-base-vi-Q8_0" => Some(
+        )),
+        "moonshine-base-vi-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-base-vi-gguf/resolve/main/moonshine-base-vi-Q8_0.gguf".into(),
-        ),
-        "moonshine-base-zh-Q8_0" => Some(
+        )),
+        "moonshine-base-zh-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-base-zh-gguf/resolve/main/moonshine-base-zh-Q8_0.gguf".into(),
-        ),
-        "moonshine-streaming-small-Q8_0" => Some(
+        )),
+        "moonshine-streaming-small-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-streaming-small-gguf/resolve/main/moonshine-streaming-small-Q8_0.gguf".into(),
-        ),
-        "moonshine-streaming-medium-Q8_0" => Some(
+        )),
+        "moonshine-streaming-medium-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/moonshine-streaming-medium-gguf/resolve/main/moonshine-streaming-medium-Q8_0.gguf".into(),
-        ),
+        )),
 
         // ── Nemotron Speech Streaming EN ───────────────────────────
-        "nemotron-speech-streaming-en-0.6b-Q8_0" => Some(
+        "nemotron-speech-streaming-en-0.6b-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/nemotron-speech-streaming-en-0.6b-gguf/resolve/main/nemotron-speech-streaming-en-0.6b-Q8_0.gguf".into(),
-        ),
+        )),
 
         // ── Parakeet extra variants ────────────────────────────────
-        "parakeet-tdt_ctc-110m-Q8_0" => Some(
+        "parakeet-tdt_ctc-110m-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-tdt_ctc-110m-gguf/resolve/main/parakeet-tdt_ctc-110m-Q8_0.gguf".into(),
-        ),
-        "parakeet-ctc-0.6b-Q8_0" => Some(
+        )),
+        "parakeet-ctc-0.6b-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-ctc-0.6b-gguf/resolve/main/parakeet-ctc-0.6b-Q8_0.gguf".into(),
-        ),
-        "parakeet-rnnt-0.6b-Q8_0" => Some(
+        )),
+        "parakeet-rnnt-0.6b-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-rnnt-0.6b-gguf/resolve/main/parakeet-rnnt-0.6b-Q8_0.gguf".into(),
-        ),
-        "parakeet-ctc-1.1b-Q5_K_M" => Some(
+        )),
+        "parakeet-ctc-1.1b-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-ctc-1.1b-gguf/resolve/main/parakeet-ctc-1.1b-Q5_K_M.gguf".into(),
-        ),
-        "parakeet-tdt-1.1b-Q5_K_M" => Some(
+        )),
+        "parakeet-tdt-1.1b-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-tdt-1.1b-gguf/resolve/main/parakeet-tdt-1.1b-Q5_K_M.gguf".into(),
-        ),
-        "parakeet-rnnt-1.1b-Q5_K_M" => Some(
+        )),
+        "parakeet-rnnt-1.1b-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-rnnt-1.1b-gguf/resolve/main/parakeet-rnnt-1.1b-Q5_K_M.gguf".into(),
-        ),
-        "parakeet-tdt_ctc-1.1b-Q5_K_M" => Some(
+        )),
+        "parakeet-tdt_ctc-1.1b-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/parakeet-tdt_ctc-1.1b-gguf/resolve/main/parakeet-tdt_ctc-1.1b-Q5_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Qwen3-ASR 1.7B ────────────────────────────────────────
-        "Qwen3-ASR-1.7B-Q5_K_M" => Some(
+        "Qwen3-ASR-1.7B-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Qwen3-ASR-1.7B-gguf/resolve/main/Qwen3-ASR-1.7B-Q5_K_M.gguf".into(),
-        ),
+        )),
 
         // ── SenseVoice Small ───────────────────────────────────────
-        "SenseVoiceSmall-Q8_0" => Some(
+        "SenseVoiceSmall-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/SenseVoiceSmall-gguf/resolve/main/SenseVoiceSmall-Q8_0.gguf".into(),
-        ),
+        )),
 
         // ── Whisper English-only variants ──────────────────────────
-        "whisper-tiny.en-Q8_0" => Some(
+        "whisper-tiny.en-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-tiny.en-gguf/resolve/main/whisper-tiny.en-Q8_0.gguf".into(),
-        ),
-        "whisper-base.en-Q8_0" => Some(
+        )),
+        "whisper-base.en-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-base.en-gguf/resolve/main/whisper-base.en-Q8_0.gguf".into(),
-        ),
-        "whisper-small.en-Q8_0" => Some(
+        )),
+        "whisper-small.en-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-small.en-gguf/resolve/main/whisper-small.en-Q8_0.gguf".into(),
-        ),
-        "whisper-medium.en-Q8_0" => Some(
+        )),
+        "whisper-medium.en-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-medium.en-gguf/resolve/main/whisper-medium.en-Q8_0.gguf".into(),
-        ),
+        )),
 
         // ── Whisper Large variants ─────────────────────────────────
-        "whisper-large-v3-turbo-Q8_0" => Some(
+        "whisper-large-v3-turbo-Q8_0" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-large-v3-turbo-gguf/resolve/main/whisper-large-v3-turbo-Q8_0.gguf".into(),
-        ),
-        "whisper-large-v3-Q5_K_M" => Some(
+        )),
+        "whisper-large-v3-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-large-v3-gguf/resolve/main/whisper-large-v3-Q5_K_M.gguf".into(),
-        ),
-        "whisper-large-Q5_K_M" => Some(
+        )),
+        "whisper-large-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-large-gguf/resolve/main/whisper-large-Q5_K_M.gguf".into(),
-        ),
-        "whisper-large-v2-Q5_K_M" => Some(
+        )),
+        "whisper-large-v2-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/whisper-large-v2-gguf/resolve/main/whisper-large-v2-Q5_K_M.gguf".into(),
-        ),
+        )),
 
         // ── Breeze-ASR-25 ──────────────────────────────────────────
-        "Breeze-ASR-25-Q5_K_M" => Some(
+        "Breeze-ASR-25-Q5_K_M" => Some(DownloadSpec::SingleFile(
             "https://huggingface.co/handy-computer/Breeze-ASR-25-gguf/resolve/main/Breeze-ASR-25-Q5_K_M.gguf".into(),
-        ),
+        )),
 
         _ => None,
     }
+}
+
+/// Returns true if `model_id` is a directory-based ONNX model.
+fn is_onnx_dir(model_id: &str) -> bool {
+    matches!(model_download_spec(model_id), Some(DownloadSpec::Directory { .. }))
 }
 
 struct DownloadState {
@@ -298,6 +337,27 @@ fn tokio_runtime() -> &'static tokio::runtime::Runtime {
 
 /// Nombre del archivo que persiste el modelo activo entre reinicios de la app.
 const ACTIVE_MODEL_FILE: &str = ".active_model";
+
+/// Recursively sum the size of all files under `path`.
+fn dir_size(path: &std::path::Path) -> u64 {
+    fn helper(path: &std::path::Path, total: &mut u64) {
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_file() {
+                        *total += meta.len();
+                    } else if meta.is_dir() {
+                        helper(&p, total);
+                    }
+                }
+            }
+        }
+    }
+    let mut total = 0;
+    helper(path, &mut total);
+    total
+}
 
 impl ModelManager {
     pub fn new(model_dir: &str) -> Self {
@@ -334,7 +394,7 @@ impl ModelManager {
 
     /// Lee el archivo .active_model del directorio de modelos.
     /// Devuelve Some(model_id) si el archivo existe, contiene un ID válido,
-    /// y el archivo .gguf correspondiente existe en disco.
+    /// y el modelo correspondiente existe en disco (archivo .gguf o directorio ONNX).
     fn load_active_model_from_file(dir: &Path) -> Option<String> {
         let path = dir.join(ACTIVE_MODEL_FILE);
         let content = std::fs::read_to_string(&path).ok()?;
@@ -343,11 +403,15 @@ impl ModelManager {
             let _ = std::fs::remove_file(&path);
             return None;
         }
-        // Verificar que el .gguf existe (sanity check: no restaurar un modelo borrado)
-        let gguf_path = dir.join(format!("{}.gguf", model_id));
-        if !gguf_path.exists() {
+        // Sanity check: no restaurar un modelo borrado (GGUF o directorio ONNX).
+        let exists = if is_onnx_dir(&model_id) {
+            dir.join(&model_id).is_dir()
+        } else {
+            dir.join(format!("{}.gguf", model_id)).is_file()
+        };
+        if !exists {
             warn!(
-                "Active model {} persisted but .gguf missing, clearing",
+                "Active model {} persisted but files missing, clearing",
                 model_id
             );
             let _ = std::fs::remove_file(&path);
@@ -377,20 +441,32 @@ impl ModelManager {
         let mut catalog = ModelInfo::catalog();
         let active_id = self.active_model_id.lock().unwrap().clone();
 
-        let mut downloaded: Vec<String> = Vec::new();
+        // Collect IDs that exist on disk: either a single .gguf or an ONNX directory.
+        let mut downloaded_gguf: Vec<String> = Vec::new();
+        let mut downloaded_dirs: Vec<String> = Vec::new();
         if let Ok(entries) = fs::read_dir(&self.model_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("gguf") {
+                if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("gguf") {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        downloaded.push(stem.to_string());
+                        downloaded_gguf.push(stem.to_string());
+                    }
+                } else if path.is_dir() {
+                    if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                        downloaded_dirs.push(name.to_string());
                     }
                 }
             }
         }
 
         for model in &mut catalog {
-            if downloaded.contains(&model.id) {
+            let onnx = is_onnx_dir(&model.id);
+            if onnx && downloaded_dirs.contains(&model.id) {
+                model.downloaded = true;
+                model.download_progress = 100.0;
+                let dir = self.model_dir.join(&model.id);
+                model.size_bytes = dir_size(&dir);
+            } else if !onnx && downloaded_gguf.contains(&model.id) {
                 model.downloaded = true;
                 model.download_progress = 100.0;
                 let path = self.model_dir.join(format!("{}.gguf", model.id));
@@ -428,8 +504,8 @@ impl ModelManager {
         }
 
         let model_id = model_id.to_string();
-        let url = match model_download_url(&model_id) {
-            Some(u) => u,
+        let spec = match model_download_spec(&model_id) {
+            Some(s) => s,
             None => {
                 complete_cb(
                     model_id.clone(),
@@ -441,10 +517,6 @@ impl ModelManager {
             }
         };
 
-        let temp_path = self.model_dir.join(format!(".{}.tmp", model_id));
-        let final_path = self.model_dir.join(format!("{model_id}.gguf"));
-        let active_download = self.active_download.clone();
-
         if let Err(e) = fs::create_dir_all(&self.model_dir) {
             complete_cb(
                 model_id.clone(),
@@ -454,6 +526,28 @@ impl ModelManager {
             self.active_download.lock().unwrap().take();
             return;
         }
+
+        match spec {
+            DownloadSpec::SingleFile(url) => {
+                self.download_single_file(model_id, url, progress_cb, complete_cb, cancel_flag)
+            }
+            DownloadSpec::Directory { base_url, files } => {
+                self.download_directory(model_id, base_url, files, progress_cb, complete_cb, cancel_flag)
+            }
+        }
+    }
+
+    fn download_single_file(
+        &self,
+        model_id: String,
+        url: String,
+        progress_cb: impl Fn(String, u64, u64) + Send + 'static,
+        complete_cb: impl Fn(String, bool, Option<String>) + Send + 'static,
+        cancel_flag: Arc<AtomicBool>,
+    ) {
+        let temp_path = self.model_dir.join(format!(".{}.tmp", model_id));
+        let final_path = self.model_dir.join(format!("{model_id}.gguf"));
+        let active_download = self.active_download.clone();
 
         let _ = fs::remove_file(&temp_path);
 
@@ -594,6 +688,218 @@ impl ModelManager {
         });
     }
 
+    fn download_directory(
+        &self,
+        model_id: String,
+        base_url: String,
+        files: Vec<String>,
+        progress_cb: impl Fn(String, u64, u64) + Send + 'static,
+        complete_cb: impl Fn(String, bool, Option<String>) + Send + 'static,
+        cancel_flag: Arc<AtomicBool>,
+    ) {
+        let temp_dir = self.model_dir.join(format!(".{}.tmp", model_id));
+        let final_dir = self.model_dir.join(&model_id);
+        let active_download = self.active_download.clone();
+
+        if let Err(e) = fs::remove_dir_all(&temp_dir) {
+            if temp_dir.exists() {
+                warn!("Failed to remove stale temp dir {temp_dir:?}: {e}");
+            }
+        }
+        let _ = fs::create_dir_all(&temp_dir);
+
+        info!("Starting directory download of {model_id} from {base_url}");
+
+        tokio_runtime().spawn(async move {
+            let client = match reqwest::Client::builder()
+                .user_agent("Handy-Android/0.1")
+                .build()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    complete_cb(
+                        model_id.clone(),
+                        false,
+                        Some(format!("Failed to create HTTP client: {e}")),
+                    );
+                    active_download.lock().unwrap().take();
+                    return;
+                }
+            };
+
+            let mut total_bytes: u64 = 0;
+            let mut file_sizes: HashMap<String, u64> = HashMap::new();
+
+            // Pre-flight HEAD requests to compute total download size for progress reporting.
+            for file in &files {
+                let url = format!("{base_url}/{file}");
+                match client.head(&url).send().await {
+                    Ok(resp) => {
+                        let len = resp.content_length().unwrap_or(0);
+                        file_sizes.insert(file.clone(), len);
+                        total_bytes += len;
+                    }
+                    Err(e) => {
+                        warn!("HEAD request failed for {url}: {e}");
+                    }
+                }
+            }
+
+            let mut overall_downloaded: u64 = 0;
+
+            for file in &files {
+                if cancel_flag.load(Ordering::Relaxed) {
+                    info!("Download cancelled for {model_id}");
+                    let _ = fs::remove_dir_all(&temp_dir);
+                    active_download.lock().unwrap().take();
+                    complete_cb(model_id.clone(), false, Some("Download cancelled by user".to_string()));
+                    return;
+                }
+
+                let url = format!("{base_url}/{file}");
+                let dest = temp_dir.join(file);
+
+                if let Some(parent) = dest.parent() {
+                    if let Err(e) = fs::create_dir_all(parent) {
+                        error!("Failed to create parent dir for {file}: {e}");
+                        let _ = fs::remove_dir_all(&temp_dir);
+                        complete_cb(
+                            model_id,
+                            false,
+                            Some(format!("Failed to create directory: {e}")),
+                        );
+                        active_download.lock().unwrap().take();
+                        return;
+                    }
+                }
+
+                let response = match client.get(&url).send().await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        error!("Network error downloading {file}: {e}");
+                        let _ = fs::remove_dir_all(&temp_dir);
+                        complete_cb(
+                            model_id,
+                            false,
+                            Some(format!("Network error for {file}: {e}")),
+                        );
+                        active_download.lock().unwrap().take();
+                        return;
+                    }
+                };
+
+                let file_total = response.content_length().unwrap_or(0);
+                let mut file_downloaded: u64 = 0;
+                let mut out_file = match tokio::fs::File::create(&dest).await {
+                    Ok(f) => f,
+                    Err(e) => {
+                        error!("Failed to create file {dest:?}: {e}");
+                        let _ = fs::remove_dir_all(&temp_dir);
+                        complete_cb(
+                            model_id,
+                            false,
+                            Some(format!("Failed to create file: {e}")),
+                        );
+                        active_download.lock().unwrap().take();
+                        return;
+                    }
+                };
+
+                let mut stream = response.bytes_stream();
+                while let Some(chunk_result) = stream.next().await {
+                    if cancel_flag.load(Ordering::Relaxed) {
+                        info!("Download cancelled for {model_id}");
+                        drop(out_file);
+                        let _ = fs::remove_dir_all(&temp_dir);
+                        active_download.lock().unwrap().take();
+                        complete_cb(model_id.clone(), false, Some("Download cancelled by user".to_string()));
+                        return;
+                    }
+
+                    let chunk = match chunk_result {
+                        Ok(c) => c,
+                        Err(e) => {
+                            error!("Download stream error for {file}: {e}");
+                            drop(out_file);
+                            let _ = fs::remove_dir_all(&temp_dir);
+                            complete_cb(
+                                model_id,
+                                false,
+                                Some(format!("Download stream error for {file}: {e}")),
+                            );
+                            active_download.lock().unwrap().take();
+                            return;
+                        }
+                    };
+
+                    if let Err(e) = out_file.write_all(&chunk).await {
+                        error!("File write error for {file}: {e}");
+                        drop(out_file);
+                        let _ = fs::remove_dir_all(&temp_dir);
+                        complete_cb(
+                            model_id,
+                            false,
+                            Some(format!("File write error for {file}: {e}")),
+                        );
+                        active_download.lock().unwrap().take();
+                        return;
+                    }
+
+                    file_downloaded += chunk.len() as u64;
+                    overall_downloaded += chunk.len() as u64;
+                    progress_cb(model_id.clone(), overall_downloaded, total_bytes);
+                }
+
+                if let Err(e) = out_file.flush().await {
+                    error!("File flush error for {file}: {e}");
+                    drop(out_file);
+                    let _ = fs::remove_dir_all(&temp_dir);
+                    complete_cb(
+                        model_id,
+                        false,
+                        Some(format!("File flush error for {file}: {e}")),
+                    );
+                    active_download.lock().unwrap().take();
+                    return;
+                }
+
+                // Verify individual file size if the server reported one.
+                if file_total > 0 && file_downloaded != file_total {
+                    error!("Download incomplete for {file}: expected {file_total} bytes, got {file_downloaded} bytes");
+                    let _ = fs::remove_dir_all(&temp_dir);
+                    complete_cb(
+                        model_id.clone(),
+                        false,
+                        Some(format!("Download incomplete for {file}")),
+                    );
+                    active_download.lock().unwrap().take();
+                    return;
+                }
+            }
+
+            // Atomically rename temp dir to final dir. Remove any stale final
+            // dir first so the rename cannot fail due to an existing target.
+            if final_dir.exists() {
+                let _ = fs::remove_dir_all(&final_dir);
+            }
+            if let Err(e) = fs::rename(&temp_dir, &final_dir) {
+                error!("Rename error for {model_id}: {e}");
+                let _ = fs::remove_dir_all(&temp_dir);
+                complete_cb(
+                    model_id,
+                    false,
+                    Some(format!("Rename error: {e}")),
+                );
+                active_download.lock().unwrap().take();
+                return;
+            }
+
+            info!("Download complete: {model_id}");
+            complete_cb(model_id, true, None);
+            active_download.lock().unwrap().take();
+        });
+    }
+
     pub fn cancel_download(&self) {
         let mut guard = self.active_download.lock().unwrap();
         if let Some(state) = guard.take() {
@@ -623,15 +929,25 @@ impl ModelManager {
     }
 
     pub fn delete_model(&self, model_id: &str) -> Result<(), ModelError> {
-        let path = self.model_dir.join(format!("{model_id}.gguf"));
+        let path = if is_onnx_dir(model_id) {
+            self.model_dir.join(model_id)
+        } else {
+            self.model_dir.join(format!("{model_id}.gguf"))
+        };
         if !path.exists() {
             return Err(ModelError::NotFound(format!(
                 "Model {model_id} not found on disk"
             )));
         }
-        fs::remove_file(&path).map_err(|e| {
-            ModelError::IoError(format!("Failed to delete {model_id}: {e}"))
-        })?;
+        if path.is_dir() {
+            fs::remove_dir_all(&path).map_err(|e| {
+                ModelError::IoError(format!("Failed to delete {model_id}: {e}"))
+            })?;
+        } else {
+            fs::remove_file(&path).map_err(|e| {
+                ModelError::IoError(format!("Failed to delete {model_id}: {e}"))
+            })?;
+        }
         let mut active = self.active_model_id.lock().unwrap();
         if active.as_deref() == Some(model_id) {
             *active = None;
@@ -646,8 +962,12 @@ impl ModelManager {
         if !catalog.iter().any(|m| m.id == model_id) {
             return Err(ModelError::NotFound(format!("Unknown model: {model_id}")));
         }
-        let path = self.model_dir.join(format!("{model_id}.gguf"));
-        if !path.exists() {
+        let exists = if is_onnx_dir(model_id) {
+            self.model_dir.join(model_id).is_dir()
+        } else {
+            self.model_dir.join(format!("{model_id}.gguf")).is_file()
+        };
+        if !exists {
             return Err(ModelError::NotFound(format!(
                 "Model {model_id} is not downloaded"
             )));
@@ -664,7 +984,13 @@ impl ModelManager {
             .lock()
             .unwrap()
             .as_ref()
-            .map(|id| self.model_dir.join(format!("{id}.gguf")))
+            .map(|id| {
+                if is_onnx_dir(id) {
+                    self.model_dir.join(id)
+                } else {
+                    self.model_dir.join(format!("{id}.gguf"))
+                }
+            })
     }
 
     pub fn active_model_id(&self) -> Option<String> {

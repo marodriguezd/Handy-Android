@@ -1,0 +1,18 @@
+* develop
+  main
++ subagent-omg-executor-android-self-f0f2aa47
++ subagent-omg-executor-rust-self-f55f4738
++ subagent-omg-executor-self-5e6b5203
++ subagent-omg-planner-research-f30373b6
+  remotes/origin/HEAD -> origin/main
+  remotes/origin/develop
+  remotes/origin/main
+  remotes/upstream/HEAD -> upstream/main
+  remotes/upstream/feature/record-while-loading
+  remotes/upstream/feature/select-last-transcription
+  remotes/upstream/feature/share-audio-for-transcription
+  remotes/upstream/feature/switch-to-last-keyboard
+  remotes/upstream/feature/voice-recognition-service
+  remotes/upstream/fix/onnx-broadcast-long-audio
+  remotes/upstream/main
+  remotes/upstream/move-to-gradle-build

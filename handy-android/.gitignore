@@ -29,6 +29,9 @@ target/
 # --- Vendored Dependencies (downloaded at build time) ---
 deps/
 
+# --- Native libraries extracted/copied at build time ---
+app/src/main/jniLibs/
+
 # --- Visual Verification (regenerated via scripts/capture_*.sh) ---
 screenshots/
 

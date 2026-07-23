@@ -6,7 +6,7 @@ plugins {
 android {
     namespace = "com.handy.app"
     compileSdk = 35
-    ndkVersion = "28.2.13676358"
+    ndkVersion = "27.0.12077973"
 
     kotlinOptions {
         jvmTarget = "17"
@@ -165,10 +165,34 @@ val copyLibCxx by tasks.registering(Copy::class) {
     into(jniLibDir)
 }
 
+// Extract the ONNX Runtime native library from the reference APK.
+// This avoids checking large prebuilt .so binaries into the repo.
+val extractOnnxRuntime by tasks.registering(Copy::class) {
+    description = "Extract ONNX Runtime native library from the reference APK"
+    val onnxRuntimeApk = file("/home/marodriguezd/Github/android_transcribe_app/android_transcribe_app_v0.6.0.apk")
+
+    if (!onnxRuntimeApk.exists()) {
+        throw GradleException("Reference APK not found: $onnxRuntimeApk. Provide it or override the path.")
+    }
+
+    inputs.file(onnxRuntimeApk)
+    outputs.file(File(jniLibDir, "libonnxruntime.so"))
+
+    from(zipTree(onnxRuntimeApk)) {
+        include("lib/arm64-v8a/libonnxruntime.so")
+        eachFile {
+            relativePath = RelativePath(true, name)
+        }
+        includeEmptyDirs = false
+    }
+    into(jniLibDir)
+}
+
 tasks.whenTaskAdded {
     if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
         dependsOn(copyRustLib)
         dependsOn(copyLibCxx)
+        dependsOn(extractOnnxRuntime)
     }
 }
 

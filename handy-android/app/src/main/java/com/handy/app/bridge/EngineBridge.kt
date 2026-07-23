@@ -10,6 +10,20 @@ import java.nio.ByteBuffer
 object EngineBridge {
 
     init {
+        // ONNX Runtime is loaded dynamically by Rust's `ort` crate. Because
+        // `libhandy_core.so` does not link against `libonnxruntime.so`, the
+        // Android dynamic linker will not auto-load it. Pre-loading here makes
+        // the .so visible to `ort` before any JNI call that needs inference.
+        try {
+            System.loadLibrary("onnxruntime")
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w(
+                "EngineBridge",
+                "libonnxruntime not preloaded \u2014 inference may fail at runtime",
+                e,
+            )
+        }
+
         try {
             System.loadLibrary("handy_core")
         } catch (e: UnsatisfiedLinkError) {
@@ -93,6 +107,9 @@ object EngineBridge {
 
     /** @return true if the engine is currently recording/listening */
     external fun nativeIsRecording(): Boolean
+
+    /** @return current VAD energy level in [0.0, 1.0], lock-free poll. */
+    external fun nativeGetVadLevel(): Float
 
     // ── Model Management ──────────────────────────────────────
 

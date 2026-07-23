@@ -13,6 +13,11 @@ import com.handy.app.capability.DeviceCapabilityDetector
 import com.handy.app.injection.InjectorRouter
 import com.handy.app.corrector.DictionaryManager
 import com.handy.app.corrector.WordCorrector
+import com.handy.app.model.AppSettings
+import com.handy.app.postprocess.PostProcessor
+import com.handy.app.postprocess.PromptsRepository
+import com.handy.app.ui.postprocess.PostProcessProvider
+import com.handy.app.model.ModelInfo
 import com.handy.app.service.RecordingService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -350,18 +355,41 @@ class EngineViewModel(
         if (isPartial) {
             _partialText.value = text
         } else {
-            val dictManager = DictionaryManager(getApplication())
-            val customWords = dictManager.getActiveWordsList()
-            val corrector = WordCorrector(customWords)
-            val filtered = WordCorrector.filterTranscriptionOutput(text, null)
-            val processedText = corrector.applyCustomWords(filtered)
+            viewModelScope.launch(Dispatchers.IO) {
+                val dictManager = DictionaryManager(getApplication())
+                val customWords = dictManager.getActiveWordsList()
+                val corrector = WordCorrector(customWords)
+                val filtered = WordCorrector.filterTranscriptionOutput(text, null)
+                var processedText = corrector.applyCustomWords(filtered)
 
-            _finalText.value = processedText
+                val app = getApplication() as com.handy.app.HandyApplication
+                val settings = app.settingsStore
+                if (settings.postProcessingEnabled) {
+                    val provider = PostProcessProvider.fromToken(settings.postProcessProviderId)
+                    val baseUrl = settings.postProcessEndpoint.ifBlank { provider.defaultBaseUrl }
+                    val promptsRepo = PromptsRepository(getApplication())
+                    val activePrompt = promptsRepo.getActivePrompt()
 
-            if (_imeModeEnabled) {
-                confirmInsert(processedText)
-            } else {
-                _state.value = STATE_CONFIRM
+                    val postProcessor = PostProcessor(
+                        apiUrl = baseUrl,
+                        apiKey = settings.postProcessApiKey.takeIf { it.isNotBlank() },
+                        modelName = settings.postProcessModel,
+                    )
+                    val result = postProcessor.process(
+                        rawText = processedText,
+                        promptTemplate = activePrompt.body,
+                        hotwordHints = customWords,
+                    )
+                    processedText = result.getOrElse { processedText }
+                }
+
+                _finalText.value = processedText
+
+                if (_imeModeEnabled) {
+                    confirmInsert(processedText)
+                } else {
+                    _state.value = STATE_CONFIRM
+                }
             }
         }
     }

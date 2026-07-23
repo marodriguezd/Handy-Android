@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::audio::capture::{AudioCapture, CaptureError};
@@ -46,6 +46,10 @@ struct PipelineInner {
     /// When true, audio frames are NOT double-buffered into audio_buffer
     /// since they are already forwarded to the stream router in real-time.
     streaming_active: bool,
+    /// Lock-free VAD level mirroring `voice_session.rs`.
+    /// Stores an `f32` value via `to_bits()` so Kotlin can poll it with
+    /// `nativeGetVadLevel()` without taking the pipeline Mutex.
+    vad_level: Arc<AtomicU32>,
 }
 
 
@@ -86,6 +90,7 @@ impl PipelineInner {
             if let Some(ref cb) = self.on_vad_level {
                 let energy = frame.iter().map(|&s| s * s).sum::<f32>() / frame.len() as f32;
                 let level = (energy.sqrt() * 5.0).min(1.0);
+                self.vad_level.store(level.to_bits(), Ordering::Relaxed);
                 match vad_result {
                     VadFrame::Speech(_) => cb(level),
                     VadFrame::Noise => cb(level * 0.5),
@@ -116,6 +121,9 @@ pub struct AudioPipeline {
     capture: Option<AudioCapture>,
     inner: Arc<Mutex<PipelineInner>>,
     running: Arc<AtomicBool>,
+    /// Lock-free VAD level exposed to Kotlin via `nativeGetVadLevel`.
+    /// Mirrors the `AtomicU32` pattern from the source `voice_session.rs`.
+    pub vad_level: Arc<AtomicU32>,
 }
 
 impl AudioPipeline {
@@ -129,6 +137,7 @@ impl AudioPipeline {
         );
 
         let resampler = FrameResampler::new(16000, 16000);
+        let vad_level = Arc::new(AtomicU32::new(0));
 
         Self {
             capture: None,
@@ -144,8 +153,10 @@ impl AudioPipeline {
                 gain_scratch: Vec::new(),
                 stream_router: None,
                 streaming_active: false,
+                vad_level: vad_level.clone(),
             })),
             running: Arc::new(AtomicBool::new(false)),
+            vad_level,
         }
     }
 

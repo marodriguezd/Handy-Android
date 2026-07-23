@@ -22,11 +22,10 @@ pub extern "system" fn JNI_OnLoad(vm: jni::JavaVM, _: *mut std::ffi::c_void) -> 
             .with_tag("handy-core"),
     );
 
-    // Initialize transcribe-cpp native backends (loads ggml CPU backend)
-    transcribe_cpp::init_logging();
-    if let Err(e) = transcribe_cpp::init_backends_default() {
-        log::warn!("transcribe-cpp backend init failed (CPU-only fallback): {e}");
-    }
+    // Initialize ONNX Runtime via ort (transcribe-rs dependency).
+    // The commit() call returns a bool indicating whether this invocation
+    // performed the one-time initialization. Errors are non-fatal.
+    let _ = ort::init().with_name("handy").commit();
 
     info!("handy-core loaded");
     jni::sys::JNI_VERSION_1_6

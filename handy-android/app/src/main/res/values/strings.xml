@@ -260,6 +260,13 @@ Continue at your own risk?</string>
     <string name="postprocess_prompt_editor_title_edit">Edit prompt</string>
     <string name="postprocess_prompt_name_label">Name</string>
     <string name="postprocess_prompt_text_label">Prompt text</string>
+    <string name="postprocess_prompt_active_label">Active</string>
+    <string name="postprocess_prompt_import">Import prompts</string>
+    <string name="postprocess_prompt_export">Export prompts</string>
+    <string name="postprocess_prompt_import_success">Prompts imported</string>
+    <string name="postprocess_prompt_import_error">Import failed</string>
+    <string name="postprocess_prompt_export_success">Prompts exported</string>
+    <string name="postprocess_prompt_export_error">Export failed</string>
     <string name="content_desc_edit">Edit</string>
     <string name="dialog_save">Save</string>
 
@@ -326,4 +333,5 @@ Continue at your own risk?</string>
     <string name="debug_toggle_disabled_feedback">Developer tools disabled. The Debug panel is hidden from the navigation rail.</string>
     <string name="debug_audio_dualwrite_label">Dual-write WAV files</string>
     <string name="debug_audio_dualwrite_subtitle">Persist recording audio to disk for retry/replay. Requires restart.</string>
+    <string name="name_default_dictionary">Default dictionary</string>
 </resources>

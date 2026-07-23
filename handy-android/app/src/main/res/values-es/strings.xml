@@ -326,4 +326,5 @@
     <string name="debug_toggle_disabled_feedback">Herramientas de desarrollador desactivadas. El panel de Depuración está oculto en el raíl de navegación.</string>
     <string name="debug_audio_dualwrite_label">Dual-write WAV files</string>
     <string name="debug_audio_dualwrite_subtitle">Persist recording audio to disk for retry/replay. Requires restart.</string>
+    <string name="name_default_dictionary">Diccionario por defecto</string>
 </resources>
