@@ -2361,3 +2361,45 @@ The A059 device rotates wireless-debugging mDNS service IPs every time the scree
 4. **Optional `LifecycleService` swap in FloatingDictationOverlayService** \u2014 would be a 1-line dep add (`libs.lifecycle.service` + swap parent class) for platform-tested lifecycle hooks. Only worth doing if a `startService(intent)` caller is added.
 5. **`MissingTranslation` lint** \u2014 still disabled in `app/build.gradle.kts`. Future-sprint cleanup: enable the lint once a real Spanish translation sweep covers the remaining 236 keys (currently 4 keys / values-es/ mirrored after `cfd2fa7`).
 6. **Original long-deferred user task**: comprehensive MD3 migration plan with PC Handy reference \u2014 already shipped as `handy-android/PC_HANDY_REFERENCE.md` (14 sections). Sprint 29(g) Definition-of-Done verification can now use the bidirectional locale verification pattern documented in this entry as evidence for the i18n-doctrine criterion.
+
+---
+
+## 📌 Session 2026-07-22 (resumed) — Unit tests batch IN PROGRESS (paused until next session)
+
+User requested to stop for the night. Save-state entry documenting the current in-flight work before closing the session.
+
+### Context
+Picks up from the prior unit-test expansion turn (historical memory). The goal was to add JVM unit tests across the app and get them green. Several production-code fixes were applied on-the-fly to support testability:
+
+- `InjectorRouter.kt` — constructor and `setImeInjector` generalized to accept `InjectorStrategy` instead of concrete `ShizukuInjector` / `ClipboardInjector` / `ImeInjector` types.
+- `PostProcessScreen.kt` — added missing `padding` import and applied `Scaffold` `innerPadding` to the `LazyColumn`; removed dead `calculateBottomPadding` usage.
+- `PromptsRepository.kt` — refactored to accept a `File` and `SharedPreferences` in the constructor for testability; removed `android.util.AtomicFile` dependency in favor of plain file IO.
+- `CompatibilityResolver.kt` — production logic adjusted so active models get the correct status/badges and heavy/extreme consent rules match the documented contract.
+- New test files (7) were created:
+  1. `app/src/test/java/com/handy/app/capability/CompatibilityResolverTest.kt`
+  2. `app/src/test/java/com/handy/app/model/ModelInfoTest.kt`
+  3. `app/src/test/java/com/handy/app/util/ReactiveRingBufferLogTest.kt`
+  4. `app/src/test/java/com/handy/app/model/HistoryEntryTest.kt`
+  5. `app/src/test/java/com/handy/app/injection/InjectorRouterTest.kt`
+  6. `app/src/test/java/com/handy/app/postprocess/PostProcessorTest.kt`
+  7. `app/src/test/java/com/handy/app/postprocess/PromptsRepositoryTest.kt`
+
+### Remaining TODO before the batch is done
+1. Re-run `:app:testDebugUnitTest` and collect the exact failure list.
+2. Fix remaining test failures (suspected areas below; exact failures TBD after the test run):
+   - `ModelInfoTest.formattedSize` assertions vs. `String.format(Locale,...)` output.
+   - `PostProcessorTest` custom `ServerSocket`-based HTTP server edge cases (request path, body decoding, race conditions).
+   - `PromptsRepositoryTest` with the refactored constructor / `InMemorySharedPreferences`.
+   - `InjectorRouterTest` after the `InjectorStrategy` generalization.
+   - Any additional `CompatibilityResolverTest` cases that still diverge from production.
+3. Re-run `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, and `:app:lintDebug` until green.
+4. Spawn `code-reviewer-kimi` for final review.
+5. Commit the unit-test batch once reviewed.
+
+### Save-state verification
+- `AGENTS.md` updated with this entry.
+- No code changes made in this turn; only documentation.
+- Next session should start by reading this entry, then run the test command in step 1 above.
+
+### User note
+🌙 Session paused at user's request. No push/commit required now; resume from the TODO list above.

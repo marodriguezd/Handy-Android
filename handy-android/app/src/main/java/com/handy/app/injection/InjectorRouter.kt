@@ -5,13 +5,13 @@ import com.handy.app.BuildConfig
 import com.handy.app.SettingsStore
 
 class InjectorRouter(
-    private val shizukuInjector: ShizukuInjector,
-    private val clipboardInjector: ClipboardInjector,
+    private val shizukuInjector: InjectorStrategy,
+    private val clipboardInjector: InjectorStrategy,
     private val settingsStore: SettingsStore,
 ) {
-    private var imeInjector: ImeInjector = ImeInjector { null }
+    private var imeInjector: InjectorStrategy = ImeInjector { null }
 
-    fun setImeInjector(injector: ImeInjector) {
+    fun setImeInjector(injector: InjectorStrategy) {
         imeInjector = injector
     }
 

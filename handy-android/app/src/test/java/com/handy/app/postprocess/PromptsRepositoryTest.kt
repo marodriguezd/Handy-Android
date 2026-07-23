@@ -1,6 +1,5 @@
 package com.handy.app.postprocess
 
-import android.content.Context
 import android.content.SharedPreferences
 import com.handy.app.util.InMemorySharedPreferences
 import org.junit.Assert.assertEquals
@@ -10,6 +9,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 
 /**
  * Unit tests for [PromptsRepository].
@@ -25,16 +25,13 @@ class PromptsRepositoryTest {
 
     private lateinit var repository: PromptsRepository
     private lateinit var prefs: SharedPreferences
-
-    private inner class FakeContext : ContextWrapper(null) {
-        override fun getFilesDir(): java.io.File = tempFolder.root
-        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = prefs
-    }
+    private lateinit var promptsFile: File
 
     @Before
     fun setUp() {
         prefs = InMemorySharedPreferences()
-        repository = PromptsRepository(FakeContext())
+        promptsFile = File(tempFolder.root, "prompts.json")
+        repository = PromptsRepository(promptsFile, prefs)
     }
 
     @Test

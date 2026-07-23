@@ -7,9 +7,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.calculateBottomPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -156,12 +156,12 @@ fun PostProcessScreen() {
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
             contentPadding = PaddingValues(
                 start = Spacing.lg,
                 end = Spacing.lg,
                 top = Spacing.lg,
-                bottom = innerPadding.calculateBottomPadding() + Spacing.lg,
+                bottom = Spacing.lg,
             ),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {

@@ -33,7 +33,19 @@ fun computeCompatibility(
         )
     }
 
-    // 2) Compute status
+    // 2) Active model bypass — once a model is active, the user already
+    //    has it on-device, so RAM warnings/consent gates are irrelevant.
+    if (model.isActive) {
+        return ModelCompatibility(
+            tier = tier,
+            status = CompatibilityStatus.ACTIVE,
+            badges = emptyList(),
+            requiresConsent = false,
+            hidden = false,
+        )
+    }
+
+    // 3) Compute status
     val status: CompatibilityStatus = when {
         model.isActive -> CompatibilityStatus.ACTIVE
         model.recommended && tier.ordinal <= deviceMax.ordinal -> CompatibilityStatus.TIER_RECOMMENDED_DEEP
@@ -42,17 +54,19 @@ fun computeCompatibility(
         else -> CompatibilityStatus.EXCEEDS
     }
 
-    // 3) Compute badges
+    // 4) Compute badges
     val badges = buildList {
         if (ModelCapability.isExperimental(model.id)) add(CompatibilityBadge.EXPERIMENTAL)
         if (ModelCapability.isHeavyGate(model.id)) add(CompatibilityBadge.HEAVY_GATE)
         if (tier.ordinal > deviceMax.ordinal + 1) {
             add(CompatibilityBadge.EXCEEDS_RAM)
-            if (tier == ModelCapability.EXTREME) add(CompatibilityBadge.LARGE_HEAP_REQUIRED)
+        }
+        if (tier == ModelCapability.EXTREME && deviceTier == DeviceTier.TABLET) {
+            add(CompatibilityBadge.LARGE_HEAP_REQUIRED)
         }
     }
 
-    // 4) Consent gate for heavy / extreme models
+    // 5) Consent gate for heavy / extreme models
     val requiresConsent = ModelCapability.isHeavyGate(model.id) ||
         (tier == ModelCapability.EXTREME && deviceTier == DeviceTier.TABLET)
 

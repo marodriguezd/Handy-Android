@@ -1,7 +1,7 @@
 package com.handy.app.postprocess
 
 import android.content.Context
-import android.util.AtomicFile
+import android.content.SharedPreferences
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -18,11 +18,15 @@ data class Prompt(
     }
 }
 
-class PromptsRepository(context: Context) {
+class PromptsRepository(
+    private val file: File,
+    private val prefs: SharedPreferences,
+) {
 
-    private val context = context.applicationContext
-    private val file = AtomicFile(File(this.context.filesDir, "prompts.json"))
-    private val prefs = this.context.getSharedPreferences("handy_prompts_prefs", Context.MODE_PRIVATE)
+    constructor(context: Context) : this(
+        File(context.applicationContext.filesDir, "prompts.json"),
+        context.applicationContext.getSharedPreferences("handy_prompts_prefs", Context.MODE_PRIVATE),
+    )
 
     @Synchronized
     fun getPrompts(): List<Prompt> {
@@ -121,10 +125,10 @@ class PromptsRepository(context: Context) {
 
     private fun loadCustomPrompts(): List<Prompt> {
         val list = mutableListOf<Prompt>()
-        if (!file.baseFile.exists()) return list
+        if (!file.exists()) return list
         try {
-            val bytes = file.readFully()
-            val jsonArray = JSONArray(String(bytes))
+            val text = file.readText(Charsets.UTF_8)
+            val jsonArray = JSONArray(text)
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
                 list.add(
@@ -151,15 +155,10 @@ class PromptsRepository(context: Context) {
             }
             jsonArray.put(obj)
         }
-        var fos: java.io.FileOutputStream? = null
         try {
-            fos = file.startWrite()
-            fos.write(jsonArray.toString(2).toByteArray())
-            file.finishWrite(fos)
+            file.parentFile?.mkdirs()
+            file.writeText(jsonArray.toString(2), Charsets.UTF_8)
         } catch (e: Exception) {
-            if (fos != null) {
-                file.failWrite(fos)
-            }
             Log.e(TAG, "Failed to write prompts to JSON", e)
         }
     }
