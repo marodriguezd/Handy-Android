@@ -33,6 +33,7 @@
 > - Portadas todas las características funcionales de `android_transcribe_app` (VoiceRecognitionService, WordCorrector fonético Soundex+Levenshtein, PostProcessor LLM multi-prompt).
 > - Integrados todos los cherrypicks clave de upstream (`cjpais/Handy`): SenseVoice STT, validación de descargas corruptas, filtro dinámico de muletillas configurable, retención y depuración de historial SQLite, presets MiniMax/Cohere, normalización de puntuación en chino y reproductor único de historial.
 > - Paridad 100% con la versión de PC de escritorio: Burbuja flotante del sistema (`FloatingDictationOverlayService.kt`), audio feedback de tonos nativos (`AudioFeedbackPlayer.kt`), tracking de paquete destino en historial (`targetPackage`), idioma ASR dinámico en Rust (`nativeSetLanguage`), aceleración GPU configurable (`nativeSetAccelerationBackend`), y separación de roles `system`/`user` en el post-procesador LLM.
+> - README reescrito con formato profesional técnico para Android sin jerga/buzzwords de IA (`b418d16d`).
 > - Todo testeado, compilado y sincronizado en `origin/main`.
 
 ### ✅ Completed — Sprints 16 → 30c + Porting Batch (android_transcribe_app)
