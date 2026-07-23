@@ -26,6 +26,8 @@ pub struct TranscriptionEngine {
     stream_worker: Mutex<Option<StreamWorkerOrPeriodic>>,
     is_streaming: AtomicBool,
     worker_id_counter: std::sync::atomic::AtomicU64,
+    selected_language: Mutex<Option<String>>,
+    acceleration_backend: Mutex<Option<String>>,
     /// Shared flag to signal cancellation of a running batch transcription.
     /// Checked before and after session.run() to skip/discard results when
     /// the user cancels recording while inference is queued or in progress.
@@ -44,19 +46,36 @@ impl TranscriptionEngine {
             stream_worker: Mutex::new(None),
             is_streaming: AtomicBool::new(false),
             worker_id_counter: std::sync::atomic::AtomicU64::new(1),
+            selected_language: Mutex::new(None),
+            acceleration_backend: Mutex::new(None),
             cancel_flag: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    pub fn set_language(&self, lang: Option<String>) {
+        *self.selected_language.lock().unwrap() = lang;
+    }
+
+    pub fn set_acceleration_backend(&self, backend: Option<String>) {
+        *self.acceleration_backend.lock().unwrap() = backend;
     }
 
     pub fn load_model(&mut self, path: &PathBuf) -> Result<(), String> {
         info!("[handy-core] loading model from: {:?}", path);
 
-        // Use explicit CPU backend (only backend available on Android).
-        // GPU device 0 is ignored for CPU backend but must NOT be -1, as
-        // whisper.cpp internally asserts gpu_device >= 0.
-        // This matches desktop Handy's convention for explicit CPU selection.
+        let backend_str = self.acceleration_backend.lock().unwrap().clone();
+        let backend = match backend_str.as_deref().unwrap_or("auto").to_lowercase().as_str() {
+            "cpu" => Backend::Cpu,
+            "vulkan" => Backend::Vulkan,
+            "opencl" => Backend::OpenCL,
+            "nnapi" => Backend::NNAPI,
+            "metal" => Backend::Metal,
+            "cuda" => Backend::Cuda,
+            _ => Backend::Auto,
+        };
+
         let model_options = ModelOptions {
-            backend: Backend::Auto,
+            backend,
             gpu_device: 0,
         };
 
@@ -128,9 +147,16 @@ impl TranscriptionEngine {
         let normalized = normalize_peak(pcm);
         let rms = compute_rms(&normalized);
 
+        let lang_guard = self.selected_language.lock().unwrap();
+        let language = match lang_guard.as_deref() {
+            Some("auto") | None | Some("") => None,
+            Some(l) => Some(l.to_string()),
+        };
+        drop(lang_guard);
+
         let run_options = RunOptions {
             task: Task::Transcribe,
-            language: Some("es".to_string()),
+            language: language.clone(),
             target_language: None,
             ..Default::default()
         };
@@ -141,7 +167,7 @@ impl TranscriptionEngine {
             return Err("Transcription cancelled".to_string());
         }
 
-        info!("[handy-core] running transcription on {} samples, rms={:.4}, language=es", pcm.len(), rms);
+        info!("[handy-core] running transcription on {} samples, rms={:.4}, language={:?}", pcm.len(), rms, language);
         let transcript = session
             .run(&normalized, &run_options)
             .map_err(|e| format!("Transcription run failed: {e}"))?;
@@ -191,14 +217,16 @@ impl TranscriptionEngine {
         let arch = session.model().arch();
         let variant = session.model().variant();
 
-        // Try to create a stream to verify support.
-        // If it fails, fall back to batch.
-        // We drop the test stream first, then move the session into the worker
-        // where it creates its own stream internally (Stream borrows Session
-        // with a non-'static lifetime, so they must live in the same thread).
+        let lang_guard = self.selected_language.lock().unwrap();
+        let language = match lang_guard.as_deref() {
+            Some("auto") | None | Some("") => None,
+            Some(l) => Some(l.to_string()),
+        };
+        drop(lang_guard);
+
         let run_options = RunOptions {
             task: Task::Transcribe,
-            language: None,
+            language: language.clone(),
             target_language: None,
             family: None,
             ..Default::default()
@@ -206,8 +234,6 @@ impl TranscriptionEngine {
 
         match session.stream(&run_options, &StreamOptions::default()) {
             Ok(_) => {
-                // Stream dropped immediately, releasing the mutable borrow on session
-                // so it can be moved into the worker thread below.
                 info!(
                     "[handy-core] model supports streaming: arch='{arch}' variant='{variant}'"
                 );
@@ -223,8 +249,7 @@ impl TranscriptionEngine {
         let rx = self.stream_router.open_channel();
         let worker_id = self.worker_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let mut worker = StreamWorker::new(worker_id);
-        // Move the session into the worker — stream was dropped so session is free
-        worker.spawn(rx, session, on_partial);
+        worker.spawn(rx, session, language, on_partial);
 
         *self.stream_worker.lock().unwrap() = Some(StreamWorkerOrPeriodic::Streaming(worker));
         self.is_streaming.store(true, std::sync::atomic::Ordering::Release);
@@ -293,10 +318,17 @@ impl TranscriptionEngine {
             .map_err(|e| format!("Failed to create session: {e}"))?;
         drop(model_guard);
 
+        let lang_guard = self.selected_language.lock().unwrap();
+        let language = match lang_guard.as_deref() {
+            Some("auto") | None | Some("") => None,
+            Some(l) => Some(l.to_string()),
+        };
+        drop(lang_guard);
+
         let rx = self.stream_router.open_channel();
         let worker_id = self.worker_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let mut worker = PeriodicWorker::new(worker_id);
-        worker.spawn(rx, session, self.cancel_flag.clone(), on_partial);
+        worker.spawn(rx, session, self.cancel_flag.clone(), language, on_partial);
 
         *self.stream_worker.lock().unwrap() = Some(StreamWorkerOrPeriodic::Periodic(worker));
         self.is_streaming.store(true, std::sync::atomic::Ordering::Release);

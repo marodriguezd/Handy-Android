@@ -31,11 +31,6 @@ class PostProcessor(
                 }
             }
 
-            var finalPrompt = promptTemplate
-            if (!finalPrompt.contains("\${output}")) {
-                finalPrompt = "$finalPrompt\n\nTranscript:\n\${output}"
-            }
-
             val hintsHeader = if (hotwordHints.isNotEmpty()) {
                 val sb = StringBuilder("Custom dictionary / hotwords reference:\n")
                 for (h in hotwordHints) {
@@ -44,18 +39,37 @@ class PostProcessor(
                 sb.append("\n").toString()
             } else ""
 
-            finalPrompt = if (finalPrompt.contains("\${hints}")) {
-                finalPrompt.replace("\${hints}", hintsHeader).replace("\${output}", rawText)
+            var systemPrompt = promptTemplate
+            val userContent = if (systemPrompt.contains("\${output}")) {
+                systemPrompt = systemPrompt.replace("\${output}", "").trim()
+                if (hintsHeader.isNotBlank()) {
+                    "$hintsHeader\n$rawText"
+                } else {
+                    rawText
+                }
             } else {
-                hintsHeader + finalPrompt.replace("\${output}", rawText)
+                if (hintsHeader.isNotBlank()) {
+                    "$hintsHeader\nTranscript:\n$rawText"
+                } else {
+                    "Transcript:\n$rawText"
+                }
+            }
+            if (systemPrompt.contains("\${hints}")) {
+                systemPrompt = systemPrompt.replace("\${hints}", hintsHeader).trim()
             }
 
             val requestJson = JSONObject().apply {
                 put("model", modelName)
                 val messages = JSONArray().apply {
+                    if (systemPrompt.isNotBlank()) {
+                        put(JSONObject().apply {
+                            put("role", "system")
+                            put("content", systemPrompt)
+                        })
+                    }
                     put(JSONObject().apply {
                         put("role", "user")
-                        put("content", finalPrompt)
+                        put("content", userContent)
                     })
                 }
                 put("messages", messages)

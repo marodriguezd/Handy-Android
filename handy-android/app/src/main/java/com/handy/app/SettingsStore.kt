@@ -158,6 +158,19 @@ class SettingsStore(context: Context) {
             editor.apply()
         }
 
+    /** Transcription ASR language tag (`"auto"`, `"es"`, `"en"`, etc., matching PC `selected_language`). */
+    private val _selectedLanguageFlow: MutableStateFlow<String> = MutableStateFlow(
+        prefs.getString("selected_language", "auto") ?: "auto",
+    )
+    val selectedLanguageFlow: StateFlow<String> = _selectedLanguageFlow.asStateFlow()
+
+    var selectedLanguage: String
+        get() = _selectedLanguageFlow.value
+        set(value) {
+            _selectedLanguageFlow.value = value
+            prefs.edit().putString("selected_language", value).apply()
+        }
+
     /** Sprint 25: model-unload timeout in minutes (5, 10, 15, 30, ∞). */
     var modelUnloadTimeoutMinutes: Int
         get() = prefs.getInt("model_unload_timeout_minutes", 30)

@@ -126,6 +126,12 @@ object EngineBridge {
     /** @param apiKey  API key for post-processing endpoint */
     external fun nativeSetPostProcessApiKey(apiKey: String)
 
+    /** Set transcription ASR language (e.g., "es", "en", "auto") */
+    external fun nativeSetLanguage(language: String)
+
+    /** Set acceleration backend (e.g., "AUTO", "CPU", "VULKAN", "NNAPI") */
+    external fun nativeSetAccelerationBackend(backend: String)
+
     // ── History ────────────────────────────────────────────────
 
     /** Save a transcription entry. @param wavPath may be null. */

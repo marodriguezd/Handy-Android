@@ -18,6 +18,8 @@ pub struct EngineState {
     pub idle_timeout_secs: u32,
     pub post_process_endpoint: Option<String>,
     pub post_process_api_key: Option<String>,
+    pub selected_language: Option<String>,
+    pub acceleration_backend: Option<String>,
     pub audio_pipeline: AudioPipeline,
     pub transcription_engine: TranscriptionEngine,
     pub model_manager: ModelManager,
@@ -49,6 +51,8 @@ impl EngineState {
             idle_timeout_secs: 30,
             post_process_endpoint: None,
             post_process_api_key: None,
+            selected_language: None,
+            acceleration_backend: None,
             audio_pipeline: AudioPipeline::new(),
             transcription_engine: TranscriptionEngine::new(),
             model_manager: ModelManager::new(&model_dir),
@@ -76,6 +80,16 @@ impl EngineState {
 
     pub fn set_post_process_api_key(&mut self, api_key: Option<String>) {
         self.post_process_api_key = api_key;
+    }
+
+    pub fn set_selected_language(&mut self, language: Option<String>) {
+        self.selected_language = language.clone();
+        self.transcription_engine.set_language(language);
+    }
+
+    pub fn set_acceleration_backend(&mut self, backend: Option<String>) {
+        self.acceleration_backend = backend.clone();
+        self.transcription_engine.set_acceleration_backend(backend);
     }
 }
 

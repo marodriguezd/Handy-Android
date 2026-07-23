@@ -11,8 +11,8 @@ import com.handy.app.bridge.EngineBridge
 import com.handy.app.bridge.EngineCallback
 import com.handy.app.capability.DeviceCapabilityDetector
 import com.handy.app.injection.InjectorRouter
-import com.handy.app.model.AppSettings
-import com.handy.app.model.ModelInfo
+import com.handy.app.corrector.DictionaryManager
+import com.handy.app.corrector.WordCorrector
 import com.handy.app.service.RecordingService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +106,9 @@ class EngineViewModel(
                     configDir = configDir.absolutePath,
                     callback = this@EngineViewModel,
                 )
+                val settings = SettingsStore(getApplication())
+                EngineBridge.nativeSetLanguage(settings.selectedLanguage)
+                EngineBridge.nativeSetAccelerationBackend(settings.accelerationBackend.name)
             } catch (t: Throwable) {
                 // Preserve structured-concurrency cancellation semantics
                 // (mirrors the HistoryViewModel.retry pattern from Sprint 24).
@@ -347,11 +350,19 @@ class EngineViewModel(
         if (isPartial) {
             _partialText.value = text
         } else {
-            // Show final text in ConfirmBar for user to Insert or Discard.
-            // No auto-insert — the ConfirmBar composable handles insertion
-            // via onConfirmInsert/onDiscard callbacks.
-            _finalText.value = text
-            _state.value = STATE_CONFIRM
+            val dictManager = DictionaryManager(getApplication())
+            val customWords = dictManager.getActiveWordsList()
+            val corrector = WordCorrector(customWords)
+            val filtered = WordCorrector.filterTranscriptionOutput(text, null)
+            val processedText = corrector.applyCustomWords(filtered)
+
+            _finalText.value = processedText
+
+            if (_imeModeEnabled) {
+                confirmInsert(processedText)
+            } else {
+                _state.value = STATE_CONFIRM
+            }
         }
     }
 

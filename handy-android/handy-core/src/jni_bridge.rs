@@ -865,6 +865,56 @@ pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetPostProce
     });
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetLanguage<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    language: JString<'local>,
+) {
+    with_guard(&mut env, "nativeSetLanguage", |env| {
+        let lang: String = match env.get_string(&language) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid language: {e}"));
+                return;
+            }
+        };
+        let l = if lang.is_empty() || lang == "auto" {
+            None
+        } else {
+            Some(lang)
+        };
+        with_engine(|state| {
+            state.set_selected_language(l);
+        });
+    });
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_handy_app_bridge_EngineBridge_nativeSetAccelerationBackend<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    backend: JString<'local>,
+) {
+    with_guard(&mut env, "nativeSetAccelerationBackend", |env| {
+        let backend: String = match env.get_string(&backend) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                let _ = env.throw_new("java/lang/IllegalArgumentException", format!("Invalid backend: {e}"));
+                return;
+            }
+        };
+        let b = if backend.is_empty() {
+            None
+        } else {
+            Some(backend)
+        };
+        with_engine(|state| {
+            state.set_acceleration_backend(b);
+        });
+    });
+}
+
 // ── History ────────────────────────────────────────────────────
 
 #[no_mangle]

@@ -39,6 +39,7 @@ impl StreamWorker {
         &mut self,
         rx: mpsc::Receiver<StreamCmd>,
         mut session: transcribe_cpp::Session,
+        language: Option<String>,
         on_partial: impl Fn(String) + Send + 'static,
     ) -> u64 {
         let worker_id = self.worker_id;
@@ -47,7 +48,7 @@ impl StreamWorker {
         let handle = thread::spawn(move || {
             let run_options = RunOptions {
                 task: Task::Transcribe,
-                language: None,
+                language,
                 target_language: None,
                 family: None,
                 ..Default::default()
