@@ -75,6 +75,7 @@ class ModelDownloader(private val context: Context) {
     suspend fun download(
         model: Model,
         onProgress: (downloaded: Long, total: Long) -> Unit = { _, _ -> },
+        engineFactory: () -> IWhisperEngine = { WhisperLib() },
     ): File = downloadMutex.withLock {
         withContext(Dispatchers.IO) {
             check(model.downloadUrl.startsWith("https://", ignoreCase = true)) {
@@ -113,7 +114,7 @@ class ModelDownloader(private val context: Context) {
                     }
                 }
                 check(partial.isFile && partial.length() > 0L) { "Downloaded model is empty" }
-                val validation = ModelValidator.validate(partial, model.expectedSha256)
+                val validation = ModelValidator.validate(partial, model.expectedSha256, engineFactory)
                 if (SettingsManager.activeModelName(context) == target.name) {
                     // Fail closed while replacing an active model; it must be explicitly reactivated.
                     SettingsManager.clearActiveModel(context)
@@ -129,9 +130,12 @@ class ModelDownloader(private val context: Context) {
     }
 
     /** Revalidates a local model and makes it active only after native Whisper accepts it. */
-    suspend fun validateAndActivate(file: File): ModelValidationResult = withContext(Dispatchers.IO) {
+    suspend fun validateAndActivate(
+        file: File,
+        engineFactory: () -> IWhisperEngine = { WhisperLib() },
+    ): ModelValidationResult = withContext(Dispatchers.IO) {
         require(installedModels().any { it.name == file.name }) { "Model is not installed: ${file.name}" }
-        val result = ModelValidator.validateAndRecord(file, expectedSha256(file))
+        val result = ModelValidator.validateAndRecord(file, expectedSha256(file), engineFactory)
         SettingsManager.setActiveModel(context, file.name, result)
         result
     }

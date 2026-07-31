@@ -26,7 +26,20 @@ class AutoTypeAccessibilityService : AccessibilityService() {
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        val setTextSuccess = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        if (setTextSuccess) return true
+
+        return try {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Handy Transcription", text))
+                node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     companion object {

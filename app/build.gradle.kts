@@ -25,15 +25,42 @@ tasks.named("preBuild") {
     dependsOn(checkModelCatalog)
 }
 
+afterEvaluate {
+    tasks.named("testDebugUnitTest") {
+        dependsOn(checkModelCatalog)
+    }
+}
+
 android {
     namespace = "com.handy.android"
-    compileSdk = 35
+    compileSdk = 34
     ndkVersion = "27.0.12077973"
+
+    lint {
+        abortOnError = true
+        warningsAsErrors = true
+        checkAllWarnings = true
+        checkDependencies = true
+        disable += listOf(
+            "MissingTranslation",
+            "GoogleAppIndexingWarning",
+            "OldTargetApi",
+            "GradleDependency",
+            "NewerVersionAvailable",
+            "ObsoleteSdkInt",
+            "UnusedResources",
+            "SyntheticAccessor",
+            "MissingApplicationIcon",
+            "ClickableViewAccessibility",
+            "SetTextI18n",
+            "InlinedApi",
+        )
+    }
 
     defaultConfig {
         applicationId = "com.handy.android"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
 
@@ -85,7 +112,7 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    implementation("androidx.activity:activity-compose:1.10.0")
+    implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")

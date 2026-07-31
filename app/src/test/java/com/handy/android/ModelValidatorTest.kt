@@ -67,6 +67,61 @@ class ModelValidatorTest {
         assertEquals(null, ModelValidator.readRecordedDigest(file))
     }
 
+    @Test
+    fun validateSucceedsWithMockEngine() {
+        val file = temporaryFile("mock model data")
+        val expectedSha = ModelValidator.sha256(file)
+        var closed = false
+        var initializedPath: String? = null
+
+        val mockEngine = object : IWhisperEngine {
+            override fun init(modelPath: String): Boolean {
+                initializedPath = modelPath
+                return true
+            }
+
+            override fun transcribe(
+                audioData: FloatArray,
+                numThreads: Int,
+                translate: Boolean,
+                language: String,
+            ): String = "mock result"
+
+            override fun close() {
+                closed = true
+            }
+        }
+
+        val result = ModelValidator.validate(file, expectedSha, engineFactory = { mockEngine })
+        assertEquals(expectedSha, result.sha256)
+        assertEquals(file.length(), result.sizeBytes)
+        assertEquals(file.absolutePath, initializedPath)
+        assertTrue(closed)
+    }
+
+    @Test
+    fun validateFailsWhenEngineRejectsModel() {
+        val file = temporaryFile("corrupt model")
+        val mockEngine = object : IWhisperEngine {
+            override fun init(modelPath: String): Boolean = false
+            override fun transcribe(
+                audioData: FloatArray,
+                numThreads: Int,
+                translate: Boolean,
+                language: String,
+            ): String = ""
+
+            override fun close() {}
+        }
+
+        try {
+            ModelValidator.validate(file, engineFactory = { mockEngine })
+            throw AssertionError("Expected ModelValidationException when init returns false")
+        } catch (error: ModelValidationException) {
+            assertTrue(error.message.orEmpty().contains("Whisper rejected model"))
+        }
+    }
+
     private fun temporaryFile(content: String): File {
         val directory = Files.createTempDirectory("handy-model-test").toFile()
         temporaryDirectories += directory

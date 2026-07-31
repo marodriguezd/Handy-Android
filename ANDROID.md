@@ -36,6 +36,19 @@ When the catalog or overrides change, regenerate the checked-in Kotlin source:
 
 The GitHub Actions workflow at `.github/workflows/android.yml` installs the pinned SDK/CMake/NDK versions and runs all four checks on Android-related changes.
 
+### ARM64 host toolchain notes
+
+- **SIGILL (Exit code 132) on ARM64 Linux hosts**:
+  When running builds on ARM64/`aarch64` Linux host environments, prepackaged Android SDK `cmake` and `ninja` binaries may fail with illegal instruction errors. Resolve this by installing `ninja-build` and symlinking system binaries:
+  ```bash
+  apt-get install -y ninja-build
+  ln -sf /usr/bin/cmake $ANDROID_SDK_ROOT/cmake/3.22.1/bin/cmake
+  ln -sf /usr/bin/ninja $ANDROID_SDK_ROOT/cmake/3.22.1/bin/ninja
+  ```
+
+- **JVM-only Test Harness Execution**:
+  Canonical verification tasks (`./gradlew checkModelCatalog testDebugUnitTest lintDebug`) run on the host JVM and do not require native NDK compilation when using the `IWhisperEngine` interface abstraction for unit testing.
+
 ## Private Telegram debug-build bot
 
 The repository also contains an optional, private build bridge:

@@ -23,13 +23,17 @@ object ModelValidator {
     private val digestPattern = Regex("[0-9a-fA-F]{$SHA256_LENGTH}")
 
     /** Loads the model through the native Whisper engine after checking its digest. */
-    fun validate(file: File, expectedSha256: String? = null): ModelValidationResult {
+    fun validate(
+        file: File,
+        expectedSha256: String? = null,
+        engineFactory: () -> IWhisperEngine = { WhisperLib() },
+    ): ModelValidationResult {
         require(file.isFile) { "Model file does not exist: ${file.name}" }
         require(file.length() > 0L) { "Model file is empty: ${file.name}" }
 
         val digest = verifyExpectedSha256(file, expectedSha256)
         try {
-            WhisperLib().use { whisper ->
+            engineFactory().use { whisper ->
                 check(whisper.init(file.absolutePath)) {
                     "Whisper rejected model ${file.name}"
                 }
@@ -52,8 +56,12 @@ object ModelValidator {
     }
 
     /** Validates a model and atomically records the digest used for future integrity checks. */
-    fun validateAndRecord(file: File, expectedSha256: String? = null): ModelValidationResult {
-        val result = validate(file, expectedSha256)
+    fun validateAndRecord(
+        file: File,
+        expectedSha256: String? = null,
+        engineFactory: () -> IWhisperEngine = { WhisperLib() },
+    ): ModelValidationResult {
+        val result = validate(file, expectedSha256, engineFactory)
         writeDigestFile(file, result)
         return result
     }

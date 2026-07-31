@@ -2,4 +2,11 @@
     <string name="app_name">Handy</string>
     <string name="accessibility_service_description">Lets Handy type local transcriptions into the focused text field.</string>
     <string name="voice_subtype">Voice</string>
+    <string name="recording_service_title">Handy Recording Service</string>
+    <string name="recording_service_description">Listening for voice input</string>
+    <string name="model_download_failed">Model download failed</string>
+    <string name="model_invalid">Model validation failed</string>
+    <string name="no_model_selected">No model selected</string>
+    <string name="transcribing">Transcribing…</string>
+    <string name="transcription_complete">Transcription complete</string>
 </resources>

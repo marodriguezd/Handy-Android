@@ -6,7 +6,7 @@ package com.handy.android
  * The native ABI is kept deliberately narrow so a full whisper.cpp build can
  * replace the bundled JNI implementation without changing the Android UI.
  */
-class WhisperLib : AutoCloseable {
+class WhisperLib : IWhisperEngine {
     private var context: Long = 0L
 
     init {
@@ -14,18 +14,18 @@ class WhisperLib : AutoCloseable {
     }
 
     @Synchronized
-    fun init(modelPath: String): Boolean {
+    override fun init(modelPath: String): Boolean {
         check(context == 0L) { "Whisper context is already initialized" }
         context = initContext(modelPath)
         return context != 0L
     }
 
     @Synchronized
-    fun transcribe(
+    override fun transcribe(
         audioData: FloatArray,
-        numThreads: Int = Runtime.getRuntime().availableProcessors().coerceAtMost(8),
-        translate: Boolean = false,
-        language: String = "auto",
+        numThreads: Int,
+        translate: Boolean,
+        language: String,
     ): String {
         check(context != 0L) { "Whisper context is not initialized" }
         return fullTranscribe(context, audioData, numThreads, translate, language)

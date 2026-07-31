@@ -15,12 +15,16 @@ object TranscriptionEngine {
     fun isValidatedModel(file: File): Boolean =
         isSupportedModel(file) && ModelValidator.verifyRecordedDigest(file)
 
-    suspend fun transcribe(context: Context, samples: FloatArray): String = withContext(Dispatchers.Default) {
+    suspend fun transcribe(
+        context: Context,
+        samples: FloatArray,
+        engineFactory: () -> IWhisperEngine = { WhisperLib() },
+    ): String = withContext(Dispatchers.Default) {
         val model = selectedModel(context) ?: throw NoModelException()
         if (!isValidatedModel(model)) {
             throw ModelValidationException("Selected model has not passed integrity validation: ${model.name}")
         }
-        WhisperLib().use { whisper ->
+        engineFactory().use { whisper ->
             check(whisper.init(model.absolutePath)) { "Unable to initialize the selected model" }
             whisper.transcribe(
                 audioData = samples,
