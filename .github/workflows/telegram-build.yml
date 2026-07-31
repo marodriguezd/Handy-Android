@@ -1,0 +1,98 @@
+name: Telegram Android debug build
+
+on:
+  workflow_dispatch:
+    inputs:
+      chat_id:
+        description: "Authorized Telegram private chat ID"
+        required: true
+        type: string
+
+concurrency:
+  group: telegram-android-debug
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_ALLOWED_CHAT_ID: ${{ secrets.TELEGRAM_ALLOWED_CHAT_ID }}
+      TELEGRAM_CHAT_ID: ${{ inputs.chat_id }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Checkout fixed build ref
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Validate Telegram recipient
+        run: test "$TELEGRAM_CHAT_ID" = "$TELEGRAM_ALLOWED_CHAT_ID"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.0.12077973"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate and build debug APK
+        run: ./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug
+
+      - name: Store debug APK in the workflow
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: handy-android-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Send debug APK to Telegram
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_size=$(stat -c '%s' app/build/outputs/apk/debug/app-debug.apk)
+          if [ "$apk_size" -gt 49000000 ]; then
+            curl --silent --show-error --fail \
+              --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+              --data-urlencode "text=La compilación terminó, pero el APK supera el límite de subida del Bot API. Descárgalo desde la ejecución de GitHub Actions: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"
+            exit 0
+          fi
+          curl --silent --show-error --fail \
+            -F "chat_id=$TELEGRAM_CHAT_ID" \
+            -F "caption=✅ Handy Android debug APK (run $GITHUB_RUN_ID)" \
+            -F "document=@app/build/outputs/apk/debug/app-debug.apk" \
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendDocument"
+
+      - name: Report failed build to Telegram
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$TELEGRAM_CHAT_ID" = "$TELEGRAM_ALLOWED_CHAT_ID"
+          curl --silent --show-error --fail \
+            --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+            --data-urlencode "text=❌ La compilación debug falló. Revisa los logs de GitHub Actions: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"

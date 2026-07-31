@@ -36,6 +36,37 @@ When the catalog or overrides change, regenerate the checked-in Kotlin source:
 
 The GitHub Actions workflow at `.github/workflows/android.yml` installs the pinned SDK/CMake/NDK versions and runs all four checks on Android-related changes.
 
+## Private Telegram debug-build bot
+
+The repository also contains an optional, private build bridge:
+
+- `.github/workflows/telegram-poll.yml` polls Telegram every five minutes;
+- `scripts/telegram_build_poller.py` accepts only `/build` from one configured private chat;
+- `.github/workflows/telegram-build.yml` always checks out `main`, runs the debug validation/build, and sends `app-debug.apk` back through Telegram.
+
+This design does not compile on the mobile Linux environment and does not accept a branch, Gradle command, or uploaded source from Telegram. To activate it, create a bot with BotFather, send it one message from the intended private chat, determine that chat's numeric ID, and add these **repository Actions secrets**:
+
+- `TELEGRAM_BOT_TOKEN`: the token from BotFather;
+- `TELEGRAM_ALLOWED_CHAT_ID`: the numeric ID of the one authorized private chat.
+
+Then enable Actions for the repository and run `Telegram build poller` once manually. Send `/build` to the bot. The scheduled poll normally starts the build within five minutes; the bot sends a success APK or a failure/log link. Telegram's standard Bot API has an upload-size limit, so oversized APKs are left as workflow artifacts and the bot sends the Actions run link instead. Never commit either secret or paste the bot token into source files or issues.
+
+### Find the private chat ID locally
+
+If you do not know `TELEGRAM_ALLOWED_CHAT_ID`, run the read-only diagnostic helper from a machine with Internet access:
+
+```bash
+python3 scripts/telegram_inspect.py
+```
+
+The helper asks for `TELEGRAM_BOT_TOKEN` without echoing it, reads pending messages through Telegram's `getUpdates`, and prints the numeric `chat_id`. It does not send messages, trigger builds, delete webhooks, or save the token. Send `/start` to the bot before running it. Copy only the numeric ID of the private chat into the `TELEGRAM_ALLOWED_CHAT_ID` GitHub secret. Do not share the full output if it contains your name or messages.
+
+If it reports `409 Conflict`, another poller or webhook is already consuming updates. Temporarily disable the scheduled `Telegram build poller` workflow, then retry the inspector. Do not run two Telegram pollers at the same time.
+
+The GitHub token used by the poller is the short-lived workflow token (`github.token`) and is limited to `actions: write` and `contents: read`.
+
+For a production setup with immediate responses, move the poller to a small always-on VPS and use long polling; the current scheduled GitHub Actions version is intentionally inexpensive, but has up to five minutes of latency.
+
 ## Install a debug build
 
 ```bash

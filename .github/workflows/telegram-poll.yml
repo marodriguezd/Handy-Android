@@ -1,0 +1,33 @@
+name: Telegram build poller
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-build-poller
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_ALLOWED_CHAT_ID: ${{ secrets.TELEGRAM_ALLOWED_CHAT_ID }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      TELEGRAM_BUILD_WORKFLOW: telegram-build.yml
+    steps:
+      - name: Checkout bot bridge
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/telegram_build_poller.py
+
+      - name: Poll Telegram and dispatch build
+        run: python3 scripts/telegram_build_poller.py
