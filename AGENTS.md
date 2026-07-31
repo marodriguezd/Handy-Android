@@ -23,6 +23,11 @@ The Android model storefront is generated from `src-tauri/src/catalog/catalog.js
 
 Android generated outputs (`.gradle/`, `app/build/`, `app/.cxx/`) must remain ignored. Work directly on the current Android module. Do not modify desktop Tauri behavior to solve an Android-only issue unless explicitly requested.
 
+### Multi-Architecture & Gauntlet Principles
+
+- **Multi-ABI Parity**: The Android module supports both ARM (mobile `arm64-v8a`, `armeabi-v7a`) and x86 (laptop emulators `x86_64`, `x86`). Always keep `abiFilters` aligned across all 4 architectures in `app/build.gradle.kts`.
+- **The Gauntlet Validation Rule (Uncle Bob's Test Harness Strategy)**: AI assistants working on code must adhere to the Gauntlet Strategy: do not request line-by-line manual code reviews. Instead, rely on automated test gates (`./gradlew checkModelCatalog testDebugUnitTest lintDebug`) and present empirical command/task execution evidence (`BUILD SUCCESSFUL`) before declaring any task complete.
+
 ## Desktop/Tauri Reference Commands (not the active Android workflow)
 
 The commands in this section document the existing desktop application only. They are not required for Android development and should not be run for Android-only tasks.
