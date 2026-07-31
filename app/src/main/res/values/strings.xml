@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Handy</string>
+    <string name="accessibility_service_description">Lets Handy type local transcriptions into the focused text field.</string>
+    <string name="voice_subtype">Voice</string>
+</resources>

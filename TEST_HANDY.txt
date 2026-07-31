@@ -1,0 +1,107 @@
+HANDY ANDROID — VALIDATION LOG
+
+Purpose
+-------
+This file records the physical-device validation performed for the Android port. It is a runbook and evidence summary, not a replacement for automated tests.
+
+Project state
+-------------
+- Package: com.handy.android
+- Test device: Android 16 / API 36 / ARM64 / model A059 (Asteroids)
+- Historical ADB transport used: `192.168.1.45:38677` (use the currently connected serial for new runs)
+- APK type: debug, installed incrementally with `adb -s <DEVICE_SERIAL> install -r`
+- Model fixture: ggml-tiny.en.bin, copied to app-private `files/models`
+- Audio fixture: 16 kHz mono PCM WAV copied to app-private files
+
+Automated validation
+--------------------
+Run from the repository root:
+
+```bash
+./gradlew lintDebug
+./gradlew testDebugUnitTest
+./gradlew assembleDebug
+./gradlew assembleRelease
+```
+
+Last verified result:
+
+- lintDebug: PASS
+- testDebugUnitTest: PASS
+- assembleDebug: PASS
+- assembleRelease: PASS
+- git diff --check: PASS
+
+The unit-test task now includes JVM tests for `AudioBuffer`. Instrumented Android tests are still pending. When more than one device is connected, always pass `-s <DEVICE_SERIAL>`; otherwise ADB can fail with `more than one device/emulator` or target the wrong device.
+
+The existing physical fixture was prepared in the debug app's private storage for the authorized device run. A clean checkout still needs a separately supplied model and audio fixture; these are intentionally not committed to the repository.
+
+Physical smoke test
+-------------------
+
+1. Build and install without clearing application data:
+
+```bash
+./gradlew assembleDebug
+adb -s <DEVICE_SERIAL> install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+2. Launch the app:
+
+```bash
+adb -s <DEVICE_SERIAL> shell am start -n com.handy.android/.MainActivity
+```
+
+3. Verify the guided setup:
+
+- `RECORD_AUDIO` granted;
+- `POST_NOTIFICATIONS` granted on Android 13+;
+- overlay access enabled;
+- `AutoTypeAccessibilityService` enabled;
+- MainActivity reports Handy ready.
+
+4. Start the floating service and verify:
+
+- foreground service is running;
+- overlay button is visible;
+- recording state changes when tapped;
+- service stops cleanly;
+- no `FATAL EXCEPTION`, `SIGSEGV` or JNI crash appears in logcat.
+
+5. Verify file transcription with a readable app-private URI:
+
+```bash
+adb -s <DEVICE_SERIAL> shell am start \
+  -a android.intent.action.VIEW \
+  -t audio/wav \
+  -d file:///data/user/0/com.handy.android/files/handy-e2e-16k.wav \
+  -n com.handy.android/.TranscribeFileActivity
+```
+
+Tap `Transcribe` and verify that the activity reaches `Transcribing…` or a final result without crashing.
+
+6. Verify sharing behavior with an external `content://` URI when a provider is available. The sender must include `FLAG_GRANT_READ_URI_PERMISSION`. `file:///sdcard/...` is not a reliable Android 13–16 contract without an explicit grant.
+
+Evidence already collected
+--------------------------
+
+- APK installed and MainActivity resumed successfully.
+- Permissions and accessibility state detected correctly.
+- FloatingButtonService started as a foreground overlay service.
+- `libhandy_whisper_jni.so` loaded successfully.
+- A real 74 MB GGML Whisper model loaded successfully.
+- Decoder and Whisper inference completed without native crash.
+- Synthetic fixture result: `No speech detected`.
+
+Interpretation: the result proves the decoder/JNI/inference path executes safely. It does not prove recognition quality because the fixture was synthetic and no expected human transcript was asserted.
+
+Known gaps
+----------
+
+- No instrumented tests yet for URI grants, IME, accessibility, services or model import.
+- Local SHA-256 sidecars and real Whisper validation are implemented; authenticated remote SHA-256 metadata for catalog models is still pending.
+- JNI inference is synchronous and not cancellable while native code is running.
+- Live subtitles use bounded periodic windows and may discard audio while inference is busy.
+- `ACTION_SET_TEXT` has no universal fallback for every target application.
+- Release compilation is verified, but signing/AAB distribution is not configured.
+- The Android module, workflow, and documentation are included in the repository commit; clean-checkout CI remains the next verification target.

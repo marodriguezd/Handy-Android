@@ -2,14 +2,33 @@
 
 This file provides guidance to AI coding assistants working with code in this repository.
 
-## Development Commands
+## Android Port
+
+The repository also contains a standalone Android Gradle project at the root (`app/`, `gradle/`, `gradlew`). It is the Android port of Handy and is separate from the Tauri desktop application under `src/` and `src-tauri/`.
+
+Before changing Android code, read [`ANDROID.md`](ANDROID.md), [`spec.md`](spec.md), [`plan.md`](plan.md), and [`TEST_HANDY.txt`](TEST_HANDY.txt). The Android package is `com.handy.android`; its local inference bridge is `app/src/main/cpp/native-lib.cpp`, and its model/audio flow is implemented in `app/src/main/java/com/handy/android/`.
+
+Canonical Android validation commands:
+
+```bash
+./gradlew lintDebug
+./gradlew testDebugUnitTest
+./gradlew assembleDebug
+./gradlew assembleRelease
+```
+
+Android generated outputs (`.gradle/`, `app/build/`, `app/.cxx/`) must remain ignored. Work directly on the current Android module. Do not modify desktop Tauri behavior to solve an Android-only issue unless explicitly requested.
+
+## Desktop/Tauri Reference Commands (not the active Android workflow)
+
+The commands in this section document the existing desktop application only. They are not required for Android development and should not be run for Android-only tasks.
 
 **Prerequisites:**
 
 - [Rust](https://rustup.rs/) (latest stable)
 - [Bun](https://bun.sh/) package manager
 
-**Core Development:**
+**Desktop/Tauri reference development:**
 
 ```bash
 # Install dependencies
@@ -51,9 +70,11 @@ For detailed platform-specific build setup, see [BUILD.md](BUILD.md).
 
 ## Architecture Overview
 
-Handy is a cross-platform desktop speech-to-text application built with Tauri 2.x (Rust backend + React/TypeScript frontend).
+The active development target in this repository is the Handy Android port, built as the standalone Gradle/Kotlin/C++ module described above. The existing Tauri 2.x desktop application (`src/` and `src-tauri/`) is retained as product and architecture reference only; Android work must not depend on running or rebuilding Tauri.
 
 ### Backend Structure (src-tauri/src/)
+
+The repository also contains the Android port described in the `Android Port` section above. It is intentionally a separate Gradle/Kotlin/C++ build and is not initialized by the Tauri runtime.
 
 - `lib.rs` - Main entry point, Tauri setup, manager initialization
 - `managers/` - Core business logic:
@@ -133,7 +154,7 @@ The app enforces single instance behavior — launching when already running bri
 
 ## Internationalization (i18n)
 
-All user-facing strings must use i18next translations. ESLint enforces this (no hardcoded strings in JSX).
+All desktop/web user-facing strings must use i18next translations. ESLint enforces this (no hardcoded strings in JSX). Android currently has hardcoded Kotlin UI/service strings; Android internationalization is a tracked follow-up and should use Android string resources when implemented.
 
 **Adding new text:**
 
