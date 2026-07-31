@@ -54,8 +54,12 @@ El módulo Android es un proyecto Gradle independiente en la raíz. La aplicaci�
 
 ## Estado verificado
 
-El módulo Android, workflow, wrapper y documentación están en el índice y quedan incorporados al repositorio mediante el commit de esta sesión. Validaciones locales completadas:
+El módulo Android, workflow, wrapper, tienda de modelos, generador y documentación forman parte del estado de trabajo que debe quedar versionado en el repositorio. La tienda se alimenta de `src-tauri/src/catalog/catalog.json` a través de `scripts/generate_android_model_catalog.py`; `scripts/android_model_catalog_overrides.json` conserva los tres artefactos legacy `.bin` que el backend JNI actual puede activar. `ModelCatalog.kt` es generado: no editarlo manualmente. El subconjunto contiene 52 entradas de hasta 1,2B parámetros; solo Whisper Small, Medium y Large v3 Turbo están disponibles ahora, y las demás se muestran como coming soon.
 
+Validaciones locales completadas:
+
+- generador `--check` correcto;
+- `generateModelCatalog` y `checkModelCatalog` correctos;
 - `lintDebug` correcto;
 - `testDebugUnitTest` correcto;
 - `assembleDebug` correcto;
@@ -65,9 +69,13 @@ El módulo Android, workflow, wrapper y documentación están en el índice y qu
 - permisos de micrófono/notificaciones, overlay, accesibilidad y foreground service;
 - carga de modelo GGML real y `libhandy_whisper_jni.so`;
 - decoder e inferencia sin crash JNI/native;
-- tests JVM de SHA-256, sidecars y detección de manipulación.
+- tests JVM de SHA-256, sidecars, catálogo y detección de manipulación.
 
 La fixture sintética produjo `No speech detected`; eso valida ejecución, no precisión con voz humana.
+
+## Siguiente prompt recomendado para una sesión limpia
+
+> Continúa el port Android de Handy desde el estado actual. Lee `AGENTS.md`, `agent_prompt.md`, `plan.md`, `ANDROID.md` y `TEST_HANDY.txt`; comprueba `git status --short` y no reinicies el trabajo de la tienda. La tienda de modelos ya está implementada y `ModelCatalog.kt` se genera desde `src-tauri/src/catalog/catalog.json` con `scripts/generate_android_model_catalog.py`, overrides en `scripts/android_model_catalog_overrides.json`, y verificación Gradle mediante `generateModelCatalog`/`checkModelCatalog`. Pregunta antes de tomar decisiones de producto. Prioriza el siguiente ítem pendiente del backlog, empieza por procedencia autenticada de checksums remotos o pruebas instrumentadas, y valida con lint, tests y builds Android.
 
 ## Siguiente trabajo prioritario
 
@@ -76,7 +84,7 @@ La fixture sintética produjo `No speech detected`; eso valida ejecución, no pr
 - Publicar y fijar checksums remotos autenticados para cada modelo del catálogo. Los modelos actuales aún tienen `expectedSha256 = null`.
 - Añadir tests instrumentados para rechazo de GGML inválido mediante JNI, URI `content://`, `ACTION_SEND`, permisos, IME, accesibilidad y foreground services.
 - Ejecutar una prueba con audio humano conocido y texto esperado.
-- Serializar descargas/importaciones concurrentes que apunten al mismo nombre.
+- Añadir cancelación, reintentos y progreso fiable de descargas; la serialización global de descargas de la tienda ya está implementada.
 - Diseñar cancelación o cola explícita alrededor de la inferencia JNI síncrona.
 
 ### P2 — Robustez y paridad

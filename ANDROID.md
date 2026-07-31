@@ -4,6 +4,7 @@ The Android port lives in the standalone Gradle module at the repository root. I
 
 ## Requirements
 
+- Python 3.10+ (used by the model catalog generation/check task)
 - JDK 17
 - Android SDK platform 35
 - Android build-tools 35.0.0
@@ -14,6 +15,17 @@ The Android port lives in the standalone Gradle module at the repository root. I
 The Gradle wrapper present in this working tree is the source of truth for the Gradle version. The Android source, wrapper, workflow, and documentation are intended to be versioned; do not commit `.gradle/`, `app/build/`, or `app/.cxx/`, because they are generated and ignored.
 
 ## Build and validation
+
+The Android model storefront is generated from the desktop catalog. The three legacy `.bin` downloads that Android currently supports are kept in `scripts/android_model_catalog_overrides.json`; all other model metadata comes from `src-tauri/src/catalog/catalog.json`.
+
+When the catalog or overrides change, regenerate the checked-in Kotlin source:
+
+```bash
+./gradlew generateModelCatalog
+./gradlew checkModelCatalog
+```
+
+`checkModelCatalog` is also a `preBuild` dependency, so Android builds fail instead of silently using stale catalog data.
 
 ```bash
 ./gradlew lintDebug

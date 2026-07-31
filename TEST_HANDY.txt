@@ -18,6 +18,8 @@ Automated validation
 Run from the repository root:
 
 ```bash
+./gradlew generateModelCatalog
+./gradlew checkModelCatalog
 ./gradlew lintDebug
 ./gradlew testDebugUnitTest
 ./gradlew assembleDebug
@@ -32,7 +34,7 @@ Last verified result:
 - assembleRelease: PASS
 - git diff --check: PASS
 
-The unit-test task now includes JVM tests for `AudioBuffer`. Instrumented Android tests are still pending. When more than one device is connected, always pass `-s <DEVICE_SERIAL>`; otherwise ADB can fail with `more than one device/emulator` or target the wrong device.
+The unit-test task now includes JVM tests for `AudioBuffer` and the generated model catalog. Instrumented Android tests are still pending. The storefront catalog is generated from the desktop catalog and currently exposes 52 entries at or below 1.2B parameters; only the three legacy Whisper `.bin` artifacts have Android download overrides, while other entries are informational/coming soon. When more than one device is connected, always pass `-s <DEVICE_SERIAL>`; otherwise ADB can fail with `more than one device/emulator` or target the wrong device.
 
 The existing physical fixture was prepared in the debug app's private storage for the authorized device run. A clean checkout still needs a separately supplied model and audio fixture; these are intentionally not committed to the repository.
 
@@ -99,7 +101,7 @@ Known gaps
 ----------
 
 - No instrumented tests yet for URI grants, IME, accessibility, services or model import.
-- Local SHA-256 sidecars and real Whisper validation are implemented; authenticated remote SHA-256 metadata for catalog models is still pending.
+- Local SHA-256 sidecars and real Whisper validation are implemented; the three current storefront overrides include SHA-256 values, but authenticated remote checksum provenance for catalog models is still pending.
 - JNI inference is synchronous and not cancellable while native code is running.
 - Live subtitles use bounded periodic windows and may discard audio while inference is busy.
 - `ACTION_SET_TEXT` has no universal fallback for every target application.

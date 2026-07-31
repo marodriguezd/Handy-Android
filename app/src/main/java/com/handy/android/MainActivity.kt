@@ -18,13 +18,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -70,9 +67,7 @@ class MainActivity : ComponentActivity() {
         }
         var permissions by remember { mutableStateOf(PermissionChecker.read(context)) }
         var serviceRunning by remember { mutableStateOf(false) }
-        var downloading by remember { mutableStateOf(false) }
         var installed by remember { mutableStateOf(emptyList<String>()) }
-        var modelStatus by remember { mutableStateOf<String?>(null) }
         var notificationRequestRejected by remember {
             mutableStateOf(permissionPrefs.getBoolean(NOTIFICATIONS_REJECTED, false))
         }
@@ -84,6 +79,20 @@ class MainActivity : ComponentActivity() {
         }
         var microphoneWasRequested by remember {
             mutableStateOf(permissionPrefs.getBoolean(MICROPHONE_REQUESTED, false))
+        }
+
+        fun refreshInstalledModels() {
+            lifecycleScope.launch {
+                installed = withContext(Dispatchers.IO) {
+                    downloader.installedModels().map { model ->
+                        if (TranscriptionEngine.isValidatedModel(model)) {
+                            "✓ ${model.name}"
+                        } else {
+                            "⚠ ${model.name} (validation required)"
+                        }
+                    }
+                }
+            }
         }
 
         fun refreshPermissions() {
@@ -118,22 +127,17 @@ class MainActivity : ComponentActivity() {
 
         DisposableEffect(lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) refreshPermissions()
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    refreshPermissions()
+                    refreshInstalledModels()
+                }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
         LaunchedEffect(Unit) {
-            installed = withContext(Dispatchers.IO) {
-                downloader.installedModels().map { model ->
-                    if (TranscriptionEngine.isValidatedModel(model)) {
-                        "✓ ${model.name}"
-                    } else {
-                        "⚠ ${model.name} (validation required)"
-                    }
-                }
-            }
+            refreshInstalledModels()
             refreshPermissions()
         }
 
@@ -274,56 +278,22 @@ class MainActivity : ComponentActivity() {
                 }
                 item {
                     Text("Models", style = MaterialTheme.typography.titleMedium)
-                    modelStatus?.let { status ->
-                        Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (installed.isEmpty()) Text("No local models yet. Download one to enable transcription.")
-                    installed.forEach { model ->
+                    if (installed.isEmpty()) {
+                        Text("No local models yet. Open the model store to choose one.")
+                    } else {
                         Text(
-                            model,
-                            color = if (model.startsWith("✓")) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            },
+                            "${installed.size} local model${if (installed.size == 1) "" else "s"}. Open Models to review or activate them.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                }
-                items(downloader.availableModels) { model ->
-                    Card {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(model.displayName, style = MaterialTheme.typography.titleMedium)
-                                Text(model.fileName, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Button(enabled = !downloading, onClick = {
-                                downloading = true
-                                lifecycleScope.launch {
-                                    runCatching { downloader.download(model) }
-                                        .onSuccess { file ->
-                                            modelStatus = "Downloaded and Whisper-validated: ${file.name}. Open Models to activate it."
-                                        }
-                                        .onFailure { error ->
-                                            modelStatus = error.message ?: "Model download or validation failed"
-                                        }
-                                    installed = withContext(Dispatchers.IO) {
-                                        downloader.installedModels().map { installedModel ->
-                                            if (TranscriptionEngine.isValidatedModel(installedModel)) {
-                                                "✓ ${installedModel.name}"
-                                            } else {
-                                                "⚠ ${installedModel.name} (validation required)"
-                                            }
-                                        }
-                                    }
-                                    downloading = false
-                                }
-                            }) {
-                                if (downloading) {
-                                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.width(18.dp).height(18.dp))
+                        installed.forEach { model ->
+                            Text(
+                                model,
+                                color = if (model.startsWith("✓")) {
+                                    MaterialTheme.colorScheme.primary
                                 } else {
-                                    Text("Download")
-                                }
-                            }
+                                    MaterialTheme.colorScheme.error
+                                },
+                            )
                         }
                     }
                 }

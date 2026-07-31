@@ -4,6 +4,27 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val modelCatalogGenerator = rootProject.file("scripts/generate_android_model_catalog.py")
+val modelCatalogOverrides = rootProject.file("scripts/android_model_catalog_overrides.json")
+val desktopModelCatalog = rootProject.file("src-tauri/src/catalog/catalog.json")
+val generatedModelCatalog = file("src/main/java/com/handy/android/ModelCatalog.kt")
+
+val generateModelCatalog = tasks.register<Exec>("generateModelCatalog") {
+    commandLine("python3", modelCatalogGenerator.absolutePath)
+    inputs.files(desktopModelCatalog, modelCatalogOverrides, modelCatalogGenerator)
+    outputs.file(generatedModelCatalog)
+}
+
+val checkModelCatalog = tasks.register<Exec>("checkModelCatalog") {
+    commandLine("python3", modelCatalogGenerator.absolutePath, "--check")
+    inputs.files(desktopModelCatalog, modelCatalogOverrides, modelCatalogGenerator, generatedModelCatalog)
+    mustRunAfter(generateModelCatalog)
+}
+
+tasks.named("preBuild") {
+    dependsOn(checkModelCatalog)
+}
+
 android {
     namespace = "com.handy.android"
     compileSdk = 35

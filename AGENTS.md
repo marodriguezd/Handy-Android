@@ -15,7 +15,11 @@ Canonical Android validation commands:
 ./gradlew testDebugUnitTest
 ./gradlew assembleDebug
 ./gradlew assembleRelease
+./gradlew generateModelCatalog
+./gradlew checkModelCatalog
 ```
+
+The Android model storefront is generated from `src-tauri/src/catalog/catalog.json` by `scripts/generate_android_model_catalog.py`. Keep the three Android-compatible legacy `.bin` artifacts in `scripts/android_model_catalog_overrides.json`; do not edit `ModelCatalog.kt` manually. `checkModelCatalog` is part of `preBuild` and must fail when the generated source is stale. The current catalog is limited to 1.2 billion parameters and only the three Whisper `.bin` overrides are downloadable by the current JNI backend; other entries are displayed as coming soon.
 
 Android generated outputs (`.gradle/`, `app/build/`, `app/.cxx/`) must remain ignored. Work directly on the current Android module. Do not modify desktop Tauri behavior to solve an Android-only issue unless explicitly requested.
 
@@ -67,6 +71,12 @@ curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.compute
 ```
 
 For detailed platform-specific build setup, see [BUILD.md](BUILD.md).
+
+## Android storefront handoff
+
+The model-storefront implementation is already present in the Android module. `ModelsActivity` provides catalog search, an all/available filter, installed-state refresh, and a separate coming-soon section. `MainActivity` opens the storefront rather than maintaining a second download path. `ModelDownloader` serializes downloads process-wide, requires HTTPS, verifies SHA-256 and real Whisper loading, and activates a model only after validation.
+
+When the desktop catalog changes, run `python3 scripts/generate_android_model_catalog.py` or `./gradlew generateModelCatalog`, then use `./gradlew checkModelCatalog` before Android builds. CI installs Python 3.11 and checks catalog-related changes. The next agent should focus on authenticated remote checksum provenance, instrumented/device coverage, and the remaining Android robustness backlog rather than rebuilding the storefront from scratch.
 
 ## Architecture Overview
 

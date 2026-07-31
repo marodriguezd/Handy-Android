@@ -15,7 +15,7 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Incorporar módulo `app` y recursos Android.
 - [x] Incorporar fuentes Kotlin, JNI/C++, CMake y whisper.cpp/GGML.
 - [x] Separar artefactos generados (`.gradle`, `app/build`, `app/.cxx`) mediante `.gitignore`.
-- [x] Preparar la incorporación Git de todos los fuentes Android y documentación, excluyendo `.gradle/`, `app/build/`, `app/.cxx/` y otros artefactos generados. El commit y su sincronización remota se verifican al cerrar esta sesión.
+- [x] Preparar la incorporación Git de todos los fuentes Android y documentación, excluyendo `.gradle/`, `app/build/`, `app/.cxx/` y otros artefactos generados.
 
 ## Fase 2 — JNI, Whisper y audio
 
@@ -50,10 +50,13 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Escribir descargas/importaciones a `.part` antes de moverlas al destino.
 - [x] Reemplazar modelos existentes de forma segura cuando el filesystem lo permita.
 - [x] Mostrar modelos instalados y disponibles.
+- [x] Añadir tienda con búsqueda, filtro de disponibilidad y sección coming soon para modelos de hasta 1,2B parámetros.
+- [x] Generar `ModelCatalog.kt` desde `src-tauri/src/catalog/catalog.json` mediante script reproducible y overrides legacy explícitos.
+- [x] Verificar el catálogo generado desde Gradle/`preBuild` y CI.
 - [x] Calcular SHA-256 para cada descarga/importación y persistirlo en un sidecar local.
 - [x] Cargar el archivo con Whisper/GGML antes de moverlo al destino y antes de activarlo.
 - [x] Rechazar modelos modificados o sin digest validado durante selección/transcripción.
-- [ ] Publicar y fijar SHA-256 autenticados para cada modelo del catálogo remoto.
+- [ ] Publicar y fijar SHA-256 autenticados para cada modelo del catálogo remoto; los tres overrides actuales tienen digest verificado localmente, pero la procedencia remota aún debe formalizarse.
 - [ ] Añadir cancelación, reintentos y progreso fiable de descargas.
 - [x] Añadir tests JVM de SHA-256, metadata de digest y detección de manipulación.
 - [ ] Añadir tests de archivo corrupto, descarga interrumpida y URI `content://`.
@@ -66,6 +69,7 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Cancelar trabajos obsoletos al recibir un nuevo intent.
 - [x] Corregir lint del intent filter multimedia.
 - [x] Añadir documentación Android en `ANDROID.md`.
+- [x] Documentar el flujo de generación/verificación del catálogo Android y su handoff agéntico.
 - [ ] Migrar strings Android a recursos/i18n.
 - [ ] Completar postprocesado o retirar el placeholder hasta definir contrato de proveedor.
 - [ ] Añadir historial y equivalentes móviles de las funciones prioritarias de escritorio.
@@ -76,7 +80,7 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Instalar en CI SDK 35, Build Tools 35.0.0, CMake 3.22.1 y NDK 27.0.12077973.
 - [x] Ejecutar lint, unit tests, debug APK y release compilation en CI.
 - [x] Fijar `ndkVersion` y conservar reglas R8 para JNI.
-- [x] Versionar mediante commit los fuentes Android, wrapper, workflow y documentación.
+- [x] Versionar mediante commit los fuentes Android, wrapper, workflow, tienda, generador y documentación.
 - [ ] Configurar firma segura de release fuera del repositorio.
 - [ ] Generar y verificar AAB/APK firmado.
 - [ ] Preparar distribución y política de privacidad para accesibilidad, micrófono y modelos locales.
