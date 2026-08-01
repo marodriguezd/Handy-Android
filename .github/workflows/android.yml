@@ -59,7 +59,9 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android build tools
-        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.0.12077973"
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.0.12077973"
+          sudo ln -sf $ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2 /usr/bin/aapt2
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
