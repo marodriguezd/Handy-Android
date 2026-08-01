@@ -28,7 +28,8 @@ Android generated outputs (`.gradle/`, `app/build/`, `app/.cxx/`) must remain ig
 - **Multi-ABI Parity**: The Android module supports both ARM (mobile `arm64-v8a`, `armeabi-v7a`) and x86 (laptop emulators `x86_64`, `x86`). Always keep `abiFilters` aligned across all 4 architectures in `app/build.gradle.kts`.
 - **The Gauntlet Validation Rule (Uncle Bob's Test Harness Strategy)**: AI assistants working on code must adhere to the Gauntlet Strategy: do not request line-by-line manual code reviews. Instead, rely on automated test gates (`./gradlew checkModelCatalog testDebugUnitTest lintDebug`) and present empirical command/task execution evidence (`BUILD SUCCESSFUL`) before declaring any task complete.
 - **Mobile Thermal & CPU Protection**: When executing local verification on mobile host devices, ensure unit test tasks (`testDebugUnitTest`) do not trigger heavy native C++/Rust re-compilations. Reserve full APK/AAB packaging for CI/CD pipelines (GitHub Actions).
-- **AAPT2 Host Override**: For ARM64 Linux environments, configure `android.aapt2FromMavenOverride=/usr/bin/aapt2` in `gradle.properties` to ensure resource linking uses the system-native AAPT2 binary.
+- **AAPT2 Host Override**: For ARM64 Linux environments, ensure `/usr/bin/aapt2` points to the native SDK 35 binary (`ln -sf $ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2 /usr/bin/aapt2`) and `android.aapt2FromMavenOverride=/usr/bin/aapt2` is set in `gradle.properties` to avoid ARSC table load failures on `android-35/android.jar`.
+- **Accessibility Text Actions**: When triggering text paste in `AutoTypeAccessibilityService`, use `node.performAction(AccessibilityNodeInfo.ACTION_PASTE)` on the target `AccessibilityNodeInfo`. Do not use `performGlobalAction` with invalid paste constants.
 
 ## Desktop/Tauri Reference Commands (not the active Android workflow)
 

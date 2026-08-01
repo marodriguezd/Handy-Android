@@ -44,6 +44,7 @@ The GitHub Actions workflow at `.github/workflows/android.yml` installs the pinn
   apt-get install -y ninja-build
   ln -sf /usr/bin/cmake $ANDROID_SDK_ROOT/cmake/3.22.1/bin/cmake
   ln -sf /usr/bin/ninja $ANDROID_SDK_ROOT/cmake/3.22.1/bin/ninja
+  ln -sf $ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2 /usr/bin/aapt2
   ```
 
 - **JVM-only Test Harness Execution**:
