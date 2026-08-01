@@ -9,4 +9,14 @@
     <string name="no_model_selected">No model selected</string>
     <string name="transcribing">Transcribing…</string>
     <string name="transcription_complete">Transcription complete</string>
+    <string name="quick_settings_tile_label">Handy dictation</string>
+    <string name="text_copied_to_clipboard">Text copied to clipboard</string>
+    <string name="llm_settings_title">AI post-processing</string>
+    <string name="llm_settings_description">When enabled, transcription text is sent to your configured OpenAI-compatible service for editing. If it is unavailable, Handy keeps the local result. HTTPS is required except for local endpoints.</string>
+    <string name="llm_endpoint_label">Endpoint</string>
+    <string name="llm_api_key_label">API key</string>
+    <string name="llm_model_label">Model</string>
+    <string name="llm_system_prompt_label">System prompt</string>
+    <string name="llm_enable_label">Use AI post-processing</string>
+    <string name="save">Save</string>
 </resources>

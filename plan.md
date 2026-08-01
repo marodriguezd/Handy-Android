@@ -78,7 +78,19 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Implementar `PostProcessor.kt`, llamada transparente en `TranscriptionEngine.kt`, preferencias en `SettingsManager.kt` y pantallas UI `PostProcessSettingsActivity.kt` y `CustomWordsActivity.kt`.
 - [ ] Migrar strings Android a recursos/i18n.
 
-## Fase 6 — CI y release
+## Fase 6 — Paridad Avanzada Handy DPC (VAD, Push-to-Talk, LLM & Sistema)
+
+- [x] Integrar `com.microsoft.onnxruntime:onnxruntime-android` en `app/build.gradle.kts`.
+- [x] Implementar `SileroVadDetector.kt` cargando `silero_vad_v4.onnx` en `AudioRecorder.kt` para detección de probabilidad de voz y auto-stop por silencio de 1.2s.
+- [x] Implementar Gesto Dual Inteligente en `FloatingButtonService.kt` y `HandyInputMethodService.kt` (Tap para Toggle, Hold para Push-to-Talk con transcripción al soltar).
+- [x] Implementar `LlmPostProcessor.kt` compatible con la API de OpenAI (OpenAI, Groq, OpenRouter, Ollama) con prompts personalizables y fallback automático por error/timeout de red.
+- [x] Crear pantalla de ajustes UI para LLM (`LlmSettingsActivity.kt`) con configuración de endpoint, API key, modelo y prompt de sistema.
+- [x] Implementar Fallback Automático Multinivel de Inserción de Texto en `AutoTypeAccessibilityService.kt` (Nivel 1: `ACTION_SET_TEXT`, Nivel 2: `ClipboardManager` + `GLOBAL_ACTION_PASTE`, Nivel 3: Toast / Notificación).
+- [x] Implementar `HandyTileService.kt` para control de dictado desde el panel de Ajustes Rápidos del sistema.
+- [x] Añadir indicador visual de forma de onda (Audio Waveform) en el overlay flotante durante la grabación.
+- [x] Migrar strings Android a recursos/i18n (`res/values/strings.xml` y `res/values-es/strings.xml`).
+
+## Fase 7 — CI y release
 
 - [x] Añadir `.github/workflows/android.yml`.
 - [x] Instalar en CI SDK 35, Build Tools 35.0.0, CMake 3.22.1 y NDK 27.0.12077973.
@@ -109,3 +121,4 @@ Además de lo anterior:
 - cobertura instrumentada de rutas críticas;
 - cancelación/concurrencia resueltas;
 - privacidad e internacionalización revisadas.
+

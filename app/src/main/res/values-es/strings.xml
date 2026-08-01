@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Handy</string>
+    <string name="accessibility_service_description">Permite que Handy escriba transcripciones locales en el campo de texto enfocado.</string>
+    <string name="voice_subtype">Voz</string>
+    <string name="recording_service_title">Servicio de grabación de Handy</string>
+    <string name="recording_service_description">Escuchando entrada de voz</string>
+    <string name="model_download_failed">Falló la descarga del modelo</string>
+    <string name="model_invalid">Falló la validación del modelo</string>
+    <string name="no_model_selected">No hay un modelo seleccionado</string>
+    <string name="transcribing">Transcribiendo…</string>
+    <string name="transcription_complete">Transcripción completa</string>
+    <string name="quick_settings_tile_label">Dictado de Handy</string>
+    <string name="text_copied_to_clipboard">Texto copiado al portapapeles</string>
+    <string name="llm_settings_title">Postprocesado con IA</string>
+    <string name="llm_settings_description">Al activarlo, el texto de la transcripción se envía al servicio compatible con OpenAI que configures. Si no está disponible, Handy conserva el resultado local. Se requiere HTTPS salvo para endpoints locales.</string>
+    <string name="llm_endpoint_label">Endpoint</string>
+    <string name="llm_api_key_label">Clave API</string>
+    <string name="llm_model_label">Modelo</string>
+    <string name="llm_system_prompt_label">Prompt del sistema</string>
+    <string name="llm_enable_label">Usar postprocesado con IA</string>
+    <string name="save">Guardar</string>
+</resources>

@@ -219,3 +219,33 @@ El fixture sintético utilizado terminó en `No speech detected`; aún hace falt
 1. **Pipeline de 4 Etapas (`PostProcessor.kt`)**: Procesa el texto plano generado por Whisper ejecutando: (1) Reemplazo de palabras y reglas `clave = valor` respetando límites de palabras, (2) Normalización de puntuación y espaciado doble, (3) Autocapitalización al inicio de oraciones y 'i' aislada, (4) Limpieza de espacios iniciales y finales.
 2. **Integración Transparente**: Se ejecuta directamente en `TranscriptionEngine.transcribe(...)` antes de retornar el resultado, de forma que todos los servicios e historial reciben automáticamente el texto procesado.
 3. **Configuración y UI**: `SettingsManager` almacena las preferencias `post_processing_enabled`, `auto_capitalization_enabled`, `punctuation_cleanup_enabled` y la lista `custom_words` editables desde `PostProcessSettingsActivity.kt` y `CustomWordsActivity.kt`.
+
+## 14. Especificación del Motor VAD (Silero VAD ONNX) y Gesto Dual Push-to-Talk
+
+1. **Silero VAD ONNX Runtime**: Integración de `com.microsoft.onnxruntime:onnxruntime-android` para ejecutar `silero_vad_v4.onnx` localmente. Procesa ventanas PCM de 30ms (512 muestras a 16 kHz) en `AudioRecorder` calculando la probabilidad de voz continua.
+2. **Auto-Stop Inteligente**: Cuando la probabilidad de voz cae bajo el umbral (default: 0.5) durante una ventana de silencio acumulada (default: 1.2s), el `AudioRecorder` notifica el evento `onSilenceAutoStop()`, deteniendo la grabación e iniciando la transcripción automáticamente.
+3. **Gesto Dual (Toggle & Push-to-Talk)**:
+   - **Tap Corto**: Inicia o detiene la grabación normalmente (Modo Toggle).
+   - **Presión Mantenida (Hold)**: Modo Push-to-Talk en `FloatingButtonService` y `HandyInputMethodService`. Transcribe inmediatamente al soltar el botón.
+4. **Respuestas Hápticas y Sonoras Diferenciadas**: Pulsos `EFFECT_CLICK` y `EFFECT_DOUBLE_CLICK` sincronizados con el inicio/fin de Push-to-Talk y Auto-Stop.
+
+## 15. Especificación del Postprocesado Inteligente con LLM (OpenAI-Compatible)
+
+1. **`LlmPostProcessor.kt`**: Motor asíncrono Coroutine que envía la transcripción cruda procesada a cualquier endpoint HTTP compatible con la API de OpenAI (OpenAI, Groq, OpenRouter, Ollama local/remoto).
+2. **Parámetros Configurables**:
+   - `llm_enabled`: Conmutador general.
+   - `llm_endpoint`: URL del endpoint (default: `https://api.openai.com/v1/chat/completions`).
+   - `llm_api_key`: Clave de API almacenada de forma segura en `SettingsManager`.
+   - `llm_model`: Nombre del modelo (ej. `gpt-4o-mini`, `llama3`, `mixtral`).
+   - `llm_system_prompt`: Prompt personalizable (ej. "Eres un editor experto. Corrige ortografía y gramática sin cambiar el significado.").
+3. **Fallback Transparente por Error de Red**: Si la solicitud al LLM falla (timeout de 5s, falta de conectividad o HTTP 5xx/4xx), se captura la excepción silenciosamente y se utiliza el resultado del `PostProcessor` local de reglas, garantizando que el texto transcrito nunca se pierda.
+
+## 16. Especificación de Fallback de Inserción Multinivel y Componentes de Sistema
+
+1. **Estrategia de Fallback de Texto**:
+   - **Nivel 1**: Intentar inserción nativa vía `ACTION_SET_TEXT` mediante `AutoTypeAccessibilityService`.
+   - **Nivel 2**: Si `ACTION_SET_TEXT` retorna `false` o falla, copiar el texto al `ClipboardManager` y ejecutar `GLOBAL_ACTION_PASTE` mediante el servicio de accesibilidad.
+   - **Nivel 3**: Si la app objetivo bloquea la accesibilidad, mostrar una notificación flotante/toast temporal: "Texto copiado al portapapeles".
+2. **Quick Settings Tile (`HandyTileService.kt`)**: Implementación de `TileService` en `AndroidManifest.xml` para permitir iniciar/detener la grabación directamente desde la barra de accesos rápidos del sistema Android.
+3. **Visualizador de Forma de Onda (Waveform)**: Cálculo de nivel RMS en `AudioRecorder` expuesto como `StateFlow<Float>` para animar barras de onda o un lienzo gráfico durante la grabación en el overlay.
+

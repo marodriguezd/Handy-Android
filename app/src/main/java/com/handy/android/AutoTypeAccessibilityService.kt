@@ -2,7 +2,10 @@ package com.handy.android
 
 import android.accessibilityservice.AccessibilityService
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
 import android.view.accessibility.AccessibilityNodeInfo
 
 class AutoTypeAccessibilityService : AccessibilityService() {
@@ -22,24 +25,27 @@ class AutoTypeAccessibilityService : AccessibilityService() {
 
     fun insertText(text: String): Boolean {
         if (text.isBlank()) return false
-        val node = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        val node = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        val setTextSuccess = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        val setTextSuccess = node?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments) == true
         if (setTextSuccess) return true
 
-        return try {
+        val clipboardCopied = runCatching {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-            if (clipboard != null) {
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Handy Transcription", text))
-                node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-            } else {
-                false
+                ?: return@runCatching false
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Handy Transcription", text))
+            true
+        }.getOrDefault(false)
+        if (clipboardCopied && node?.performAction(AccessibilityNodeInfo.ACTION_PASTE) == true) return true
+
+        if (clipboardCopied) {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(applicationContext, getString(R.string.text_copied_to_clipboard), Toast.LENGTH_LONG).show()
             }
-        } catch (_: Exception) {
-            false
         }
+        return false
     }
 
     companion object {

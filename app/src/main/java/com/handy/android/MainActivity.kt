@@ -332,6 +332,9 @@ class MainActivity : ComponentActivity() {
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { startActivity(Intent(this@MainActivity, PostProcessSettingsActivity::class.java)) }) { Text("Post-processing") }
+                            TextButton(onClick = { startActivity(Intent(this@MainActivity, LlmSettingsActivity::class.java)) }) { Text("AI editing") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { startActivity(Intent(this@MainActivity, LiveSubtitleActivity::class.java)) }) { Text("Subtitles") }
                         }
                     }

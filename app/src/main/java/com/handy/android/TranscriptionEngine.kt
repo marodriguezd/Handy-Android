@@ -121,7 +121,7 @@ object TranscriptionEngine {
                         translate = SettingsManager.translate(context),
                         language = SettingsManager.language(context),
                     ).trim()
-                    val processedResult = PostProcessor.process(context, result)
+                    val processedResult = LlmPostProcessor.process(context, result)
                     if (!isLatest(requestId)) throw CancellationException("A newer transcription superseded this request")
                     processedResult
                 } finally {

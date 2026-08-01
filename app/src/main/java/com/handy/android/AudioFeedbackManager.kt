@@ -13,6 +13,8 @@ import java.util.concurrent.ConcurrentHashMap
 internal enum class AudioFeedbackEvent {
     START_RECORDING,
     STOP_RECORDING,
+    START_PUSH_TO_TALK,
+    STOP_PUSH_TO_TALK,
     TRANSCRIPTION_SUCCESS,
 }
 
@@ -37,6 +39,10 @@ internal class AudioFeedbackController(
 
     fun onStopRecording(context: Context) = emit(context, AudioFeedbackEvent.STOP_RECORDING)
 
+    fun onStartPushToTalk(context: Context) = emit(context, AudioFeedbackEvent.START_PUSH_TO_TALK)
+
+    fun onStopPushToTalk(context: Context) = emit(context, AudioFeedbackEvent.STOP_PUSH_TO_TALK)
+
     fun onTranscriptionSuccess(context: Context) = emit(context, AudioFeedbackEvent.TRANSCRIPTION_SUCCESS)
 
     fun release() {
@@ -58,6 +64,10 @@ object AudioFeedbackManager {
     fun onStartRecording(context: Context) = controller(context).onStartRecording(context)
 
     fun onStopRecording(context: Context) = controller(context).onStopRecording(context)
+
+    fun onStartPushToTalk(context: Context) = controller(context).onStartPushToTalk(context)
+
+    fun onStopPushToTalk(context: Context) = controller(context).onStopPushToTalk(context)
 
     fun onTranscriptionSuccess(context: Context) = controller(context).onTranscriptionSuccess(context)
 
@@ -100,6 +110,8 @@ private class SoundPoolFeedbackPlayer(private val context: Context) : SoundFeedb
             mapOf(
                 AudioFeedbackEvent.START_RECORDING to load(R.raw.record_start),
                 AudioFeedbackEvent.STOP_RECORDING to load(R.raw.record_stop),
+                AudioFeedbackEvent.START_PUSH_TO_TALK to load(R.raw.record_start),
+                AudioFeedbackEvent.STOP_PUSH_TO_TALK to load(R.raw.record_stop),
                 AudioFeedbackEvent.TRANSCRIPTION_SUCCESS to load(R.raw.transcribe_success),
             )
         } else {
@@ -124,8 +136,8 @@ private class SoundPoolFeedbackPlayer(private val context: Context) : SoundFeedb
 
     private fun playFallbackTone(event: AudioFeedbackEvent) {
         val tone = when (event) {
-            AudioFeedbackEvent.START_RECORDING -> ToneGenerator.TONE_PROP_BEEP
-            AudioFeedbackEvent.STOP_RECORDING -> ToneGenerator.TONE_PROP_ACK
+            AudioFeedbackEvent.START_RECORDING, AudioFeedbackEvent.START_PUSH_TO_TALK -> ToneGenerator.TONE_PROP_BEEP
+            AudioFeedbackEvent.STOP_RECORDING, AudioFeedbackEvent.STOP_PUSH_TO_TALK -> ToneGenerator.TONE_PROP_ACK
             AudioFeedbackEvent.TRANSCRIPTION_SUCCESS -> ToneGenerator.TONE_PROP_PROMPT
         }
         synchronized(audioLock) {
@@ -165,6 +177,10 @@ private class VibratorFeedbackPlayer(private val context: Context) : HapticFeedb
                 VibrationEffect.createPredefined(
                     if (event == AudioFeedbackEvent.START_RECORDING) {
                         VibrationEffect.EFFECT_CLICK
+                    } else if (event == AudioFeedbackEvent.START_PUSH_TO_TALK) {
+                        VibrationEffect.EFFECT_DOUBLE_CLICK
+                    } else if (event == AudioFeedbackEvent.STOP_PUSH_TO_TALK) {
+                        VibrationEffect.EFFECT_CLICK
                     } else {
                         VibrationEffect.EFFECT_DOUBLE_CLICK
                     },
@@ -172,7 +188,11 @@ private class VibratorFeedbackPlayer(private val context: Context) : HapticFeedb
             else -> {
                 @Suppress("DEPRECATION")
                 VibrationEffect.createWaveform(
-                    if (event == AudioFeedbackEvent.START_RECORDING) longArrayOf(0, 20) else longArrayOf(0, 20, 40, 20),
+                    if (event == AudioFeedbackEvent.START_RECORDING || event == AudioFeedbackEvent.START_PUSH_TO_TALK) {
+                        longArrayOf(0, if (event == AudioFeedbackEvent.START_PUSH_TO_TALK) 35 else 20)
+                    } else {
+                        longArrayOf(0, 20, 40, 20)
+                    },
                     -1,
                 )
             }

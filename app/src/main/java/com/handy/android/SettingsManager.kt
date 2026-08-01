@@ -16,7 +16,15 @@ object SettingsManager {
     private const val PUNCTUATION_CLEANUP_ENABLED = "punctuation_cleanup_enabled"
     private const val SOUND_FEEDBACK_ENABLED = "sound_feedback_enabled"
     private const val HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled"
+    private const val LLM_ENABLED = "llm_enabled"
+    private const val LLM_ENDPOINT = "llm_endpoint"
+    private const val LLM_API_KEY = "llm_api_key"
+    private const val LLM_MODEL = "llm_model"
+    private const val LLM_SYSTEM_PROMPT = "llm_system_prompt"
     private const val FEEDBACK_ENABLED = "1"
+    private const val DEFAULT_LLM_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+    private const val DEFAULT_LLM_MODEL = "gpt-4o-mini"
+    private const val DEFAULT_LLM_PROMPT = "You are an expert editor. Correct spelling and grammar without changing the meaning. Return only the edited text."
 
     private fun file(context: Context, name: String) = File(context.filesDir, name)
 
@@ -113,6 +121,38 @@ object SettingsManager {
 
     fun setHapticFeedbackEnabled(context: Context, enabled: Boolean) =
         setBoolean(file(context, HAPTIC_FEEDBACK_ENABLED), enabled)
+
+    fun llmEnabled(context: Context): Boolean =
+        booleanSetting(context, LLM_ENABLED, default = false)
+
+    fun setLlmEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, LLM_ENABLED), enabled)
+
+    fun llmEndpoint(context: Context): String =
+        file(context, LLM_ENDPOINT).readTextOrNull()?.trim().orEmpty().ifBlank { DEFAULT_LLM_ENDPOINT }
+
+    fun setLlmEndpoint(context: Context, endpoint: String) =
+        file(context, LLM_ENDPOINT).writeText(endpoint.trim())
+
+    fun llmApiKey(context: Context): String =
+        file(context, LLM_API_KEY).readTextOrNull()?.trim()?.let(::decodeApiKey).orEmpty()
+
+    fun setLlmApiKey(context: Context, apiKey: String) {
+        val target = file(context, LLM_API_KEY)
+        if (apiKey.isBlank()) target.delete() else target.writeText(encodeApiKey(apiKey.trim()))
+    }
+
+    fun llmModel(context: Context): String =
+        file(context, LLM_MODEL).readTextOrNull()?.trim().orEmpty().ifBlank { DEFAULT_LLM_MODEL }
+
+    fun setLlmModel(context: Context, model: String) =
+        file(context, LLM_MODEL).writeText(model.trim())
+
+    fun llmSystemPrompt(context: Context): String =
+        file(context, LLM_SYSTEM_PROMPT).readTextOrNull()?.trim().orEmpty().ifBlank { DEFAULT_LLM_PROMPT }
+
+    fun setLlmSystemPrompt(context: Context, prompt: String) =
+        file(context, LLM_SYSTEM_PROMPT).writeText(prompt.trim())
 
     private fun booleanSetting(context: Context, name: String, default: Boolean): Boolean =
         when (file(context, name).readTextOrNull()?.trim()) {

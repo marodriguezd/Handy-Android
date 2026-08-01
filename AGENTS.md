@@ -79,11 +79,11 @@ curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.compute
 
 For detailed platform-specific build setup, see [BUILD.md](BUILD.md).
 
-## Android storefront handoff
+## Android Handoff & Single-Prompt Master Execution Plan
 
-The model-storefront implementation is already present in the Android module. `ModelsActivity` provides catalog search, an all/available filter, installed-state refresh, and a separate coming-soon section. `MainActivity` opens the storefront rather than maintaining a second download path. `ModelDownloader` serializes downloads process-wide, requires HTTPS, verifies SHA-256 and real Whisper loading, and activates a model only after validation.
+The Android port contains all foundational features (local Whisper/GGML JNI, storefront, SQLite history, sound/haptics, and basic rule-based post-processing).
 
-When the desktop catalog changes, run `python3 scripts/generate_android_model_catalog.py` or `./gradlew generateModelCatalog`, then use `./gradlew checkModelCatalog` before Android builds. CI installs Python 3.11 and checks catalog-related changes. The next agent should focus on authenticated remote checksum provenance, instrumented/device coverage, and the remaining Android robustness backlog rather than rebuilding the storefront from scratch.
+The master execution prompt for the next agent is isolated in [`PROMPT_FASE6.md`](PROMPT_FASE6.md). The next AI agent should be given [`PROMPT_FASE6.md`](PROMPT_FASE6.md) directly to execute **Phase 6: Paridad Avanzada Handy DPC** following the specifications in [`spec.md`](spec.md) and tasks in [`plan.md`](plan.md).
 
 ## Architecture Overview
 
