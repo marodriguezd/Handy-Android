@@ -15,6 +15,7 @@ data class HistoryEntry(
     val durationMs: Long,
     val modelName: String?,
     val sourceType: String,
+    val audioFilePath: String? = null,
 )
 
 object HistorySource {
@@ -43,9 +44,7 @@ class HistoryRepository(
     private val database: HistoryDatabase = HistoryDatabase(context.applicationContext),
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
 ) : AutoCloseable {
-    init {
-        require(maxEntries > 0) { "History capacity must be positive" }
-    }
+    init { require(maxEntries > 0) { "History capacity must be positive" } }
 
     @Synchronized
     fun addEntry(
@@ -54,18 +53,19 @@ class HistoryRepository(
         durationMs: Long = 0L,
         modelName: String? = null,
         sourceType: String = HistorySource.UNKNOWN,
+        audioFilePath: String? = null,
     ): Long {
         val normalizedText = text.trim()
         require(normalizedText.isNotEmpty()) { "History entries cannot be blank" }
         require(timestamp >= 0L) { "History timestamp cannot be negative" }
         require(durationMs >= 0L) { "History duration cannot be negative" }
-
         val values = ContentValues().apply {
             put(HistoryDatabase.COLUMN_TEXT, normalizedText)
             put(HistoryDatabase.COLUMN_TIMESTAMP, timestamp)
             put(HistoryDatabase.COLUMN_DURATION_MS, durationMs)
             put(HistoryDatabase.COLUMN_MODEL_NAME, modelName?.trim()?.ifBlank { null })
             put(HistoryDatabase.COLUMN_SOURCE_TYPE, sourceType.trim().ifBlank { HistorySource.UNKNOWN })
+            put(HistoryDatabase.COLUMN_AUDIO_FILE_PATH, audioFilePath?.trim()?.ifBlank { null })
         }
         val writableDatabase = database.writableDatabase
         writableDatabase.beginTransaction()
@@ -80,10 +80,7 @@ class HistoryRepository(
     }
 
     @Synchronized
-    fun listEntries(
-        query: String = "",
-        sourceType: String? = null,
-    ): List<HistoryEntry> {
+    fun listEntries(query: String = "", sourceType: String? = null): List<HistoryEntry> {
         val normalizedQuery = query.trim()
         val clauses = mutableListOf<String>()
         val arguments = mutableListOf<String>()
@@ -95,62 +92,94 @@ class HistoryRepository(
             clauses += "$COLUMN_SOURCE_TYPE = ?"
             arguments += sourceType
         }
-        val selection = clauses.takeIf { it.isNotEmpty() }?.joinToString(" AND ")
         return database.readableDatabase.query(
             HistoryDatabase.TABLE_NAME,
             COLUMNS,
-            selection,
+            clauses.takeIf { it.isNotEmpty() }?.joinToString(" AND "),
             arguments.toTypedArray(),
             null,
             null,
             "$COLUMN_TIMESTAMP DESC, $COLUMN_ID DESC",
         ).use { cursor ->
-            buildList(cursor.count) {
-                while (cursor.moveToNext()) add(cursor.toHistoryEntry())
-            }
+            buildList(cursor.count) { while (cursor.moveToNext()) add(cursor.toHistoryEntry()) }
         }
     }
 
     @Synchronized
-    fun deleteEntry(id: Long): Int = database.writableDatabase.delete(
-        HistoryDatabase.TABLE_NAME,
-        "$COLUMN_ID = ?",
-        arrayOf(id.toString()),
-    )
-
-    @Synchronized
-    fun clear(): Int = database.writableDatabase.delete(HistoryDatabase.TABLE_NAME, null, null)
-
-    @Synchronized
-    fun count(): Int = database.readableDatabase.query(
-        HistoryDatabase.TABLE_NAME,
-        arrayOf("COUNT(*)"),
-        null,
-        null,
-        null,
-        null,
-        null,
-    ).use { cursor ->
-        if (cursor.moveToFirst()) cursor.getInt(0) else 0
+    fun deleteEntry(id: Long): Int {
+        val path = listEntries().firstOrNull { it.id == id }?.audioFilePath
+        val deleted = database.writableDatabase.delete(
+            HistoryDatabase.TABLE_NAME, "$COLUMN_ID = ?", arrayOf(id.toString()),
+        )
+        if (deleted > 0 && path != null && listEntries().none { it.audioFilePath == path }) {
+            deleteAudioFile(path)
+        }
+        return deleted
     }
 
     @Synchronized
-    fun closeDatabase() = database.close()
+    fun clear(): Int {
+        val paths = listEntries().mapNotNull { it.audioFilePath }
+        val deleted = database.writableDatabase.delete(HistoryDatabase.TABLE_NAME, null, null)
+        if (deleted > 0) paths.forEach(::deleteAudioFile)
+        return deleted
+    }
 
+    @Synchronized
+    fun count(): Int = database.readableDatabase.query(
+        HistoryDatabase.TABLE_NAME, arrayOf("COUNT(*)"), null, null, null, null, null,
+    ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+
+    @Synchronized fun closeDatabase() = database.close()
     override fun close() = closeDatabase()
 
     private fun pruneToCapacity(writableDatabase: SQLiteDatabase) {
+        val retainedIds = writableDatabase.query(
+            HistoryDatabase.TABLE_NAME,
+            arrayOf(COLUMN_ID),
+            null, null, null, null,
+            "$COLUMN_TIMESTAMP DESC, $COLUMN_ID DESC",
+            maxEntries.toString(),
+        ).use { cursor ->
+            buildSet { while (cursor.moveToNext()) add(cursor.getLong(0)) }
+        }
+        val stalePaths = writableDatabase.query(
+            HistoryDatabase.TABLE_NAME,
+            arrayOf(COLUMN_ID, HistoryDatabase.COLUMN_AUDIO_FILE_PATH),
+            null, null, null, null, null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    if (cursor.getLong(0) !in retainedIds && !cursor.isNull(1)) add(cursor.getString(1))
+                }
+            }
+        }
         writableDatabase.delete(
             HistoryDatabase.TABLE_NAME,
             "$COLUMN_ID NOT IN (SELECT $COLUMN_ID FROM $TABLE_NAME ORDER BY $COLUMN_TIMESTAMP DESC, $COLUMN_ID DESC LIMIT ?)",
             arrayOf(maxEntries.toString()),
         )
+        stalePaths.distinct().filter { path ->
+            listEntriesFromDatabase(writableDatabase).none { it == path }
+        }.forEach(::deleteAudioFile)
     }
 
-    private fun escapeLike(value: String): String = value
-        .replace("\\", "\\\\")
-        .replace("%", "\\%")
-        .replace("_", "\\_")
+    private fun listEntriesFromDatabase(database: SQLiteDatabase): List<String> = database.query(
+        HistoryDatabase.TABLE_NAME,
+        arrayOf(HistoryDatabase.COLUMN_AUDIO_FILE_PATH),
+        "${HistoryDatabase.COLUMN_AUDIO_FILE_PATH} IS NOT NULL",
+        null, null, null, null,
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) if (!cursor.isNull(0)) add(cursor.getString(0))
+        }
+    }
+
+    private fun deleteAudioFile(path: String) {
+        runCatching { java.io.File(path).delete() }
+    }
+
+    private fun escapeLike(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     private fun android.database.Cursor.toHistoryEntry(): HistoryEntry = HistoryEntry(
         id = getLong(getColumnIndexOrThrow(HistoryDatabase.COLUMN_ID)),
@@ -159,6 +188,7 @@ class HistoryRepository(
         durationMs = getLong(getColumnIndexOrThrow(HistoryDatabase.COLUMN_DURATION_MS)),
         modelName = getStringOrNull(HistoryDatabase.COLUMN_MODEL_NAME),
         sourceType = getString(getColumnIndexOrThrow(HistoryDatabase.COLUMN_SOURCE_TYPE)),
+        audioFilePath = getStringOrNull(HistoryDatabase.COLUMN_AUDIO_FILE_PATH),
     )
 
     private fun android.database.Cursor.getStringOrNull(column: String): String? {
@@ -180,6 +210,7 @@ class HistoryRepository(
             HistoryDatabase.COLUMN_DURATION_MS,
             HistoryDatabase.COLUMN_MODEL_NAME,
             HistoryDatabase.COLUMN_SOURCE_TYPE,
+            HistoryDatabase.COLUMN_AUDIO_FILE_PATH,
         )
 
         /** Records an entry without allowing history failure to break transcription output. */
@@ -188,6 +219,7 @@ class HistoryRepository(
             text: String,
             sourceType: String,
             durationMs: Long = 0L,
+            audioFilePath: String? = null,
         ) {
             if (text.isBlank()) return
             try {
@@ -198,6 +230,7 @@ class HistoryRepository(
                             durationMs = durationMs,
                             modelName = SettingsManager.activeModelName(context),
                             sourceType = sourceType,
+                            audioFilePath = audioFilePath,
                         )
                     }
                 }

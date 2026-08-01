@@ -33,7 +33,7 @@ afterEvaluate {
 
 android {
     namespace = "com.handy.android"
-    compileSdk = 34
+    compileSdk = 35
     ndkVersion = "27.0.12077973"
 
     lint {
@@ -60,7 +60,7 @@ android {
     defaultConfig {
         applicationId = "com.handy.android"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
 

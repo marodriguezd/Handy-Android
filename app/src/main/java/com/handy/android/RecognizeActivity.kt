@@ -79,6 +79,7 @@ class RecognizeActivity : ComponentActivity() {
         AudioFeedbackManager.onStopRecording(this)
         status = "Transcribing…"
         val samples = recorder.stop()
+        val audioPath = runCatching { AudioRecorder.writeWav(this@RecognizeActivity, samples).absolutePath }.getOrNull()
         lifecycleScope.launch {
             try {
                 val text = TranscriptionEngine.transcribe(this@RecognizeActivity, samples)
@@ -91,6 +92,7 @@ class RecognizeActivity : ComponentActivity() {
                         text = text,
                         sourceType = HistorySource.VOICE_INPUT,
                         durationMs = AudioRecorder.durationMs(samples),
+                        audioFilePath = audioPath,
                     )
                     finishWithResult(text)
                 }

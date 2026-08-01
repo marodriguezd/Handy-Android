@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,9 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,7 +33,7 @@ class LlmSettingsActivity : ComponentActivity() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun LlmSettingsScreen(onSaved: () -> Unit) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(SettingsManager.llmEnabled(context)) }
@@ -38,6 +41,8 @@ private fun LlmSettingsScreen(onSaved: () -> Unit) {
     var apiKey by remember { mutableStateOf(SettingsManager.llmApiKey(context)) }
     var model by remember { mutableStateOf(SettingsManager.llmModel(context)) }
     var prompt by remember { mutableStateOf(SettingsManager.llmSystemPrompt(context)) }
+    var templateName by remember { mutableStateOf("") }
+    var templates by remember { mutableStateOf(SettingsManager.llmPromptTemplates(context)) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -54,6 +59,43 @@ private fun LlmSettingsScreen(onSaved: () -> Unit) {
         OutlinedTextField(apiKey, { apiKey = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.llm_api_key_label)) }, singleLine = true)
         OutlinedTextField(model, { model = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.llm_model_label)) }, singleLine = true)
         OutlinedTextField(prompt, { prompt = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.llm_system_prompt_label)) }, minLines = 4)
+
+        Text("Prompt library", style = MaterialTheme.typography.titleLarge)
+        OutlinedTextField(
+            templateName,
+            { templateName = it },
+            Modifier.fillMaxWidth(),
+            label = { Text("Template name") },
+            singleLine = true,
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = templateName.isNotBlank() && prompt.isNotBlank(),
+                onClick = {
+                    SettingsManager.saveLlmPromptTemplate(context, SettingsManager.PromptTemplate(templateName, prompt))
+                    templates = SettingsManager.llmPromptTemplates(context)
+                    templateName = ""
+                },
+            ) { Text("Save template") }
+            OutlinedButton(
+                enabled = templateName.isNotBlank(),
+                onClick = {
+                    SettingsManager.deleteLlmPromptTemplate(context, templateName)
+                    templates = SettingsManager.llmPromptTemplates(context)
+                    templateName = ""
+                },
+            ) { Text("Delete") }
+        }
+        templates.forEach { template ->
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    templateName = template.name
+                    prompt = template.prompt
+                },
+            ) { Text(template.name) }
+        }
+
         Button(
             modifier = Modifier.fillMaxWidth(),
             onClick = {
@@ -68,9 +110,9 @@ private fun LlmSettingsScreen(onSaved: () -> Unit) {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun SettingSwitch(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    androidx.compose.foundation.layout.Row(
+    Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -79,5 +121,5 @@ private fun SettingSwitch(title: String, checked: Boolean, onCheckedChange: (Boo
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun stringResource(id: Int): String = androidx.compose.ui.res.stringResource(id)

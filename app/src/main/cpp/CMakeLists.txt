@@ -11,7 +11,11 @@ set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_ACCELERATE OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
-set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+# Vulkan can be enabled in a toolchain that provides Android Vulkan headers and
+# glslc. Keep the portable CPU build as the default until those artifacts are
+# provisioned; the engine setting remains forward-compatible with this backend.
+option(HANDY_ENABLE_VULKAN "Build the optional GGML Vulkan backend" OFF)
+set(GGML_VULKAN ${HANDY_ENABLE_VULKAN} CACHE BOOL "ggml: use Vulkan" FORCE)
 set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
 set(GGML_METAL OFF CACHE BOOL "" FORCE)
 

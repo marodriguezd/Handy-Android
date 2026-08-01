@@ -336,6 +336,10 @@ class MainActivity : ComponentActivity() {
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { startActivity(Intent(this@MainActivity, LiveSubtitleActivity::class.java)) }) { Text("Subtitles") }
+                            TextButton(onClick = { startActivity(Intent(this@MainActivity, TranscriptionSettingsActivity::class.java)) }) { Text("Engine settings") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { startActivity(Intent(this@MainActivity, LiveLogViewerActivity::class.java)) }) { Text("Live logs") }
                         }
                     }
                 }

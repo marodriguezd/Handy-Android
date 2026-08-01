@@ -57,12 +57,26 @@ class FloatingButtonService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_TOGGLE) toggleRecording()
+        when (intent?.action) {
+            ACTION_TOGGLE -> toggleRecording()
+            ACTION_CANCEL -> cancelRecording()
+        }
         return START_STICKY
     }
 
     private fun toggleRecording() {
         if (recording) stopRecording() else startRecording()
+    }
+
+    private fun cancelRecording() {
+        if (!recording) return
+        recording = false
+        isRecording = false
+        pushToTalk = false
+        mainHandler.removeCallbacks(holdRunnable)
+        recorder.stop()
+        waveform?.setAmplitude(0f)
+        overlay?.contentDescription = "Handy: ready"
     }
 
     private fun startRecording(pushToTalk: Boolean = false) {
@@ -83,12 +97,13 @@ class FloatingButtonService : Service() {
         if (wasPushToTalk) AudioFeedbackManager.onStopPushToTalk(this) else AudioFeedbackManager.onStopRecording(this)
         waveform?.setAmplitude(0f)
         val samples = recorder.stop()
+        val audioPath = runCatching { AudioRecorder.writeWav(this@FloatingButtonService, samples).absolutePath }.getOrNull()
         overlay?.contentDescription = "Handy: processing"
         scope.launch(Dispatchers.Default) {
             val result = runCatching {
                 TranscriptionEngine.transcribe(this@FloatingButtonService, samples)
             }.onFailure { error ->
-                android.util.Log.e(TAG, "Transcription failed", error)
+                AppLog.record(this@FloatingButtonService, "E", TAG, "Transcription failed", error)
             }.getOrNull().orEmpty()
             if (result.isNotBlank()) {
                 AudioFeedbackManager.onTranscriptionSuccess(this@FloatingButtonService)
@@ -97,6 +112,7 @@ class FloatingButtonService : Service() {
                     text = result,
                     sourceType = HistorySource.FLOATING_BUTTON,
                     durationMs = AudioRecorder.durationMs(samples),
+                    audioFilePath = audioPath,
                 )
                 AutoTypeAccessibilityService.instance?.insertText(result)
             }
@@ -234,6 +250,7 @@ class FloatingButtonService : Service() {
             private set
 
         const val ACTION_TOGGLE = "com.handy.android.action.TOGGLE_RECORDING"
+        const val ACTION_CANCEL = "com.handy.android.action.CANCEL_RECORDING"
 
         fun start(context: android.content.Context) {
             ContextCompat.startForegroundService(context, Intent(context, FloatingButtonService::class.java))

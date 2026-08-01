@@ -18,27 +18,27 @@ class HistoryDatabase(
                 $COLUMN_TIMESTAMP INTEGER NOT NULL,
                 $COLUMN_DURATION_MS INTEGER NOT NULL DEFAULT 0,
                 $COLUMN_MODEL_NAME TEXT,
-                $COLUMN_SOURCE_TYPE TEXT NOT NULL
+                $COLUMN_SOURCE_TYPE TEXT NOT NULL,
+                $COLUMN_AUDIO_FILE_PATH TEXT
             )
             """.trimIndent(),
         )
-        database.execSQL(
-            "CREATE INDEX ${TABLE_NAME}_timestamp_index ON $TABLE_NAME ($COLUMN_TIMESTAMP DESC, $COLUMN_ID DESC)",
-        )
-        database.execSQL(
-            "CREATE INDEX ${TABLE_NAME}_source_index ON $TABLE_NAME ($COLUMN_SOURCE_TYPE)",
-        )
+        database.execSQL("CREATE INDEX ${TABLE_NAME}_timestamp_index ON $TABLE_NAME ($COLUMN_TIMESTAMP DESC, $COLUMN_ID DESC)")
+        database.execSQL("CREATE INDEX ${TABLE_NAME}_source_index ON $TABLE_NAME ($COLUMN_SOURCE_TYPE)")
     }
 
     override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
             database.execSQL("ALTER TABLE $TABLE_NAME ADD COLUMN $COLUMN_SOURCE_TYPE TEXT NOT NULL DEFAULT '${HistorySource.UNKNOWN}'")
         }
+        if (oldVersion < 3) {
+            database.execSQL("ALTER TABLE $TABLE_NAME ADD COLUMN $COLUMN_AUDIO_FILE_PATH TEXT")
+        }
     }
 
     companion object {
         const val DATABASE_NAME = "handy_history.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
         const val TABLE_NAME = "transcription_history"
         const val COLUMN_ID = "id"
         const val COLUMN_TEXT = "text"
@@ -46,5 +46,6 @@ class HistoryDatabase(
         const val COLUMN_DURATION_MS = "duration_ms"
         const val COLUMN_MODEL_NAME = "model_name"
         const val COLUMN_SOURCE_TYPE = "source_type"
+        const val COLUMN_AUDIO_FILE_PATH = "audio_file_path"
     }
 }

@@ -53,6 +53,7 @@ class VoiceRecognitionService : RecognitionService() {
         listening = false
         AudioFeedbackManager.onStopRecording(this)
         val samples = recorder.stop()
+        val audioPath = runCatching { AudioRecorder.writeWav(this@VoiceRecognitionService, samples).absolutePath }.getOrNull()
         val activeCallback = callback ?: listener ?: return
         scope.launch {
             try {
@@ -67,6 +68,7 @@ class VoiceRecognitionService : RecognitionService() {
                         text = text,
                         sourceType = HistorySource.VOICE_RECOGNITION,
                         durationMs = AudioRecorder.durationMs(samples),
+                        audioFilePath = audioPath,
                     )
                     val results = Bundle().apply {
                         putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, arrayListOf(text))

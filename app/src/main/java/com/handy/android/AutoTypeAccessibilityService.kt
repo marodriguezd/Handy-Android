@@ -1,6 +1,7 @@
 package com.handy.android
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -30,7 +31,12 @@ class AutoTypeAccessibilityService : AccessibilityService() {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
         val setTextSuccess = node?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments) == true
-        if (setTextSuccess) return true
+        if (setTextSuccess) {
+            if (SettingsManager.autoSubmitEnabled(this)) {
+                performImeEnter(node)
+            }
+            return true
+        }
 
         val clipboardCopied = runCatching {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
@@ -38,7 +44,12 @@ class AutoTypeAccessibilityService : AccessibilityService() {
             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Handy Transcription", text))
             true
         }.getOrDefault(false)
-        if (clipboardCopied && node?.performAction(AccessibilityNodeInfo.ACTION_PASTE) == true) return true
+        if (clipboardCopied && node?.performAction(AccessibilityNodeInfo.ACTION_PASTE) == true) {
+            if (SettingsManager.autoSubmitEnabled(this)) {
+                performImeEnter(node)
+            }
+            return true
+        }
 
         if (clipboardCopied) {
             Handler(Looper.getMainLooper()).post {
@@ -46,6 +57,13 @@ class AutoTypeAccessibilityService : AccessibilityService() {
             }
         }
         return false
+    }
+
+    private fun performImeEnter(node: AccessibilityNodeInfo?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || node == null) return
+        // ACTION_IME_ENTER is 0x00400000 in the Android accessibility API.
+        // Use the numeric id so this module remains source-compatible with older SDK stubs.
+        node.performAction(0x00400000)
     }
 
     companion object {

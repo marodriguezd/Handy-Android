@@ -1,11 +1,6 @@
 package com.handy.android
 
-/**
- * Small, lifecycle-safe wrapper around the native Whisper context.
- *
- * The native ABI is kept deliberately narrow so a full whisper.cpp build can
- * replace the bundled JNI implementation without changing the Android UI.
- */
+/** Lifecycle-safe wrapper around the native Whisper context. */
 class WhisperLib : IWhisperEngine {
     @Volatile
     private var context: Long = 0L
@@ -15,9 +10,12 @@ class WhisperLib : IWhisperEngine {
     }
 
     @Synchronized
-    override fun init(modelPath: String): Boolean {
+    override fun init(modelPath: String): Boolean = initWithBackend(modelPath, useGpu = false)
+
+    @Synchronized
+    override fun initWithBackend(modelPath: String, useGpu: Boolean): Boolean {
         check(context == 0L) { "Whisper context is already initialized" }
-        context = initContext(modelPath)
+        context = initContext(modelPath, useGpu)
         return context != 0L
     }
 
@@ -26,13 +24,20 @@ class WhisperLib : IWhisperEngine {
         numThreads: Int,
         translate: Boolean,
         language: String,
+    ): String = transcribe(audioData, numThreads, translate, language, "")
+
+    override fun transcribe(
+        audioData: FloatArray,
+        numThreads: Int,
+        translate: Boolean,
+        language: String,
+        initialPrompt: String,
     ): String {
         val nativeContext = context
         check(nativeContext != 0L) { "Whisper context is not initialized" }
-        return fullTranscribe(nativeContext, audioData, numThreads, translate, language)
+        return fullTranscribe(nativeContext, audioData, numThreads, translate, language, initialPrompt)
     }
 
-    /** Requests cancellation without taking the lock used by native inference. */
     override fun cancelTranscribe() {
         val nativeContext = context
         if (nativeContext != 0L) cancelTranscribe(nativeContext)
@@ -46,7 +51,7 @@ class WhisperLib : IWhisperEngine {
         }
     }
 
-    private external fun initContext(modelPath: String): Long
+    private external fun initContext(modelPath: String, useGpu: Boolean): Long
     private external fun freeContext(context: Long)
     private external fun fullTranscribe(
         context: Long,
@@ -54,6 +59,7 @@ class WhisperLib : IWhisperEngine {
         numThreads: Int,
         translate: Boolean,
         language: String,
+        initialPrompt: String,
     ): String
     private external fun cancelTranscribe(context: Long)
 }

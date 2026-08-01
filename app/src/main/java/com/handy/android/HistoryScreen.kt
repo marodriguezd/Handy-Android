@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.media.MediaPlayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -178,6 +179,11 @@ private fun HistoryEntryCard(
     onShare: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var player by remember(entry.id) { mutableStateOf<MediaPlayer?>(null) }
+    var playing by remember(entry.id) { mutableStateOf(false) }
+    DisposableEffect(entry.audioFilePath) {
+        onDispose { player?.release() }
+    }
     Card {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -198,6 +204,25 @@ private fun HistoryEntryCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onCopy) { Text("Copy") }
                 TextButton(onClick = onShare) { Text("Share") }
+                entry.audioFilePath?.let { path ->
+                    TextButton(onClick = {
+                        if (playing) {
+                            player?.pause()
+                            playing = false
+                        } else {
+                            player?.release()
+                            player = runCatching {
+                                MediaPlayer().apply {
+                                    setDataSource(path)
+                                    setOnCompletionListener { playing = false }
+                                    prepare()
+                                    start()
+                                }
+                            }.getOrNull()
+                            playing = player != null
+                        }
+                    }) { Text(if (playing) "Pause" else "Play") }
+                }
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = onDelete) { Text("Delete") }
             }

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <permission
+        android:name="com.handy.android.permission.REMOTE_CONTROL"
+        android:protectionLevel="signature" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -8,6 +11,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
         <intent>
@@ -44,6 +48,12 @@
             android:exported="false" />
         <activity
             android:name=".LlmSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".TranscriptionSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".LiveLogViewerActivity"
             android:exported="false" />
         <activity
             android:name=".LiveSubtitleActivity"
@@ -113,6 +123,21 @@
             android:name=".LiveSubtitleService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".RemoteControlReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.handy.android.permission.REMOTE_CONTROL" />
 
         <service
             android:name=".HandyTileService"

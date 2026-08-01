@@ -97,7 +97,8 @@ extern "C" JNIEXPORT jlong JNICALL
 Java_com_handy_android_WhisperLib_initContext(
     JNIEnv* env,
     jobject /* thiz */,
-    jstring model_path_str) {
+    jstring model_path_str,
+    jboolean use_gpu) {
     const std::string model_path = to_string(env, model_path_str);
     if (model_path.empty()) {
         throw_exception(env, "java/lang/IllegalArgumentException", "Whisper model path is empty");
@@ -105,7 +106,7 @@ Java_com_handy_android_WhisperLib_initContext(
     }
 
     whisper_context_params context_params = whisper_context_default_params();
-    context_params.use_gpu = false;
+    context_params.use_gpu = use_gpu == JNI_TRUE;
 
     whisper_context* whisper = whisper_init_from_file_with_params(model_path.c_str(), context_params);
     if (whisper == nullptr) {
@@ -193,7 +194,8 @@ Java_com_handy_android_WhisperLib_fullTranscribe(
     jfloatArray audio_data,
     jint num_threads,
     jboolean translate,
-    jstring language_str) {
+    jstring language_str,
+    jstring initial_prompt_str) {
     auto* context = reinterpret_cast<ModelContext*>(context_ptr);
     if (!retain_context(context)) {
         throw_exception(env, "java/lang/IllegalStateException", "Whisper context is not initialized");
@@ -222,6 +224,7 @@ Java_com_handy_android_WhisperLib_fullTranscribe(
     }
 
     const std::string language = to_string(env, language_str);
+    const std::string initial_prompt = to_string(env, initial_prompt_str);
     const int threads = std::max(1, static_cast<int>(num_threads));
     std::lock_guard<std::mutex> inference_lock(context->inference_mutex);
     {
@@ -250,6 +253,7 @@ Java_com_handy_android_WhisperLib_fullTranscribe(
     full_params.translate = translate == JNI_TRUE;
     full_params.language = is_auto_language(language) ? nullptr : language.c_str();
     full_params.detect_language = is_auto_language(language);
+    full_params.initial_prompt = initial_prompt.empty() ? nullptr : initial_prompt.c_str();
     full_params.print_progress = false;
     full_params.print_realtime = false;
     full_params.print_timestamps = false;

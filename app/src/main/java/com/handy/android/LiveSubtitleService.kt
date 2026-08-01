@@ -86,7 +86,7 @@ class LiveSubtitleService : Service() {
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
-                    android.util.Log.e(TAG, "Live subtitle transcription failed", error)
+                    AppLog.record(this@LiveSubtitleService, "E", TAG, "Live subtitle transcription failed", error)
                     ""
                 }
                 if (!isActive || !listening) return@launch

@@ -140,6 +140,7 @@ class HandyInputMethodService : InputMethodService() {
         recordButton.text = "Mic"
         status.text = "Transcribing…"
         val samples = recorder.stop()
+        val audioPath = runCatching { AudioRecorder.writeWav(this@HandyInputMethodService, samples).absolutePath }.getOrNull()
         transcriptionJob?.cancel()
         transcriptionJob = scope.launch {
             try {
@@ -151,8 +152,12 @@ class HandyInputMethodService : InputMethodService() {
                         text = text,
                         sourceType = HistorySource.INPUT_METHOD,
                         durationMs = AudioRecorder.durationMs(samples),
+                        audioFilePath = audioPath,
                     )
                     currentInputConnection?.commitText(text, 1)
+                    if (SettingsManager.autoSubmitEnabled(this@HandyInputMethodService)) {
+                        currentInputConnection?.performEditorAction(EditorInfo.IME_ACTION_DONE)
+                    }
                 }
                 status.text = if (text.isBlank()) "No speech" else "Handy ready"
             } catch (cancelled: CancellationException) {

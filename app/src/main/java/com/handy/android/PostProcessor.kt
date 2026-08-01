@@ -20,14 +20,21 @@ object PostProcessor {
         if (!SettingsManager.postProcessingEnabled(context)) return text
 
         var result = applyCustomWords(text, SettingsManager.customWords(context))
+        if (SettingsManager.removeFillerWordsEnabled(context)) {
+            result = removeFillerWords(result)
+        }
         if (SettingsManager.punctuationCleanupEnabled(context)) {
             result = normalizePunctuation(result)
         }
         if (SettingsManager.autoCapitalizationEnabled(context)) {
             result = capitalizeSentences(result)
         }
-        return result.trim()
+        return if (SettingsManager.trimTrailingSpaceEnabled(context)) result.trim() else result.trimStart()
     }
+
+    private fun removeFillerWords(text: String): String = text
+        .replace(Regex("(?i)(?<![\\p{L}\\p{N}_])(eh|em|um|este|uh|er)(?![\\p{L}\\p{N}_])\\s*"), "")
+        .replace(Regex("\\s{2,}"), " ")
 
     private fun applyCustomWords(text: String, entries: List<String>): String {
         val rules = entries.mapNotNull(::parseRule)

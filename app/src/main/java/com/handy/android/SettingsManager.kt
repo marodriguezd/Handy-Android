@@ -10,7 +10,19 @@ object SettingsManager {
     private const val MODEL_LANGUAGE = "model_language"
     private const val MODEL_THREADS = "model_threads"
     private const val MODEL_TRANSLATE = "model_translate"
+    private const val INITIAL_PROMPT = "initial_prompt"
+    private const val MODEL_UNLOAD_TIMEOUT_MS = "model_unload_timeout_ms"
+    private const val GPU_BACKEND = "gpu_backend"
+    private const val EXTRA_RECORDING_BUFFER_MS = "extra_recording_buffer_ms"
+    private const val MUTE_WHILE_RECORDING = "mute_while_recording"
+    private const val INPUT_DEVICE_ID = "input_device_id"
+    private const val ALWAYS_ON_MICROPHONE = "always_on_microphone"
+    private const val AUTO_SUBMIT = "auto_submit"
+    private const val REMOVE_FILLER_WORDS = "remove_filler_words"
+    private const val TRIM_TRAILING_SPACE = "trim_trailing_space"
+    private const val AUTO_START_ON_BOOT = "auto_start_on_boot"
     private const val CUSTOM_WORDS = "custom_words"
+    private const val LLM_PROMPT_TEMPLATES = "llm_prompt_templates"
     private const val POST_PROCESSING_ENABLED = "post_processing_enabled"
     private const val AUTO_CAPITALIZATION_ENABLED = "auto_capitalization_enabled"
     private const val PUNCTUATION_CLEANUP_ENABLED = "punctuation_cleanup_enabled"
@@ -75,6 +87,114 @@ object SettingsManager {
         val marker = file(context, MODEL_TRANSLATE)
         if (enabled) marker.writeText("1") else marker.delete()
     }
+
+    fun initialPrompt(context: Context): String = file(context, INITIAL_PROMPT).readTextOrNull()?.trim().orEmpty()
+
+    fun setInitialPrompt(context: Context, prompt: String) {
+        val target = file(context, INITIAL_PROMPT)
+        if (prompt.isBlank()) target.delete() else target.writeText(prompt.trim())
+    }
+
+    fun modelUnloadTimeoutMs(context: Context): Long =
+        file(context, MODEL_UNLOAD_TIMEOUT_MS).readTextOrNull()?.trim()?.toLongOrNull()
+            ?.coerceIn(0L, 60L * 60L * 1_000L) ?: 0L
+
+    fun setModelUnloadTimeoutMs(context: Context, timeoutMs: Long) =
+        file(context, MODEL_UNLOAD_TIMEOUT_MS).writeText(timeoutMs.coerceAtLeast(0L).toString())
+
+    fun gpuBackend(context: Context): String =
+        file(context, GPU_BACKEND).readTextOrNull()?.trim()?.lowercase().takeUnless { it.isNullOrBlank() } ?: "cpu"
+
+    fun setGpuBackend(context: Context, backend: String) {
+        file(context, GPU_BACKEND).writeText(if (backend.equals("vulkan", true)) "vulkan" else "cpu")
+    }
+
+    fun extraRecordingBufferMs(context: Context): Long =
+        file(context, EXTRA_RECORDING_BUFFER_MS).readTextOrNull()?.trim()?.toLongOrNull()
+            ?.coerceIn(0L, 2_000L) ?: 300L
+
+    fun setExtraRecordingBufferMs(context: Context, value: Long) =
+        file(context, EXTRA_RECORDING_BUFFER_MS).writeText(value.coerceIn(0L, 2_000L).toString())
+
+    fun muteWhileRecording(context: Context): Boolean =
+        booleanSetting(context, MUTE_WHILE_RECORDING, default = true)
+
+    fun setMuteWhileRecording(context: Context, enabled: Boolean) =
+        setBoolean(file(context, MUTE_WHILE_RECORDING), enabled)
+
+    fun inputDeviceId(context: Context): Int? =
+        file(context, INPUT_DEVICE_ID).readTextOrNull()?.trim()?.toIntOrNull()?.takeIf { it >= 0 }
+
+    fun setInputDeviceId(context: Context, deviceId: Int?) {
+        val target = file(context, INPUT_DEVICE_ID)
+        if (deviceId == null) target.delete() else target.writeText(deviceId.toString())
+    }
+
+    fun alwaysOnMicrophoneEnabled(context: Context): Boolean =
+        booleanSetting(context, ALWAYS_ON_MICROPHONE, default = false)
+
+    fun setAlwaysOnMicrophoneEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, ALWAYS_ON_MICROPHONE), enabled)
+
+    fun autoSubmitEnabled(context: Context): Boolean =
+        booleanSetting(context, AUTO_SUBMIT, default = false)
+
+    fun setAutoSubmitEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, AUTO_SUBMIT), enabled)
+
+    fun removeFillerWordsEnabled(context: Context): Boolean =
+        booleanSetting(context, REMOVE_FILLER_WORDS, default = false)
+
+    fun setRemoveFillerWordsEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, REMOVE_FILLER_WORDS), enabled)
+
+    fun trimTrailingSpaceEnabled(context: Context): Boolean =
+        booleanSetting(context, TRIM_TRAILING_SPACE, default = true)
+
+    fun setTrimTrailingSpaceEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, TRIM_TRAILING_SPACE), enabled)
+
+    fun autoStartOnBoot(context: Context): Boolean =
+        booleanSetting(context, AUTO_START_ON_BOOT, default = false)
+
+    fun setAutoStartOnBoot(context: Context, enabled: Boolean) =
+        setBoolean(file(context, AUTO_START_ON_BOOT), enabled)
+
+    data class PromptTemplate(val name: String, val prompt: String)
+
+    fun llmPromptTemplates(context: Context): List<PromptTemplate> = file(context, LLM_PROMPT_TEMPLATES)
+        .readTextOrNull()
+        ?.lineSequence()
+        ?.mapNotNull { line ->
+            val separator = line.indexOf('\t')
+            if (separator <= 0) return@mapNotNull null
+            runCatching {
+                PromptTemplate(
+                    String(Base64.getDecoder().decode(line.substring(0, separator))),
+                    String(Base64.getDecoder().decode(line.substring(separator + 1))),
+                )
+            }.getOrNull()
+        }
+        ?.filter { it.name.isNotBlank() && it.prompt.isNotBlank() }
+        ?.toList()
+        .orEmpty()
+
+    fun setLlmPromptTemplates(context: Context, templates: List<PromptTemplate>) {
+        file(context, LLM_PROMPT_TEMPLATES).writeText(
+            templates.filter { it.name.isNotBlank() && it.prompt.isNotBlank() }
+                .distinctBy { it.name.trim().lowercase() }
+                .joinToString("\n") { template ->
+                    "${Base64.getEncoder().encodeToString(template.name.trim().toByteArray())}\t" +
+                        Base64.getEncoder().encodeToString(template.prompt.trim().toByteArray())
+                },
+        )
+    }
+
+    fun saveLlmPromptTemplate(context: Context, template: PromptTemplate) =
+        setLlmPromptTemplates(context, llmPromptTemplates(context).filterNot { it.name.equals(template.name, true) } + template)
+
+    fun deleteLlmPromptTemplate(context: Context, name: String) =
+        setLlmPromptTemplates(context, llmPromptTemplates(context).filterNot { it.name.equals(name, true) })
 
     fun customWords(context: Context): List<String> = file(context, CUSTOM_WORDS)
         .readTextOrNull()
