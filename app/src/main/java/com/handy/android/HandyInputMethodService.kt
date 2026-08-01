@@ -10,6 +10,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -65,6 +66,7 @@ class HandyInputMethodService : InputMethodService() {
             return
         }
         recording = true
+        AudioFeedbackManager.onStartRecording(this)
         recordButton.text = "Stop"
         status.text = "Listening…"
     }
@@ -72,23 +74,37 @@ class HandyInputMethodService : InputMethodService() {
     private fun stopRecording() {
         if (!recording) return
         recording = false
+        AudioFeedbackManager.onStopRecording(this)
         recordButton.text = "Mic"
         status.text = "Transcribing…"
         val samples = recorder.stop()
         transcriptionJob?.cancel()
         transcriptionJob = scope.launch {
-            runCatching { TranscriptionEngine.transcribe(this@HandyInputMethodService, samples) }
-                .onSuccess { text ->
-                    if (text.isNotBlank()) currentInputConnection?.commitText(text, 1)
-                    status.text = if (text.isBlank()) "No speech" else "Handy ready"
+            try {
+                val text = TranscriptionEngine.transcribe(this@HandyInputMethodService, samples)
+                if (text.isNotBlank()) {
+                    AudioFeedbackManager.onTranscriptionSuccess(this@HandyInputMethodService)
+                    HistoryRepository.record(
+                        context = this@HandyInputMethodService,
+                        text = text,
+                        sourceType = HistorySource.INPUT_METHOD,
+                        durationMs = AudioRecorder.durationMs(samples),
+                    )
+                    currentInputConnection?.commitText(text, 1)
                 }
-                .onFailure { status.text = it.message ?: "Transcription failed" }
+                status.text = if (text.isBlank()) "No speech" else "Handy ready"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                status.text = error.message ?: "Transcription failed"
+            }
         }
     }
 
     override fun onWindowHidden() {
         if (recording) {
             recording = false
+            AudioFeedbackManager.onStopRecording(this)
             recorder.stop()
         }
         super.onWindowHidden()

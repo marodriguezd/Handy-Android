@@ -80,7 +80,16 @@ class TranscribeFileActivity : ComponentActivity() {
                 val text = TranscriptionEngine.transcribe(this@TranscribeFileActivity, samples)
                 if (uri == source) {
                     result = text.ifBlank { "No speech detected" }
-                    if (text.isNotBlank()) copyResult()
+                    if (text.isNotBlank()) {
+                        AudioFeedbackManager.onTranscriptionSuccess(this@TranscribeFileActivity)
+                        HistoryRepository.record(
+                            context = this@TranscribeFileActivity,
+                            text = text,
+                            sourceType = HistorySource.AUDIO_FILE,
+                            durationMs = AudioRecorder.durationMs(samples),
+                        )
+                        copyResult()
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

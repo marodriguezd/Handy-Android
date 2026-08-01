@@ -11,6 +11,12 @@ object SettingsManager {
     private const val MODEL_THREADS = "model_threads"
     private const val MODEL_TRANSLATE = "model_translate"
     private const val CUSTOM_WORDS = "custom_words"
+    private const val POST_PROCESSING_ENABLED = "post_processing_enabled"
+    private const val AUTO_CAPITALIZATION_ENABLED = "auto_capitalization_enabled"
+    private const val PUNCTUATION_CLEANUP_ENABLED = "punctuation_cleanup_enabled"
+    private const val SOUND_FEEDBACK_ENABLED = "sound_feedback_enabled"
+    private const val HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled"
+    private const val FEEDBACK_ENABLED = "1"
 
     private fun file(context: Context, name: String) = File(context.filesDir, name)
 
@@ -72,6 +78,52 @@ object SettingsManager {
 
     fun setCustomWords(context: Context, words: List<String>) =
         file(context, CUSTOM_WORDS).writeText(words.map(String::trim).filter(String::isNotEmpty).distinct().joinToString("\n"))
+
+    /** Whether local vocabulary and text cleanup should be applied to transcriptions. */
+    fun postProcessingEnabled(context: Context): Boolean =
+        booleanSetting(context, POST_PROCESSING_ENABLED, default = true)
+
+    fun setPostProcessingEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, POST_PROCESSING_ENABLED), enabled)
+
+    /** Whether sentence and isolated-`i` capitalization should be applied. */
+    fun autoCapitalizationEnabled(context: Context): Boolean =
+        booleanSetting(context, AUTO_CAPITALIZATION_ENABLED, default = true)
+
+    fun setAutoCapitalizationEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, AUTO_CAPITALIZATION_ENABLED), enabled)
+
+    /** Whether punctuation spacing and duplicate whitespace should be normalized. */
+    fun punctuationCleanupEnabled(context: Context): Boolean =
+        booleanSetting(context, PUNCTUATION_CLEANUP_ENABLED, default = true)
+
+    fun setPunctuationCleanupEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, PUNCTUATION_CLEANUP_ENABLED), enabled)
+
+    /** Whether short sound cues should be played for recording events. */
+    fun soundFeedbackEnabled(context: Context): Boolean =
+        file(context, SOUND_FEEDBACK_ENABLED).readTextOrNull()?.trim() != "0"
+
+    fun setSoundFeedbackEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, SOUND_FEEDBACK_ENABLED), enabled)
+
+    /** Whether haptic cues should be emitted for recording events. */
+    fun hapticFeedbackEnabled(context: Context): Boolean =
+        file(context, HAPTIC_FEEDBACK_ENABLED).readTextOrNull()?.trim() != "0"
+
+    fun setHapticFeedbackEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, HAPTIC_FEEDBACK_ENABLED), enabled)
+
+    private fun booleanSetting(context: Context, name: String, default: Boolean): Boolean =
+        when (file(context, name).readTextOrNull()?.trim()) {
+            FEEDBACK_ENABLED -> true
+            "0" -> false
+            else -> default
+        }
+
+    private fun setBoolean(target: File, enabled: Boolean) {
+        if (enabled) target.writeText(FEEDBACK_ENABLED) else target.writeText("0")
+    }
 
     private fun File.readTextOrNull(): String? = takeIf { isFile }?.readText()
 

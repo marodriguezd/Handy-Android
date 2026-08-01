@@ -25,8 +25,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -80,6 +83,9 @@ class MainActivity : ComponentActivity() {
         var microphoneWasRequested by remember {
             mutableStateOf(permissionPrefs.getBoolean(MICROPHONE_REQUESTED, false))
         }
+        var selectedTab by remember { mutableStateOf(MainTab.TRANSCRIPTION) }
+        var soundFeedbackEnabled by remember { mutableStateOf(SettingsManager.soundFeedbackEnabled(context)) }
+        var hapticFeedbackEnabled by remember { mutableStateOf(SettingsManager.hapticFeedbackEnabled(context)) }
 
         fun refreshInstalledModels() {
             lifecycleScope.launch {
@@ -141,7 +147,33 @@ class MainActivity : ComponentActivity() {
             refreshPermissions()
         }
 
-        Scaffold(topBar = { TopAppBar(title = { Text("Handy") }) }) { padding ->
+        Scaffold(
+            topBar = { TopAppBar(title = { Text(selectedTab.title) }) },
+            bottomBar = {
+                NavigationBar {
+                    MainTab.entries.forEach { tab ->
+                        NavigationBarItem(
+                            selected = selectedTab == tab,
+                            onClick = { selectedTab = tab },
+                            icon = { Text(tab.shortLabel) },
+                            label = { Text(tab.title) },
+                        )
+                    }
+                }
+            },
+        ) { padding ->
+            if (selectedTab == MainTab.HISTORY) {
+                HistoryScreen(Modifier.padding(padding))
+                return@Scaffold
+            }
+            if (selectedTab == MainTab.STORE) {
+                ModelStoreTab(
+                    installedCount = installed.size,
+                    onOpenStore = { startActivity(Intent(this@MainActivity, ModelsActivity::class.java)) },
+                    modifier = Modifier.padding(padding),
+                )
+                return@Scaffold
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -270,10 +302,38 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { startActivity(Intent(this@MainActivity, ModelsActivity::class.java)) }) { Text("Models") }
-                        TextButton(onClick = { startActivity(Intent(this@MainActivity, CustomWordsActivity::class.java)) }) { Text("Custom words") }
-                        TextButton(onClick = { startActivity(Intent(this@MainActivity, LiveSubtitleActivity::class.java)) }) { Text("Subtitles") }
+                    Text("Feedback", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Choose whether Handy signals recording and transcription events with sound or vibration.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FeedbackToggle(
+                        label = "Sound feedback",
+                        checked = soundFeedbackEnabled,
+                        onCheckedChange = {
+                            soundFeedbackEnabled = it
+                            SettingsManager.setSoundFeedbackEnabled(context, it)
+                        },
+                    )
+                    FeedbackToggle(
+                        label = "Haptic feedback",
+                        checked = hapticFeedbackEnabled,
+                        onCheckedChange = {
+                            hapticFeedbackEnabled = it
+                            SettingsManager.setHapticFeedbackEnabled(context, it)
+                        },
+                    )
+                }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { startActivity(Intent(this@MainActivity, ModelsActivity::class.java)) }) { Text("Models") }
+                            TextButton(onClick = { startActivity(Intent(this@MainActivity, CustomWordsActivity::class.java)) }) { Text("Custom words") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { startActivity(Intent(this@MainActivity, PostProcessSettingsActivity::class.java)) }) { Text("Post-processing") }
+                            TextButton(onClick = { startActivity(Intent(this@MainActivity, LiveSubtitleActivity::class.java)) }) { Text("Subtitles") }
+                        }
                     }
                 }
                 item {
@@ -301,6 +361,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private enum class MainTab(val title: String, val shortLabel: String) {
+        TRANSCRIPTION("Transcription", "Mic"),
+        STORE("Store", "Models"),
+        HISTORY("History", "Past"),
+    }
+
     private fun openOverlaySettings() {
         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
     }
@@ -321,6 +387,55 @@ class MainActivity : ComponentActivity() {
         private const val NOTIFICATIONS_REQUESTED = "notifications_requested"
         private const val MICROPHONE_REJECTED = "microphone_rejected"
         private const val NOTIFICATIONS_REJECTED = "notifications_rejected"
+    }
+}
+
+@Composable
+private fun ModelStoreTab(
+    installedCount: Int,
+    onOpenStore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text("Model store", style = MaterialTheme.typography.headlineSmall)
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Column(
+                Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    if (installedCount == 0) "No models installed" else "$installedCount model${if (installedCount == 1) " is" else "s are"} installed",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    "Download or import a Whisper GGML model to transcribe speech locally. Models are validated before they can be activated.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = onOpenStore) { Text("Browse all models") }
+            }
+        }
+        Text(
+            "The full catalog includes supported downloads, installed-model validation, and coming-soon entries.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun FeedbackToggle(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

@@ -102,7 +102,7 @@ Known gaps
 
 - No instrumented tests yet for URI grants, IME, accessibility, services or model import.
 - Local SHA-256 sidecars and real Whisper validation are implemented; the three current storefront overrides include SHA-256 values, but authenticated remote checksum provenance for catalog models is still pending.
-- JNI inference is synchronous and not cancellable while native code is running.
+- JNI inference is synchronous to Kotlin, with native `abort_callback` cancellation for active requests.
 - Live subtitles use bounded periodic windows and may discard audio while inference is busy.
 - `ACTION_SET_TEXT` has no universal fallback for every target application.
 - Release compilation is verified, but signing/AAB distribution is not configured.

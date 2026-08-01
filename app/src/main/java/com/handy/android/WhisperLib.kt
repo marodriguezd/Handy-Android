@@ -7,6 +7,7 @@ package com.handy.android
  * replace the bundled JNI implementation without changing the Android UI.
  */
 class WhisperLib : IWhisperEngine {
+    @Volatile
     private var context: Long = 0L
 
     init {
@@ -20,15 +21,21 @@ class WhisperLib : IWhisperEngine {
         return context != 0L
     }
 
-    @Synchronized
     override fun transcribe(
         audioData: FloatArray,
         numThreads: Int,
         translate: Boolean,
         language: String,
     ): String {
-        check(context != 0L) { "Whisper context is not initialized" }
-        return fullTranscribe(context, audioData, numThreads, translate, language)
+        val nativeContext = context
+        check(nativeContext != 0L) { "Whisper context is not initialized" }
+        return fullTranscribe(nativeContext, audioData, numThreads, translate, language)
+    }
+
+    /** Requests cancellation without taking the lock used by native inference. */
+    override fun cancelTranscribe() {
+        val nativeContext = context
+        if (nativeContext != 0L) cancelTranscribe(nativeContext)
     }
 
     @Synchronized
@@ -48,4 +55,5 @@ class WhisperLib : IWhisperEngine {
         translate: Boolean,
         language: String,
     ): String
+    private external fun cancelTranscribe(context: Long)
 }

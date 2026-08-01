@@ -69,25 +69,41 @@ class RecognizeActivity : ComponentActivity() {
             return
         }
         recording = true
+        AudioFeedbackManager.onStartRecording(this)
         status = "Listening…"
     }
 
     private fun stopRecording() {
         if (!recording) return
         recording = false
+        AudioFeedbackManager.onStopRecording(this)
         status = "Transcribing…"
         val samples = recorder.stop()
         lifecycleScope.launch {
-            runCatching { TranscriptionEngine.transcribe(this@RecognizeActivity, samples) }
-                .onSuccess { text ->
-                    if (text.isBlank()) finishCanceled() else finishWithResult(text)
+            try {
+                val text = TranscriptionEngine.transcribe(this@RecognizeActivity, samples)
+                if (text.isBlank()) {
+                    finishCanceled()
+                } else {
+                    AudioFeedbackManager.onTranscriptionSuccess(this@RecognizeActivity)
+                    HistoryRepository.record(
+                        context = this@RecognizeActivity,
+                        text = text,
+                        sourceType = HistorySource.VOICE_INPUT,
+                        durationMs = AudioRecorder.durationMs(samples),
+                    )
+                    finishWithResult(text)
                 }
-                .onFailure { status = it.message ?: "Transcription failed" }
+            } catch (error: Exception) {
+                status = error.message ?: "Transcription failed"
+            }
         }
     }
 
     override fun onStop() {
         if (!isChangingConfigurations && !isFinishing && recording) {
+            recording = false
+            AudioFeedbackManager.onStopRecording(this)
             recorder.stop()
             finishCanceled()
         }

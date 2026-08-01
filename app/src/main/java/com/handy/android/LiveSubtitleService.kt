@@ -68,6 +68,7 @@ class LiveSubtitleService : Service() {
         }
 
         listening = true
+        AudioFeedbackManager.onStartRecording(this)
         updateOverlay("Listening…")
         transcriptionJob?.cancel()
         transcriptionJob = scope.launch {
@@ -89,7 +90,18 @@ class LiveSubtitleService : Service() {
                     ""
                 }
                 if (!isActive || !listening) return@launch
-                if (text.isNotBlank()) updateOverlay(text.trim()) else updateOverlay("Listening…")
+                if (text.isNotBlank()) {
+                    AudioFeedbackManager.onTranscriptionSuccess(this@LiveSubtitleService)
+                    HistoryRepository.record(
+                        context = this@LiveSubtitleService,
+                        text = text,
+                        sourceType = HistorySource.LIVE_SUBTITLE,
+                        durationMs = AudioRecorder.durationMs(samples),
+                    )
+                    updateOverlay(text.trim())
+                } else {
+                    updateOverlay("Listening…")
+                }
             }
         }
     }
@@ -100,6 +112,7 @@ class LiveSubtitleService : Service() {
             return
         }
         listening = false
+        AudioFeedbackManager.onStopRecording(this)
         transcriptionJob?.cancel()
         transcriptionJob = null
         recorder?.stop()

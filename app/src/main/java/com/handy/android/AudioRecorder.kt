@@ -13,6 +13,8 @@ import kotlin.concurrent.thread
 class AudioRecorder(private val context: Context) {
     companion object {
         const val SAMPLE_RATE = 16_000
+
+        fun durationMs(samples: FloatArray): Long = samples.size.toLong() * 1_000L / SAMPLE_RATE
     }
 
     private val recording = AtomicBoolean(false)

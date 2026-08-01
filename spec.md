@@ -55,7 +55,11 @@ graph TD
 - `TranscribeFileActivity.kt`: entrada `ACTION_VIEW`/`ACTION_SEND`, `ClipData` y URI `content://`.
 - `LiveSubtitleService.kt`: overlay foreground y ventanas periódicas de transcripción local.
 - `WhisperLib.kt`: wrapper lifecycle-safe del contexto nativo.
-- `native-lib.cpp`: carga, inferencia greedy, mutex por contexto y conversión de errores JNI.
+- `native-lib.cpp`: carga, inferencia greedy, mutex por contexto, cancelación atómica, protección de lifetime JNI y conversión de errores.
+- `HistoryDatabase.kt` / `HistoryRepository.kt`: almacenamiento SQLite local para guardar el historial de transcripciones (ID, texto, fecha, duración, modelo y fuente).
+- `HistoryScreen.kt`: interfaz Compose Material3 para buscar, copiar, compartir y eliminar transcripciones del historial.
+- `AudioFeedbackManager.kt`: reproductor de efectos de sonido (`SoundPool`) y motor de vibración háptica (`Vibrator` / `VibratorManager`) para eventos de inicio, fin y éxito de transcripción.
+- `PostProcessor.kt`: motor local de postprocesado de texto que ejecuta reglas de sustitución de vocabulario (`key = value`), normalización de puntuación/espacios y autocapitalización de oraciones; se invoca desde `TranscriptionEngine` antes de entregar el texto a los servicios consumidores.
 
 ## 3. Build Android
 
@@ -91,11 +95,18 @@ Las firmas JNI deben coincidir exactamente con `WhisperLib.kt`:
 Java_com_handy_android_WhisperLib_initContext
 Java_com_handy_android_WhisperLib_freeContext
 Java_com_handy_android_WhisperLib_fullTranscribe
+Java_com_handy_android_WhisperLib_cancelTranscribe
 ```
 
-El contexto nativo contiene `whisper_context*` y un mutex. La inferencia usa muestreo greedy, idioma configurable, traducción opcional y sin timestamps visibles. `WhisperLib.close()` libera el contexto; las reglas R8 mantienen la clase y sus métodos JNI durante la compilación release. La ejecución de una release instalada todavía debe validarse aparte.
+El contexto nativo (`ModelContext`) contiene `whisper_context*`, un mutex de inferencia y una bandera atómica `std::atomic<bool> cancel_requested`.
 
-La inferencia nativa es síncrona y actualmente no cancelable desde Kotlin mientras `whisper_full` está ejecutándose. Cualquier diseño de streaming debe serializar ventanas y descartar resultados obsoletos antes de actualizar UI/overlay.
+### Especificación de Cache y Cancelación Nativa
+
+1. **Singleton Model Caching**: `TranscriptionEngine` mantiene una instancia nativa cargada del modelo activo, reutilizando el contexto en sucesivas transcripciones para evitar el overhead de recargar el archivo GGML binario en cada llamada. El contexto se invalida y recarga si cambia el modelo seleccionado (`SettingsManager.activeModelName`).
+2. **Cancelación JNI en C++**: La inferencia invoca `whisper_full_params.abort_callback` que lee `cancel_requested`. Al invocar `cancelTranscribe()`, la bandera se marca en `true`, interrumpiendo `whisper_full()` de forma limpia.
+3. **Estrategia Concurrente (Latest-Wins)**: Cuando se solicita una nueva transcripción con un trabajo previo en curso, el trabajo anterior se cancela inmediatamente mediante `cancelTranscribe()`. La nueva petición espera a que el mutex se libere y procede a ejecutar la inferencia.
+4. **Manejo de Excepciones**: Cuando la inferencia se aborta por cancelación, se lanza `java.util.concurrent.CancellationException` en Kotlin para integrarse de forma transparente con el ciclo de vida de Kotlin Coroutines.
+5. **Evicción por Memoria**: `TranscriptionEngine` registra `ComponentCallbacks2` para liberar el contexto nativo cargado ante eventos de presión de memoria (`TRIM_MEMORY_RUNNING_LOW`, `TRIM_MEMORY_RUNNING_MODERATE`, `onLowMemory()`) o al cerrar la aplicación.
 
 ## 5. Audio
 
@@ -181,13 +192,30 @@ El fixture sintético utilizado terminó en `No speech detected`; aún hace falt
 - firma de APK/AAB y configuración de distribución;
 - checksums oficiales autenticados para los modelos del catálogo (los sidecars locales no sustituyen esta procedencia);
 - tests instrumentados y prueba de regresión de voz humana;
-- decidir una política de cancelación/cola para inferencia JNI.
 
 ### Paridad pendiente
 
 - postprocesado configurable;
 - fallback de escritura para apps que no soporten `ACTION_SET_TEXT`;
 - internacionalización Android;
-- cache compartida de modelo para evitar recargar Whisper en cada transcripción;
-- medición y eventual aceleración ARM/GPU;
-- historial y funciones de producto de escritorio que todavía no tienen equivalente móvil.
+- pruebas instrumentadas y medición de rendimiento del cache/cancelación en dispositivos adicionales;
+- medición y eventual aceleración ARM/GPU.
+
+## 11. Especificación del Historial de Transcripciones
+
+1. **Almacenamiento Persistente**: `HistoryDatabase.kt` administra la tabla SQLite `transcription_history` con las columnas `id`, `text`, `timestamp`, `duration_ms`, `model_name` y `source_type`.
+2. **Registro Automático**: Todos los servicios de transcripción (`FloatingButtonService`, `HandyInputMethodService`, `VoiceRecognitionService`, `TranscribeFileActivity`, `LiveSubtitleService`) guardan automáticamente las transcripciones completadas con éxito.
+3. **Interfaz UI**: `HistoryScreen.kt` integrado en la barra de navegación de `MainActivity`, con búsqueda en tiempo real, copia al portapapeles, compartir mediante `ACTION_SEND`, borrado de elementos individuales y limpieza completa.
+4. **Política de Retención**: Limite máximo configurable (por defecto 500 entradas) con podado automático de los elementos más antiguos al sobrepasar el límite.
+
+## 12. Especificación de Señales de Audio y Respuesta Háptica
+
+1. **Efectos de Sonido (`SoundPool`)**: `AudioFeedbackManager.kt` carga muestras de audio de baja latencia desde `res/raw/` (`record_start.ogg`, `record_stop.ogg`, `transcribe_success.ogg`). Si los recursos OGG no están presentes, utiliza `ToneGenerator` como alternativa ligera.
+2. **Vibración Háptica (`Vibrator` / `VibratorManager`)**: Dispara pulsos táctiles diferenciados al iniciar grabación (`EFFECT_CLICK`), detener grabación (`EFFECT_DOUBLE_CLICK`) y finalizar transcripción con éxito (onda de pulso de 30ms). Compatible con API 26–35.
+3. **Ajustes Independientes**: `SettingsManager` expone `soundFeedbackEnabled` y `hapticFeedbackEnabled` (ambos activos por defecto), configurables mediante conmutadores en la pantalla de ajustes de `MainActivity`.
+
+## 13. Especificación del Postprocesado de Texto y Reglas Vocabulario
+
+1. **Pipeline de 4 Etapas (`PostProcessor.kt`)**: Procesa el texto plano generado por Whisper ejecutando: (1) Reemplazo de palabras y reglas `clave = valor` respetando límites de palabras, (2) Normalización de puntuación y espaciado doble, (3) Autocapitalización al inicio de oraciones y 'i' aislada, (4) Limpieza de espacios iniciales y finales.
+2. **Integración Transparente**: Se ejecuta directamente en `TranscriptionEngine.transcribe(...)` antes de retornar el resultado, de forma que todos los servicios e historial reciben automáticamente el texto procesado.
+3. **Configuración y UI**: `SettingsManager` almacena las preferencias `post_processing_enabled`, `auto_capitalization_enabled`, `punctuation_cleanup_enabled` y la lista `custom_words` editables desde `PostProcessSettingsActivity.kt` y `CustomWordsActivity.kt`.

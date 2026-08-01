@@ -46,6 +46,7 @@ class FloatingButtonService : Service() {
     private fun toggleRecording() {
         if (recording) {
             recording = false
+            AudioFeedbackManager.onStopRecording(this)
             val samples = recorder.stop()
             overlay?.contentDescription = "Handy: processing"
             scope.launch(Dispatchers.Default) {
@@ -54,11 +55,21 @@ class FloatingButtonService : Service() {
                 }.onFailure { error ->
                     android.util.Log.e("Handy", "Whisper transcription failed", error)
                 }.getOrNull().orEmpty()
+                if (result.isNotBlank()) {
+                    AudioFeedbackManager.onTranscriptionSuccess(this@FloatingButtonService)
+                    HistoryRepository.record(
+                        context = this@FloatingButtonService,
+                        text = result,
+                        sourceType = HistorySource.FLOATING_BUTTON,
+                        durationMs = AudioRecorder.durationMs(samples),
+                    )
+                }
                 AutoTypeAccessibilityService.instance?.insertText(result)
                 launch(Dispatchers.Main) { overlay?.contentDescription = "Handy: ready" }
             }
         } else if (recorder.start()) {
             recording = true
+            AudioFeedbackManager.onStartRecording(this)
             overlay?.contentDescription = "Handy: recording"
         }
     }
@@ -119,6 +130,7 @@ class FloatingButtonService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        if (recording) AudioFeedbackManager.onStopRecording(this)
         recording = false
         recorder.release()
         overlay?.let { getSystemService(WindowManager::class.java).removeView(it) }

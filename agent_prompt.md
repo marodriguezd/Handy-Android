@@ -36,6 +36,7 @@ El módulo Android es un proyecto Gradle independiente en la raíz. La aplicaci�
   - `Java_com_handy_android_WhisperLib_initContext`
   - `Java_com_handy_android_WhisperLib_freeContext`
   - `Java_com_handy_android_WhisperLib_fullTranscribe`
+  - `Java_com_handy_android_WhisperLib_cancelTranscribe`
 - Captura: PCM 16 kHz, mono, 16-bit, normalizado a `[-1, 1]`.
 - Modelos: `files/models/*.bin`.
 - Modelo activo: `files/active_model` mediante `SettingsManager`.
@@ -50,7 +51,8 @@ El módulo Android es un proyecto Gradle independiente en la raíz. La aplicaci�
   - `ModelValidator`: SHA-256, sidecar y carga real de Whisper antes de activar.
   - `TranscribeFileActivity`: `ACTION_VIEW`/`ACTION_SEND` para audio.
   - `LiveSubtitleService`: overlay y transcripción periódica local.
-  - `WhisperLib`/`native-lib.cpp`: puente JNI a whisper.cpp/GGML.
+  - `WhisperLib`/`native-lib.cpp`: puente JNI a whisper.cpp/GGML con soporte de cancelación `std::atomic<bool> cancel_requested` y `abort_callback`.
+  - `TranscriptionEngine`: manager singleton con cache de contexto nativo cargado, política concurrente latest-wins y evicción por `ComponentCallbacks2`.
 
 ## Estado verificado
 
@@ -69,29 +71,30 @@ Validaciones locales completadas:
 - permisos de micrófono/notificaciones, overlay, accesibilidad y foreground service;
 - carga de modelo GGML real y `libhandy_whisper_jni.so`;
 - decoder e inferencia sin crash JNI/native;
-- tests JVM de SHA-256, sidecars, catálogo y detección de manipulación.
+- tests JVM de SHA-256, sidecars, catálogo, cache singleton, cancelación JNI, evicción por memoria, repositorio de historial y gestor de feedback;
+- Historial de Transcripciones SQLite implementado con UI Compose, navegación en `MainActivity`, registro automático multiservicio y tests unitarios;
+- Señales de Audio (`SoundPool`/`ToneGenerator`) y Respuestas Hápticas (`VibratorManager`) implementadas con preferencias, UI y tests;
+- Motor local de Postprocesado de Texto y Reglas de Vocabulario implementado en `PostProcessor.kt`, integrado en `TranscriptionEngine`, con ajustes Compose, tests JVM y documentación actualizada;
 
 La fixture sintética produjo `No speech detected`; eso valida ejecución, no precisión con voz humana.
 
-## Siguiente prompt recomendado para una sesión limpia
+## Siguiente prompt recomendado para una sesión autónoma
 
-> Continúa el port Android de Handy desde el estado actual. Lee `AGENTS.md`, `agent_prompt.md`, `plan.md`, `ANDROID.md` y `TEST_HANDY.txt`; comprueba `git status --short` y no reinicies el trabajo de la tienda. La tienda de modelos ya está implementada y `ModelCatalog.kt` se genera desde `src-tauri/src/catalog/catalog.json` con `scripts/generate_android_model_catalog.py`, overrides en `scripts/android_model_catalog_overrides.json`, y verificación Gradle mediante `generateModelCatalog`/`checkModelCatalog`. Pregunta antes de tomar decisiones de producto. Prioriza el siguiente ítem pendiente del backlog, empieza por procedencia autenticada de checksums remotos o pruebas instrumentadas, y valida con lint, tests y builds Android.
+> Continúa el port Android desde el estado actual. Lee `AGENTS.md`, `spec.md`, `plan.md` y `TEST_HANDY.txt`; conserva los cambios existentes y prioriza checksums remotos autenticados, pruebas instrumentadas y robustez de descargas. No rehagas el motor de postprocesado, el historial ni las señales de feedback ya implementadas.
 
 ## Siguiente trabajo prioritario
 
-### P1 — Confianza y pruebas de release
+### P1 — Postprocesado, Vocabulario y Paridad con Handy DPC
 
+- **[x] Implementar el Motor de Postprocesado de Texto (PostProcessor.kt) y Reemplazos de Vocabulario** según la especificación acordada.
 - Publicar y fijar checksums remotos autenticados para cada modelo del catálogo. Los modelos actuales aún tienen `expectedSha256 = null`.
 - Añadir tests instrumentados para rechazo de GGML inválido mediante JNI, URI `content://`, `ACTION_SEND`, permisos, IME, accesibilidad y foreground services.
 - Ejecutar una prueba con audio humano conocido y texto esperado.
-- Añadir cancelación, reintentos y progreso fiable de descargas; la serialización global de descargas de la tienda ya está implementada.
-- Diseñar cancelación o cola explícita alrededor de la inferencia JNI síncrona.
+- Añadir cancelación, reintentos y progreso fiable de descargas.
 
 ### P2 — Robustez y paridad
 
 - Revisar fallback de inserción cuando una app no soporta `ACTION_SET_TEXT`.
-- Completar cache/manager de modelo para no recargar Whisper en cada operación.
-- Completar postprocesado configurable sin inventar proveedores ni credenciales.
 - Internacionalizar textos Android mediante recursos.
 - Medir aceleración ARM/GPU antes de habilitar optimizaciones.
 - Preparar firma segura, AAB y distribución Play.

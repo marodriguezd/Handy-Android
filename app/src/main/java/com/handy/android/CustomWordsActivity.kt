@@ -26,8 +26,14 @@ class CustomWordsActivity : ComponentActivity() {
                 var words by remember { mutableStateOf(SettingsManager.customWords(this@CustomWordsActivity).joinToString("\n")) }
                 Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Custom words", style = MaterialTheme.typography.headlineSmall)
-                    Text("One word or phrase per line.")
-                    OutlinedTextField(words, { words = it }, Modifier.weight(1f, fill = true), minLines = 8)
+                    Text("One word or phrase per line. Use `heard text = preferred text` for an explicit replacement.")
+                    OutlinedTextField(
+                        value = words,
+                        onValueChange = { words = it },
+                        modifier = Modifier.weight(1f, fill = true),
+                        minLines = 8,
+                        label = { Text("Words and rules") },
+                    )
                     Button(onClick = {
                         SettingsManager.setCustomWords(this@CustomWordsActivity, words.lines())
                         finish()

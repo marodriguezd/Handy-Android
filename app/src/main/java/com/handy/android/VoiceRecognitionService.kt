@@ -43,6 +43,7 @@ class VoiceRecognitionService : RecognitionService() {
             return
         }
         listening = true
+        AudioFeedbackManager.onStartRecording(this)
         listener.readyForSpeech(Bundle())
         listener.beginningOfSpeech()
     }
@@ -50,6 +51,7 @@ class VoiceRecognitionService : RecognitionService() {
     override fun onStopListening(listener: Callback?) {
         if (!listening) return
         listening = false
+        AudioFeedbackManager.onStopRecording(this)
         val samples = recorder.stop()
         val activeCallback = callback ?: listener ?: return
         scope.launch {
@@ -59,6 +61,13 @@ class VoiceRecognitionService : RecognitionService() {
                 if (text.isBlank()) {
                     mainHandler.post { activeCallback.error(SpeechRecognizer.ERROR_NO_MATCH) }
                 } else {
+                    AudioFeedbackManager.onTranscriptionSuccess(this@VoiceRecognitionService)
+                    HistoryRepository.record(
+                        context = this@VoiceRecognitionService,
+                        text = text,
+                        sourceType = HistorySource.VOICE_RECOGNITION,
+                        durationMs = AudioRecorder.durationMs(samples),
+                    )
                     val results = Bundle().apply {
                         putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, arrayListOf(text))
                     }
@@ -77,6 +86,7 @@ class VoiceRecognitionService : RecognitionService() {
     }
 
     override fun onCancel(listener: Callback?) {
+        if (listening) AudioFeedbackManager.onStopRecording(this)
         listening = false
         recorder.stop()
         callback = null

@@ -26,9 +26,9 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Decodificar archivos mediante MediaExtractor/MediaCodec.
 - [x] Resamplear audio compartido a 16 kHz.
 - [x] Verificar carga e inferencia real en dispositivo sin crash native.
-- [ ] Validar texto esperado con una grabación humana reproducible.
-- [ ] Diseñar cache/manager de modelo para evitar recargarlo en cada operación.
-- [ ] Diseñar cancelación o cola para inferencias JNI bloqueantes.
+- [x] Diseñar cache/manager de modelo para evitar recargarlo en cada operación.
+- [x] Diseñar cancelación o cola para inferencias JNI bloqueantes.
+- [x] Implementar cache singleton de modelo y cancelación JNI nativa en `native-lib.cpp`, `WhisperLib.kt` y `TranscriptionEngine.kt`, con estrategia latest-wins y evicción por presión de memoria.
 
 ## Fase 3 — Componentes de sistema
 
@@ -70,9 +70,13 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Corregir lint del intent filter multimedia.
 - [x] Añadir documentación Android en `ANDROID.md`.
 - [x] Documentar el flujo de generación/verificación del catálogo Android y su handoff agéntico.
+- [x] Diseñar el historial de transcripciones SQLite, UI de navegación en MainActivity y registro automático en servicios.
+- [x] Implementar `HistoryDatabase.kt`, `HistoryRepository.kt`, `HistoryScreen.kt`, navegación en `MainActivity` y registro automático en los servicios.
+- [x] Diseñar el sistema de señales de audio (SoundPool) y respuestas hápticas de vibración en el inicio, fin y éxito de transcripción.
+- [x] Implementar `AudioFeedbackManager.kt`, recursos de audio en `res/raw/`, ajustes independientes en `SettingsManager.kt` y conmutadores UI en `MainActivity.kt`.
+- [x] Diseñar el motor local de postprocesado (PostProcessor.kt), sustitución de vocabulario / reglas `clave = valor`, normalización de puntuación y autocapitalización.
+- [x] Implementar `PostProcessor.kt`, llamada transparente en `TranscriptionEngine.kt`, preferencias en `SettingsManager.kt` y pantallas UI `PostProcessSettingsActivity.kt` y `CustomWordsActivity.kt`.
 - [ ] Migrar strings Android a recursos/i18n.
-- [ ] Completar postprocesado o retirar el placeholder hasta definir contrato de proveedor.
-- [ ] Añadir historial y equivalentes móviles de las funciones prioritarias de escritorio.
 
 ## Fase 6 — CI y release
 
