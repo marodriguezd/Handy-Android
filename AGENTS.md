@@ -88,11 +88,9 @@ curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.compute
 
 For detailed platform-specific build setup, see [BUILD.md](BUILD.md).
 
-## Android Handoff & Single-Prompt Master Execution Plan
+## Android Handoff & Execution State
 
-The Android port contains all foundational features (local Whisper/GGML JNI, storefront, SQLite history, sound/haptics, and basic rule-based post-processing).
-
-The master execution prompt for the next agent is isolated in [`PROMPT_FASE6.md`](PROMPT_FASE6.md). The next AI agent should be given [`PROMPT_FASE6.md`](PROMPT_FASE6.md) directly to execute **Phase 6: Paridad Avanzada Handy DPC** following the specifications in [`spec.md`](spec.md) and tasks in [`plan.md`](plan.md).
+The Android port contains all foundational features (local Whisper/GGML JNI, storefront, SQLite history, sound/haptics, post-processing) plus the MD3/Wispr Flow redesign and the audit fixes F1–F8. The canonical status and open items live in [`AUDIT.md`](AUDIT.md); the specification is in [`spec.md`](spec.md) and the task list in [`plan.md`](plan.md). New agents should read [`AUDIT.md`](AUDIT.md) first, then [`AGENTS.md`](AGENTS.md), [`spec.md`](spec.md) and [`plan.md`](plan.md), and confirm the checkout state with `git status --short` and `git log -1 --oneline`.
 
 ## Architecture Overview
 
