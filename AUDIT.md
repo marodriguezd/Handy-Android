@@ -10,7 +10,7 @@
 | Gate | Resultado |
 |---|---|
 | `checkModelCatalog` | ✅ |
-| `testDebugUnitTest` (74 tests) | ✅ |
+| `testDebugUnitTest` (78 tests) | ✅ |
 | `lintDebug` (0 errores) | ✅ |
 | `BUILD SUCCESSFUL` (checkModelCatalog + testDebugUnitTest + lintDebug) | ✅ |
 | `assembleDebug` | ⚠️ Bloqueado únicamente por toolchain ARM64 del host (`clang` x86_64 del NDK → SIGILL). Documentado en `AGENTS.md`. No es un error de código: `compileDebugKotlin` y `processDebugResources` pasan antes de `configureCMake`. |
@@ -167,7 +167,7 @@ Contraste calculado de los 12 pares clave de la paleta real (light + dark): **to
 
 ## 6. Veredicto
 
-El código está **bien hecho, funcional y alineado con las directrices de Google I/O 2026**: gates verdes (74/74 tests, lint 0 errores), toolchain 2026 (BOM 2026.06.01, material3 1.4.0, Compose UI 1.11.4, Kotlin 2.2.21, AGP 8.10.1), adaptive-first en MainActivity, APIs Expressive adoptadas en su versión estable, **IME migrado a Material3 Compose**, **iconografía de marca completa** (launcher adaptive + `ic_stat_handy` en FGS y tile de QS) y **los 8 defectos F1–F8 de la auditoría corregidos y validados** (crash de FGS, overlay que robaba toques, API key en claro, icono de app, job obsoleto en `VoiceRecognitionService`, LLM fuera del mutex, símbolo JNI muerto, magic number `ACTION_IME_ENTER`), con tests de regresión para F1, F4, el IME, la constante de accesibilidad y el icono de notificación.
+El código está **bien hecho, funcional y alineado con las directrices de Google I/O 2026**: gates verdes (78/78 tests, lint 0 errores), toolchain 2026 (BOM 2026.06.01, material3 1.4.0, Compose UI 1.11.4, Kotlin 2.2.21, AGP 8.10.1), adaptive-first en MainActivity, APIs Expressive adoptadas en su versión estable, **IME migrado a Material3 Compose**, **iconografía de marca completa** (launcher adaptive + `ic_stat_handy` en FGS y tile de QS) y **los 8 defectos F1–F8 de la auditoría corregidos y validados** (crash de FGS, overlay que robaba toques, API key en claro, icono de app, job obsoleto en `VoiceRecognitionService`, LLM fuera del mutex, símbolo JNI muerto, magic number `ACTION_IME_ENTER`), con tests de regresión para F1, F4, el IME, la constante de accesibilidad y el icono de notificación.
 
 Pendiente para la siguiente fase:
 
