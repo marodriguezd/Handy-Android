@@ -7,7 +7,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -38,7 +37,15 @@ class LiveSubtitleService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        startForeground(NOTIFICATION_ID, notification("Ready to listen"))
+        runCatching {
+            startForeground(NOTIFICATION_ID, notification(getString(R.string.live_subtitle_ready)))
+        }.onFailure { error ->
+            // RECORD_AUDIO may be revoked at runtime; starting a microphone FGS without it
+            // throws SecurityException on Android 14+.
+            AppLog.record(this, "E", TAG, "Unable to start foreground service", error)
+            stopSelf()
+            return
+        }
         recorder = AudioRecorder(this)
         if (Settings.canDrawOverlays(this)) showOverlay()
     }
@@ -54,22 +61,22 @@ class LiveSubtitleService : Service() {
     private fun startListening() {
         if (listening) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            updateOverlay("Microphone permission is required")
+            updateOverlay(getString(R.string.live_subtitle_perm_mic))
             return
         }
         if (Settings.canDrawOverlays(this).not()) {
-            updateOverlay("Overlay permission is required")
+            updateOverlay(getString(R.string.live_subtitle_perm_overlay))
             return
         }
         val activeRecorder = recorder ?: return
         if (!activeRecorder.start()) {
-            updateOverlay("Microphone unavailable")
+            updateOverlay(getString(R.string.recognize_mic_unavailable))
             return
         }
 
         listening = true
         AudioFeedbackManager.onStartRecording(this)
-        updateOverlay("Listening…")
+        updateOverlay(getString(R.string.recognize_listening))
         transcriptionJob?.cancel()
         transcriptionJob = scope.launch {
             while (isActive && listening) {
@@ -78,7 +85,7 @@ class LiveSubtitleService : Service() {
                 if (samples.size < MIN_SAMPLES) continue
 
                 if (!isActive || !listening) return@launch
-                updateOverlay("Transcribing…")
+                updateOverlay(getString(R.string.transcribing))
                 val text = try {
                     withContext(Dispatchers.Default) {
                         TranscriptionEngine.transcribe(this@LiveSubtitleService, samples)
@@ -100,7 +107,7 @@ class LiveSubtitleService : Service() {
                     )
                     updateOverlay(text.trim())
                 } else {
-                    updateOverlay("Listening…")
+                    updateOverlay(getString(R.string.recognize_listening))
                 }
             }
         }
@@ -116,7 +123,7 @@ class LiveSubtitleService : Service() {
         transcriptionJob?.cancel()
         transcriptionJob = null
         recorder?.stop()
-        updateOverlay("Paused")
+        updateOverlay(getString(R.string.live_subtitle_paused))
         stopSelf()
     }
 
@@ -128,10 +135,10 @@ class LiveSubtitleService : Service() {
 
     private fun showOverlay() {
         val text = TextView(this).apply {
-            text = "Handy subtitles ready"
+            text = getString(R.string.live_subtitle_overlay_ready)
             textSize = 17f
-            setTextColor(Color.WHITE)
-            setBackgroundColor(0xCC202124.toInt())
+            setTextColor(ContextCompat.getColor(this@LiveSubtitleService, R.color.handy_on_surface))
+            setBackgroundColor(ContextCompat.getColor(this@LiveSubtitleService, R.color.handy_primary_container))
             setPadding(24, 14, 24, 14)
             gravity = Gravity.CENTER
         }
@@ -145,7 +152,9 @@ class LiveSubtitleService : Service() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            // Not focusable AND not touchable: this passive caption bar must never steal
+            // touches from the app content underneath it.
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
@@ -168,8 +177,8 @@ class LiveSubtitleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun notification(message: String): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
-        .setContentTitle("Handy subtitles")
+        .setSmallIcon(R.drawable.ic_stat_handy)
+        .setContentTitle(getString(R.string.live_subtitle_notification_title))
         .setContentText(message)
         .setOngoing(true)
         .build()
@@ -177,7 +186,7 @@ class LiveSubtitleService : Service() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Live subtitles", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CHANNEL_ID, getString(R.string.live_subtitle_title), NotificationManager.IMPORTANCE_LOW),
             )
         }
     }

@@ -1,9 +1,15 @@
-<resources>
-    <style name="Theme.Handy" parent="android:style/Theme.Material.Light.NoActionBar">
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Handy" parent="android:style/Theme.Material.Light.NoActionBar" tools:targetApi="31">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#6750A4</item>
-        <item name="android:navigationBarColor">#FFFBFE</item>
-        <item name="android:statusBarColor">#FFFBFE</item>
+        <item name="android:colorPrimary">@color/handy_primary</item>
+        <item name="android:colorPrimaryDark">@color/handy_primary_dark_container</item>
+        <item name="android:colorAccent">@color/handy_primary</item>
+        <item name="android:colorBackground">@color/handy_surface</item>
+        <item name="android:windowBackground">@color/handy_surface</item>
+        <item name="android:navigationBarColor">@color/handy_surface</item>
+        <item name="android:statusBarColor">@color/handy_surface</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowSplashScreenBackground">@color/handy_surface</item>
     </style>
 </resources>

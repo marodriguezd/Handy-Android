@@ -39,7 +39,7 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Implementar `HandyInputMethodService`.
 - [x] Implementar `VoiceRecognitionService` y `RecognizeActivity`.
 - [x] Implementar overlay y transcripción periódica de `LiveSubtitleService` (ventanas acotadas; no streaming incremental completo).
-- [ ] Añadir fallback de inserción cuando `ACTION_SET_TEXT` no esté soportado.
+- [x] Añadir fallback de inserción cuando `ACTION_SET_TEXT` no esté soportado (3 niveles: `ACTION_SET_TEXT` -> `ClipboardManager` + `ACTION_PASTE` -> Toast/Notificación).
 - [ ] Añadir tests instrumentados de permisos, IME, accesibilidad y foreground services.
 
 ## Fase 4 — Modelos e importación
@@ -76,7 +76,7 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Implementar `AudioFeedbackManager.kt`, recursos de audio en `res/raw/`, ajustes independientes en `SettingsManager.kt` y conmutadores UI en `MainActivity.kt`.
 - [x] Diseñar el motor local de postprocesado (PostProcessor.kt), sustitución de vocabulario / reglas `clave = valor`, normalización de puntuación y autocapitalización.
 - [x] Implementar `PostProcessor.kt`, llamada transparente en `TranscriptionEngine.kt`, preferencias en `SettingsManager.kt` y pantallas UI `PostProcessSettingsActivity.kt` y `CustomWordsActivity.kt`.
-- [ ] Migrar strings Android a recursos/i18n.
+- [x] Migrar strings Android a recursos/i18n (`res/values/strings.xml` como fuente, traducciones es/de/fr/ja/zh/pt, migración completa de pantallas Compose y servicios).
 
 ## Fase 6 — Paridad Avanzada Handy DPC (VAD, Push-to-Talk, LLM & Sistema)
 

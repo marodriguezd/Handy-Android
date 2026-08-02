@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,22 +18,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.handy.android.ui.theme.HandyTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,10 +68,12 @@ private suspend fun loadInstalledModels(downloader: ModelDownloader): List<Insta
     }
 
 class ModelsActivity : ComponentActivity() {
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            HandyTheme {
                 val downloader = remember { ModelDownloader(this@ModelsActivity) }
                 val downloadableByCatalogId = remember(downloader.availableModels) {
                     downloader.availableModels.associateBy { it.catalogId }
@@ -65,7 +81,7 @@ class ModelsActivity : ComponentActivity() {
                 var installed by remember { mutableStateOf(emptyList<InstalledModel>()) }
                 var query by remember { mutableStateOf("") }
                 var showAvailableOnly by remember { mutableStateOf(false) }
-                var status by remember { mutableStateOf("Choose a model for local transcription") }
+                var status by remember { mutableStateOf(getString(R.string.model_status_initial)) }
                 var downloadingId by remember { mutableStateOf<String?>(null) }
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if (uri != null) importModel(uri) { message ->
@@ -92,132 +108,152 @@ class ModelsActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) { installed = loadInstalledModels(downloader) }
 
-                LazyColumn(
-                    Modifier.fillMaxSize().padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    item {
-                        Spacer(Modifier.height(20.dp))
-                        Text("Model store", style = MaterialTheme.typography.headlineSmall)
-                        Text(
-                            "Browse Handy's mobile-sized catalog. Models are limited to ${formatParameterLimit(ModelCatalog.MAX_PARAMETERS)} parameters.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+                Scaffold(
+                    topBar = {
+                        LargeTopAppBar(
+                            title = { Text(stringResource(R.string.model_store_title)) },
+                            navigationIcon = {
+                                IconButton(onClick = { finish() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                                }
+                            },
+                            scrollBehavior = scrollBehavior,
                         )
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("Search models") },
-                            placeholder = { Text("Name, language family, or architecture") },
-                        )
-                    }
-                    item {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = !showAvailableOnly,
-                                onClick = { showAvailableOnly = false },
-                                label = { Text("All models") },
-                            )
-                            FilterChip(
-                                selected = showAvailableOnly,
-                                onClick = { showAvailableOnly = true },
-                                label = { Text("Available now") },
-                            )
-                        }
-                    }
-                    item {
-                        Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(onClick = { picker.launch(arrayOf("application/octet-stream", "*/*")) }) {
-                            Text("Import GGML .bin")
-                        }
-                    }
-                    if (installed.isNotEmpty()) {
-                        item { Text("Installed models", style = MaterialTheme.typography.titleLarge) }
-                        items(installed, key = { "installed-${it.file.name}" }) { installedModel ->
-                            InstalledModelCard(
-                                model = installedModel,
-                                active = installedModel.validated &&
-                                    SettingsManager.activeModelName(this@ModelsActivity) == installedModel.file.name,
-                                onValidate = {
-                                    status = "Validating ${installedModel.file.name} with Whisper…"
-                                    lifecycleScope.launch {
-                                        runCatching { downloader.validateAndActivate(installedModel.file) }
-                                            .onSuccess { result ->
-                                                status = "Active model: ${installedModel.file.name} (SHA-256 ${result.sha256.take(12)}…)"
-                                                installed = loadInstalledModels(downloader)
-                                            }
-                                            .onFailure { error ->
-                                                status = error.message ?: "Model validation failed"
-                                            }
-                                    }
-                                },
-                            )
-                        }
-                    }
-                    item {
-                        Text(
-                            "Available on Android (${availableEntries.size})",
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                        Text(
-                            "These Whisper GGML models are supported by the current local Android engine.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    items(availableEntries, key = { "available-${it.id}" }) { entry ->
-                        val model = downloadableByCatalogId[entry.id]
-                        if (model != null) {
-                            val installedAlready = installed.any { it.file.name == model.fileName }
-                            StoreModelCard(
-                                entry = entry,
-                                installed = installedAlready,
-                                downloading = downloadingId == entry.id,
-                                downloadBlocked = downloadingId != null && downloadingId != entry.id,
-                                onDownload = {
-                                    if (downloadingId == null) {
-                                        downloadingId = entry.id
-                                        status = "Downloading ${entry.name}…"
-                                        lifecycleScope.launch {
-                                            runCatching { downloader.download(model) }
-                                                .onSuccess { file ->
-                                                    installed = loadInstalledModels(downloader)
-                                                    status = "Downloaded and validated: ${file.name}. Validate and use it below to activate."
-                                                }
-                                                .onFailure { error ->
-                                                    status = error.message ?: "Model download or validation failed"
-                                                }
-                                            downloadingId = null
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
-                    if (comingSoonEntries.isNotEmpty()) {
+                    },
+                ) { innerPadding ->
+                    LazyColumn(
+                        Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .padding(horizontal = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         item {
                             Text(
-                                "Coming soon (${comingSoonEntries.size})",
-                                style = MaterialTheme.typography.titleLarge,
-                            )
-                            Text(
-                                "These models fit the mobile parameter limit, but their native Android backend is not available yet. They cannot be downloaded safely from this build.",
+                                stringResource(R.string.model_store_subtitle, formatParameterLimit(ModelCatalog.MAX_PARAMETERS)),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        items(comingSoonEntries, key = { "soon-${it.id}" }) { entry ->
-                            StoreModelCard(
-                                entry = entry,
-                                installed = false,
-                                downloading = false,
-                                downloadBlocked = false,
-                                onDownload = null,
+                        item {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text(stringResource(R.string.model_search_label)) },
+                                placeholder = { Text(stringResource(R.string.model_search_placeholder)) },
                             )
                         }
+                        item {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(
+                                    selected = !showAvailableOnly,
+                                    onClick = { showAvailableOnly = false },
+                                    label = { Text(stringResource(R.string.model_filter_all)) },
+                                )
+                                FilterChip(
+                                    selected = showAvailableOnly,
+                                    onClick = { showAvailableOnly = true },
+                                    label = { Text(stringResource(R.string.model_filter_available)) },
+                                )
+                            }
+                        }
+                        item {
+                            Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedButton(onClick = { picker.launch(arrayOf("application/octet-stream", "*/*")) }) {
+                                Text(stringResource(R.string.model_import))
+                            }
+                        }
+                        if (installed.isNotEmpty()) {
+                            item { Text(stringResource(R.string.model_installed_title), style = MaterialTheme.typography.titleLarge) }
+                            items(installed, key = { "installed-${it.file.name}" }) { installedModel ->
+                                InstalledModelCard(
+                                    model = installedModel,
+                                    active = installedModel.validated &&
+                                        SettingsManager.activeModelName(this@ModelsActivity) == installedModel.file.name,
+                                    onValidate = {
+                                        status = getString(R.string.model_validating, installedModel.file.name)
+                                        lifecycleScope.launch {
+                                            runCatching { downloader.validateAndActivate(installedModel.file) }
+                                                .onSuccess { result ->
+                                                    status = getString(
+                                                        R.string.model_active_status,
+                                                        installedModel.file.name,
+                                                        result.sha256.take(12),
+                                                    )
+                                                    installed = loadInstalledModels(downloader)
+                                                }
+                                                .onFailure { error ->
+                                                    status = error.message ?: getString(R.string.model_invalid)
+                                                }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        item {
+                            Text(
+                                stringResource(R.string.model_available_title, availableEntries.size),
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                stringResource(R.string.model_available_description),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        items(availableEntries, key = { "available-${it.id}" }) { entry ->
+                            val model = downloadableByCatalogId[entry.id]
+                            if (model != null) {
+                                val installedAlready = installed.any { it.file.name == model.fileName }
+                                StoreModelCard(
+                                    entry = entry,
+                                    installed = installedAlready,
+                                    downloading = downloadingId == entry.id,
+                                    downloadBlocked = downloadingId != null && downloadingId != entry.id,
+                                    onDownload = {
+                                        if (downloadingId == null) {
+                                            downloadingId = entry.id
+                                            status = getString(R.string.model_downloading, entry.name)
+                                            lifecycleScope.launch {
+                                                runCatching { downloader.download(model) }
+                                                    .onSuccess { file ->
+                                                        installed = loadInstalledModels(downloader)
+                                                        status = getString(R.string.model_downloaded_status, file.name)
+                                                    }
+                                                    .onFailure { error ->
+                                                        status = error.message ?: getString(R.string.model_download_or_validation_failed)
+                                                    }
+                                                downloadingId = null
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        if (comingSoonEntries.isNotEmpty()) {
+                            item {
+                                Text(
+                                    stringResource(R.string.model_coming_soon_title, comingSoonEntries.size),
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Text(
+                                    stringResource(R.string.model_coming_soon_description),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            items(comingSoonEntries, key = { "soon-${it.id}" }) { entry ->
+                                StoreModelCard(
+                                    entry = entry,
+                                    installed = false,
+                                    downloading = false,
+                                    downloadBlocked = false,
+                                    onDownload = null,
+                                )
+                            }
+                        }
+                        item { Spacer(Modifier.height(20.dp)) }
                     }
-                    item { Spacer(Modifier.height(20.dp)) }
                 }
             }
         }
@@ -229,16 +265,16 @@ class ModelsActivity : ComponentActivity() {
                 val name = requireNotNull(uri.lastPathSegment).substringAfterLast('/').substringAfterLast(':')
                     .ifBlank { "imported-model.bin" }
                     .replace(Regex("[^A-Za-z0-9._-]"), "_")
-                require(name.endsWith(".bin", true)) { "Choose a GGML .bin Whisper model" }
+                require(name.endsWith(".bin", true)) { getString(R.string.model_import_require_bin) }
                 val target = File(File(filesDir, "models").apply { mkdirs() }, name)
                 val partial = File(target.path + ".part")
                 partial.delete()
                 try {
                     contentResolver.openInputStream(uri).use { input ->
-                        requireNotNull(input) { "Unable to open selected file" }
+                        requireNotNull(input) { getString(R.string.model_import_open_failed) }
                         partial.outputStream().use { output -> input.copyTo(output) }
                     }
-                    require(partial.isFile && partial.length() > 0L) { "Selected model is empty" }
+                    require(partial.isFile && partial.length() > 0L) { getString(R.string.model_import_empty) }
                     val validation = ModelValidator.validate(partial)
                     if (SettingsManager.activeModelName(this@ModelsActivity) == target.name) {
                         SettingsManager.clearActiveModel(this@ModelsActivity)
@@ -249,10 +285,10 @@ class ModelsActivity : ComponentActivity() {
                     partial.delete()
                 }
                 withContext(Dispatchers.Main) {
-                    onFinished("Imported and validated: ${target.name}. Validate and use it below to activate.")
+                    onFinished(getString(R.string.model_imported_status, target.name))
                 }
             }.onFailure { error ->
-                withContext(Dispatchers.Main) { onFinished(error.message ?: "Import failed") }
+                withContext(Dispatchers.Main) { onFinished(error.message ?: getString(R.string.model_import_failed)) }
             }
         }
     }
@@ -271,37 +307,39 @@ class ModelsActivity : ComponentActivity() {
             target.delete()
             Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
-        check(target.isFile && target.length() > 0L) { "Could not finalize imported model" }
+        check(target.isFile && target.length() > 0L) { getString(R.string.model_import_finalize_failed) }
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun InstalledModelCard(
     model: InstalledModel,
     active: Boolean,
     onValidate: () -> Unit,
 ) {
-    Card {
+    ElevatedCard {
         Row(Modifier.fillMaxWidth().padding(16.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(model.file.name, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    when {
-                        active -> "Active model"
-                        model.validated -> "Validated and ready"
-                        else -> "Not validated — cannot be used yet"
-                    },
+                    stringResource(
+                        when {
+                            active -> R.string.model_active
+                            model.validated -> R.string.model_validated_ready
+                            else -> R.string.model_not_validated
+                        },
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Button(onClick = onValidate) {
-                Text(if (active) "Revalidate" else "Validate and use")
+                Text(stringResource(if (active) R.string.model_revalidate else R.string.model_validate_use))
             }
         }
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun StoreModelCard(
     entry: ModelCatalogEntry,
     installed: Boolean,
@@ -310,11 +348,13 @@ private fun StoreModelCard(
     onDownload: (() -> Unit)?,
 ) {
     val available = entry.isAvailableOnAndroid
-    Card(
+    ElevatedCard(
         colors = if (available) {
-            CardDefaults.cardColors()
+            CardDefaults.elevatedCardColors()
         } else {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            // Disabled/coming-soon container: surfaceContainerHigh is the MD3 role for
+            // a higher-emphasis container (surfaceVariant is deprecated for containers).
+            CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
         },
     ) {
         Column(
@@ -329,14 +369,17 @@ private fun StoreModelCard(
                 Text(entry.parameters, style = MaterialTheme.typography.labelLarge)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModelMetadataChip("${formatModelSize(entry.downloadSizeBytes)} download")
-                ModelMetadataChip("${entry.languageCount} ${if (entry.languageCount == 1) "language" else "languages"}")
+                ModelMetadataChip(stringResource(R.string.model_download_size, formatModelSize(entry.downloadSizeBytes)))
+                ModelMetadataChip(
+                    pluralStringResource(R.plurals.model_language_count, entry.languageCount, entry.languageCount),
+                )
                 ModelMetadataChip(entry.architecture)
             }
             if (available) {
                 Text(
-                    if (installed) "Installed. Use the validation control above to activate it."
-                    else "Download is hashed and Whisper-validated before activation.",
+                    stringResource(
+                        if (installed) R.string.model_installed_hint else R.string.model_download_hint,
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(
@@ -349,21 +392,21 @@ private fun StoreModelCard(
                             modifier = Modifier.width(18.dp).height(18.dp),
                         )
                     } else {
-                        Text(if (installed) "Installed" else "Download")
+                        Text(stringResource(if (installed) R.string.model_installed else R.string.model_download))
                     }
                 }
             } else {
                 Text(
-                    "Coming soon — Android support for ${entry.architecture} is not implemented yet.",
+                    stringResource(R.string.model_coming_soon_entry, entry.architecture),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedButton(onClick = {}, enabled = false) { Text("Not available yet") }
+                OutlinedButton(onClick = {}, enabled = false) { Text(stringResource(R.string.model_not_available)) }
             }
         }
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun ModelMetadataChip(text: String) {
     Text(
         text,

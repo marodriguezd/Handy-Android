@@ -8,6 +8,10 @@ import androidx.core.content.ContextCompat
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED || !SettingsManager.autoStartOnBoot(context)) return
+        if (!PermissionChecker.canStartMicrophoneService(context)) {
+            AppLog.record(context, "E", "BootReceiver", "RECORD_AUDIO missing, skipping autostart")
+            return
+        }
         runCatching {
             ContextCompat.startForegroundService(
                 context,

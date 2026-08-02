@@ -1,18 +1,28 @@
 package com.handy.android
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class HistoryRepositoryTest {
+    private val context: Context
+        get() = ApplicationProvider.getApplicationContext()
+
     @Test
     fun formatsSourceLabelsCorrectly() {
-        assertEquals("Floating button", HistorySource.label(HistorySource.FLOATING_BUTTON))
-        assertEquals("Voice keyboard", HistorySource.label(HistorySource.INPUT_METHOD))
-        assertEquals("Voice recognition", HistorySource.label(HistorySource.VOICE_RECOGNITION))
-        assertEquals("Voice input", HistorySource.label(HistorySource.VOICE_INPUT))
-        assertEquals("Audio file", HistorySource.label(HistorySource.AUDIO_FILE))
-        assertEquals("Live subtitles", HistorySource.label(HistorySource.LIVE_SUBTITLE))
-        assertEquals("Other", HistorySource.label("custom_source"))
+        assertEquals("Floating button", context.getString(HistorySource.labelRes(HistorySource.FLOATING_BUTTON)))
+        assertEquals("Voice keyboard", context.getString(HistorySource.labelRes(HistorySource.INPUT_METHOD)))
+        assertEquals("Voice recognition", context.getString(HistorySource.labelRes(HistorySource.VOICE_RECOGNITION)))
+        assertEquals("Voice input", context.getString(HistorySource.labelRes(HistorySource.VOICE_INPUT)))
+        assertEquals("Audio file", context.getString(HistorySource.labelRes(HistorySource.AUDIO_FILE)))
+        assertEquals("Live subtitles", context.getString(HistorySource.labelRes(HistorySource.LIVE_SUBTITLE)))
+        assertEquals("Other", context.getString(HistorySource.labelRes("custom_source")))
     }
 
     @Test
@@ -41,4 +51,3 @@ class HistoryRepositoryTest {
         assertEquals(500, HistoryRepository.DEFAULT_MAX_ENTRIES)
     }
 }
-

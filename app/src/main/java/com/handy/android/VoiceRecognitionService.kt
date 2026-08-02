@@ -30,6 +30,9 @@ class VoiceRecognitionService : RecognitionService() {
     }
 
     override fun onStartListening(recognizerIntent: Intent?, listener: Callback?) {
+        // Cancel any in-flight transcription from a previous session so it cannot post
+        // results/errors to a now-stale callback.
+        scope.coroutineContext.cancelChildren()
         callback = listener
         if (listener == null) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {

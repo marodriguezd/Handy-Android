@@ -1,10 +1,10 @@
 package com.handy.android
 
-import android.service.quicksettings.Tile
-import android.service.quicksettings.TileService
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.service.quicksettings.Tile
+import android.service.quicksettings.TileService
 import androidx.core.content.ContextCompat
 
 class HandyTileService : TileService() {
@@ -15,6 +15,11 @@ class HandyTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
+        // Allow a running service to be stopped even if RECORD_AUDIO was revoked mid-session.
+        if (!PermissionChecker.canStartMicrophoneService(this, FloatingButtonService.isRunning)) {
+            AppLog.record(this, "E", "HandyTile", "RECORD_AUDIO missing, ignoring tile tap")
+            return
+        }
         ContextCompat.startForegroundService(
             this,
             Intent(this, FloatingButtonService::class.java).setAction(FloatingButtonService.ACTION_TOGGLE),

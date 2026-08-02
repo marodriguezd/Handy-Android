@@ -1,45 +1,53 @@
-# Project: Quality Assurance Ecosystem for com.handy.android
+# Project: Handy Android Wispr Flow Parity & Material Design 3 Redesign
 
 ## Architecture
-- **Target Package**: `com.handy.android` (Android Gradle module under `app/`)
-- **Layers**:
-  - Audio Pipeline: `AudioBuffer`, `AudioRecorder`, `AudioFileDecoder` (MediaCodec / resampler)
-  - Model Management: `ModelCatalog`, `ModelDownloader` (HTTPS download, `.part` file), `ModelValidator` (SHA-256 sidecars)
-  - Inference Abstraction: `IWhisperEngine` interface, `WhisperLib` (JNI native wrapper), `TranscriptionEngine`
-  - System Integration: `SettingsManager`, `PermissionState` / `PermissionChecker`, Android services (`FloatingButtonService`, `AutoTypeAccessibilityService`, `HandyInputMethodService`, `LiveSubtitleService`, `VoiceRecognitionService`)
-- **Shared Interfaces**:
-  - `IWhisperEngine`: Decouples native `libhandy_whisper_jni.so` loading from host JVM test runners.
+- **UI & Material Design 3 Layer**: `com.handy.android.ui.theme` (`Theme.kt`, `Color.kt`, `Type.kt`), Compose scaffolds for `MainActivity`, `ModelsActivity`, `HistoryScreen`, `LlmSettingsActivity`, `PostProcessSettingsActivity`, `CustomWordsActivity`, `TranscriptionSettingsActivity`, and modern animated `AudioWaveformView`.
+- **Wispr Flow Audio & Dictation Layer**: Silero VAD silence detector (`SileroVadDetector.kt`, `AudioRecorder.kt`), Tap vs Hold dual gesture (`FloatingButtonService.kt`, `HandyInputMethodService.kt`), 2-Tier Post-Processor (`LlmPostProcessor.kt`, `PostProcessor.kt`, `CustomWordsActivity.kt`).
+- **System Integration & Insertion Layer**: 3-tier text insertion resilience (`AutoTypeAccessibilityService.kt`), Quick Settings Tile (`HandyTileService.kt`), Audio & Haptic Feedback (`AudioFeedbackManager.kt`).
+- **Validation & Gauntlet Layer**: Gradle canonical targets (`checkModelCatalog`, `testDebugUnitTest`, `lintDebug`, `assembleDebug`, `assembleRelease`), test suite expansion, and Forensic Audit (`teamwork_preview_auditor`).
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Test Infra & Gradle Lint Setup | Gradle test dependencies, strict lint rules (`warningsAsErrors`), `checkModelCatalog` task binding | M1 | survey |
-| 2 | Whisper Engine Interface Abstraction | `IWhisperEngine` interface, refactored `WhisperLib`, `ModelValidator`, and `TranscriptionEngine` | M1 | survey |
-| 3 | ModelDownloader Unit Test Suite | HTTPS validation, redirect security, HTTP errors, `.part` file lifecycle, progress callbacks, SHA-256 replacement | M2 | survey |
-| 4 | TranscriptionEngine Unit Test Suite | Model extension check, sidecar requirement, active model fallback, `NoModelException`, `ModelValidationException`, mock delegation | M2 | survey |
-| 5 | SettingsManager Unit Test Suite | Path traversal check, model setting hash validation, thread count normalization, custom words serialization, API key Base64 | M2 | survey |
-| 6 | PermissionChecker Unit Test Suite | `PermissionState.ready` evaluation, SDK 33+ `POST_NOTIFICATIONS`, colon-separated accessibility service string parsing | M2 | survey |
-| 7 | AudioFileDecoder Resampler Test Suite | Linear interpolation sample rate resampler (44.1k/48k -> 16k), mono downmixing, empty/same rate handling | M3 | survey |
-| 8 | AudioBuffer Concurrency Test Suite | Multi-threaded concurrent `append` and `drain` thread-safety, zero-sample drain, snapshot retention | M3 | survey |
-| 9 | Autonomous Gauntlet & E2E Validation | Comprehensive execution of `./gradlew testDebugUnitTest`, `./gradlew lintDebug`, `./gradlew checkModelCatalog`, `./gradlew assembleDebug` | M4 | survey |
+| 1 | MD3 Theme & Dynamic Colors | Central `com.handy.android.ui.theme` package with dynamic color scheme (`dynamicLightColorScheme` / `dynamicDarkColorScheme`) & dark mode | M1 | survey_1 |
+| 2 | MD3 Sub-Activity Modernization | Scaffolds and TopAppBar navigation across `ModelsActivity`, `HistoryScreen`, `LlmSettingsActivity`, `PostProcessSettingsActivity`, `CustomWordsActivity`, `TranscriptionSettingsActivity` | M1 | survey_1 |
+| 3 | MD3 Component & Navigation Upgrade | MD3 vector icons for `NavigationBar`, `ElevatedCard` containers, `FilterChip`, `Switch`, `IconButton` | M1 | survey_1 |
+| 4 | Animated Audio Waveform & Overlays | Smooth interpolation amplitude decay drawing on canvas and state-based color animation without flickering | M1 | survey_1 |
+| 5 | Silero VAD Silence Auto-Stop | Silence detection in `SileroVadDetector` & `AudioRecorder` with 1200ms auto-stop threshold and fail-safe handling | M2 | survey_2 |
+| 6 | Tap / Hold Dual Gesture | Tap to toggle ON/OFF vs Hold push-to-talk in `FloatingButtonService` and `HandyInputMethodService` with 300ms threshold and drag cancellation | M2 | survey_2 |
+| 7 | LLM Post-Processor | `LlmPostProcessor` supporting OpenAI / Groq / OpenRouter / Ollama with 5s timeout guard | M2 | survey_2 |
+| 8 | Rule-Based Fallback & Dictionary | Deterministic local `PostProcessor` fallback with filler removal, custom dictionary replacement, punctuation, and capitalization | M2 | survey_2 |
+| 9 | Multi-level Text Insertion Resilience | `AutoTypeAccessibilityService` 3-tier insertion: `ACTION_SET_TEXT` -> `ClipboardManager` + `node.performAction(ACTION_PASTE)` -> Toast/Notification fallback | M3 | survey_3 |
+| 10 | Quick Settings Tile Integration | Real-time status sync and toggle control in `HandyTileService` | M3 | survey_3 |
+| 11 | Audio & Haptic Feedback | `AudioFeedbackManager` process-wide SoundPool/Vibrator feedback for start/stop/success | M3 | survey_3 |
+| 12 | Dual Track E2E & Gauntlet Verification | Execute `./gradlew checkModelCatalog testDebugUnitTest lintDebug assembleDebug assembleRelease` and pass Forensic Audit | M4 | survey_3 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | M1: Test Infra & JNI Decoupling | `app/build.gradle.kts` dependencies & lint settings, `IWhisperEngine` interface creation & component refactoring | none | PLANNED |
-| 2 | M2: Core Business Logic Test Gauntlet | `ModelDownloaderTest`, `TranscriptionEngineTest`, `SettingsManagerTest`, `PermissionCheckerTest` | M1 | PLANNED |
-| 3 | M3: Audio Pipeline & Concurrency Gauntlet | `AudioFileDecoderTest`, `AudioBufferConcurrencyTest` | M1 | PLANNED |
-| 4 | M4: E2E Verification & Gauntlet Hardening | Validation of canonical commands (`testDebugUnitTest`, `lintDebug`, `checkModelCatalog`, `assembleDebug`), zero lint warnings, fast JVM execution | M1, M2, M3 | PLANNED |
+| M1 | MD3 Visual Redesign | UI theme, screens, MD3 components, animated waveform | None | COMPLETED |
+| M2 | Wispr Flow Parity | Silero VAD, Tap/Hold gestures, LLM post-processing, fallback rules, dictionary | M1 | COMPLETED |
+| M3 | Text Insertion & System Integration | AutoTypeAccessibilityService 3-tier resilience, HandyTileService, AudioFeedbackManager | M2 | COMPLETED |
+| M4 | E2E Testing & Gauntlet Hardening | E2E testing tiers 1-5, canonical build/test execution, forensic audit | M3 | IN PROGRESS |
 
 ## Interface Contracts
-### `WhisperLib` ↔ `TranscriptionEngine` / `ModelValidator`
-- Interface: `IWhisperEngine : AutoCloseable`
-- Signatures:
-  - `fun init(modelPath: String): Boolean`
-  - `fun transcribe(audioData: FloatArray, numThreads: Int = 4, translate: Boolean = false, language: String = "auto"): String`
-- Behavior: `TranscriptionEngine` and `ModelValidator` accept an `engineFactory: () -> IWhisperEngine = { WhisperLib() }`.
+### UI (M1) ↔ Audio/VAD (M2)
+- State flow: Recording state (IDLE, RECORDING, PROCESSING) emitted by `AudioRecorder` / `FloatingButtonService` consumed by `AudioWaveformView` for dynamic color & animation.
+
+### Audio/VAD (M2) ↔ Post-Processing (M2)
+- Interface: `PostProcessor` interface with `process(text: String): String` implemented by `LlmPostProcessor` (Tier 1) delegating to `LocalRulePostProcessor` (Tier 2) on failure.
+
+### Audio/VAD (M2) ↔ System Integration (M3)
+- Interface: `AutoTypeAccessibilityService.insertText(text: String)` receives formatted text from post-processor pipeline.
+- Interface: `HandyTileService` broadcasts intent `ACTION_TOGGLE` to `FloatingButtonService` and observes `isRecording` state.
 
 ## Code Layout
-- Source files: `app/src/main/java/com/handy/android/`
-- Test files: `app/src/test/java/com/handy/android/`
-- Build script: `app/build.gradle.kts`
+- Package: `com.handy.android`
+- App module: `app/src/main/java/com/handy/android/`
+- Theme (Compose): `app/src/main/java/com/handy/android/ui/theme/` (`Theme.kt`, `Color.kt`, `Type.kt`)
+- Activities/Screens: `app/src/main/java/com/handy/android/` (planos en el paquete raíz)
+- Audio/VAD: `app/src/main/java/com/handy/android/` (`AudioRecorder.kt`, `SileroVadDetector.kt`)
+- Post-processing: `app/src/main/java/com/handy/android/` (`PostProcessor.kt`, `LlmPostProcessor.kt`)
+- Service/Accessibility: `app/src/main/java/com/handy/android/` (`AutoTypeAccessibilityService.kt`, `HandyTileService.kt`, etc.)
+- Recursos i18n: `app/src/main/res/values*/strings.xml` (en, es, de, fr, ja, zh, pt)
+- Unit tests: `app/src/test/java/com/handy/android/`

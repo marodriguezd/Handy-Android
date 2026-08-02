@@ -19,6 +19,19 @@ data class PermissionState(
 }
 
 object PermissionChecker {
+    /** Whether the RECORD_AUDIO permission is currently granted (required by both microphone foreground services). */
+    fun hasMicrophonePermission(context: Context): Boolean =
+        granted(context, Manifest.permission.RECORD_AUDIO)
+
+    /**
+     * Whether a caller may safely start (or re-deliver an intent to) a microphone foreground
+     * service on Android 14+. Starting one requires RECORD_AUDIO unless the service is already
+     * running — a running service only receives the re-delivered intent, so stop/control commands
+     * must not be blocked when the permission was revoked mid-session.
+     */
+    fun canStartMicrophoneService(context: Context, serviceRunning: Boolean = false): Boolean =
+        serviceRunning || hasMicrophonePermission(context)
+
     fun read(context: Context): PermissionState = PermissionState(
         microphone = granted(context, Manifest.permission.RECORD_AUDIO),
         notifications = notificationsGranted(context),

@@ -21,6 +21,8 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Handy"
         android:theme="@style/Theme.Handy">
         <activity
@@ -142,6 +144,7 @@
         <service
             android:name=".HandyTileService"
             android:exported="true"
+            android:icon="@drawable/ic_stat_handy"
             android:label="@string/quick_settings_tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>

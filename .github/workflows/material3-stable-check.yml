@@ -1,0 +1,24 @@
+name: "Material3 stable check"
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly Monday 06:00 UTC: catches a stable material3 1.5.x even without code
+    # changes in app/ (android.yml only runs on app/** paths).
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: material3-stable-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run material3 stable check
+        run: python3 scripts/check_material3_stable.py
+
+      - name: Self-test the check script
+        run: python3 scripts/check_material3_stable.py --selftest

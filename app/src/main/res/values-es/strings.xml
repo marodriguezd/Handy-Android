@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="app_name">Handy</string>
     <string name="accessibility_service_description">Permite que Handy escriba transcripciones locales en el campo de texto enfocado.</string>
     <string name="voice_subtype">Voz</string>
@@ -20,4 +19,239 @@
     <string name="llm_system_prompt_label">Prompt del sistema</string>
     <string name="llm_enable_label">Usar postprocesado con IA</string>
     <string name="save">Guardar</string>
+
+    <!-- General -->
+    <string name="back">Atrás</string>
+    <string name="cancel">Cancelar</string>
+    <string name="delete">Eliminar</string>
+    <string name="stop">Detener</string>
+
+    <!-- Navigation -->
+    <string name="nav_tab_transcription">Transcripción</string>
+    <string name="nav_tab_store">Tienda</string>
+
+    <!-- Main screen -->
+    <string name="main_title">Entrada de voz privada</string>
+    <string name="main_subtitle">Transcribe la voz localmente y escríbela en la aplicación enfocada.</string>
+    <string name="main_ready_title">Handy está listo</string>
+    <string name="main_setup_title">Completa la configuración para iniciar Handy</string>
+    <string name="main_ready_description">Todos los accesos necesarios están activados. Ya puedes iniciar el botón flotante.</string>
+    <string name="main_setup_description">Handy necesita acceso a micrófono, notificaciones, superposición y accesibilidad para funcionar en todas las aplicaciones.</string>
+    <string name="main_open_app_settings">Abrir ajustes de la app</string>
+    <string name="main_allow_microphone">Permitir micrófono</string>
+    <string name="main_allow_notifications">Permitir notificaciones</string>
+    <string name="main_allow_overlay">Permitir superposición</string>
+    <string name="main_enable_accessibility">Activar accesibilidad</string>
+    <string name="main_handy_running">Handy en ejecución</string>
+    <string name="main_start_handy">Iniciar Handy</string>
+    <string name="main_permissions_title">Permisos</string>
+    <string name="main_permissions_description">Completa cada paso. Handy vuelve a comprobar los permisos automáticamente al volver de los ajustes del sistema.</string>
+    <string name="main_feedback_title">Comentarios</string>
+    <string name="main_feedback_description">Elige si Handy avisa de los eventos de grabación y transcripción con sonido o vibración.</string>
+    <string name="main_sound_feedback">Sonido</string>
+    <string name="main_haptic_feedback">Vibración</string>
+    <string name="main_dynamic_color">Color dinámico</string>
+    <string name="main_settings_title">Ajustes</string>
+    <string name="main_store_none">No hay modelos instalados</string>
+    <plurals name="main_store_installed">
+        <item quantity="one">%1$d modelo instalado</item>
+        <item quantity="many">%1$d modelos instalados</item>
+        <item quantity="other">%1$d modelos instalados</item>
+    </plurals>
+    <string name="main_store_description">Descarga o importa un modelo Whisper GGML para transcribir voz localmente. Los modelos se validan antes de poder activarse.</string>
+    <string name="main_store_browse">Ver todos los modelos</string>
+    <string name="main_store_footer">El catálogo completo incluye descargas compatibles, validación de modelos instalados y entradas próximas.</string>
+
+    <!-- Settings rows -->
+    <string name="settings_models">Modelos</string>
+    <string name="settings_ai_editing">Edición con IA</string>
+    <string name="settings_subtitles">Subtítulos</string>
+
+    <!-- Permission steps -->
+    <string name="permission_microphone">Micrófono</string>
+    <string name="permission_microphone_description">Graba la voz localmente a 16 kHz mono.</string>
+    <string name="permission_notifications">Notificaciones</string>
+    <string name="permission_notifications_description">Mantiene visible el servicio de grabación en primer plano en Android 13 y versiones posteriores.</string>
+    <string name="permission_overlay">Mostrar sobre otras aplicaciones</string>
+    <string name="permission_overlay_description">Muestra el botón de grabación de Handy sobre la aplicación que estés usando.</string>
+    <string name="permission_accessibility">Escritura por accesibilidad</string>
+    <string name="permission_accessibility_description">Permite que Handy inserte una transcripción terminada en el campo de texto enfocado. Handy no lee contenido de la pantalla más allá de la entrada enfocada necesaria para escribir.</string>
+    <string name="permission_open_notification_settings">Abrir ajustes de notificaciones</string>
+    <string name="permission_open_overlay_settings">Abrir ajustes de superposición</string>
+    <string name="permission_open_accessibility_settings">Abrir ajustes de accesibilidad</string>
+    <string name="permission_enabled">Activado</string>
+    <string name="permission_needed">Pendiente</string>
+
+    <!-- Model store -->
+    <string name="model_store_title">Tienda de modelos</string>
+    <string name="model_store_subtitle">Explora el catálogo de tamaño móvil de Handy. Los modelos se limitan a %1$s parámetros.</string>
+    <string name="model_search_label">Buscar modelos</string>
+    <string name="model_search_placeholder">Nombre, familia de idiomas o arquitectura</string>
+    <string name="model_filter_all">Todos los modelos</string>
+    <string name="model_filter_available">Disponibles ahora</string>
+    <string name="model_import">Importar GGML .bin</string>
+    <string name="model_installed_title">Modelos instalados</string>
+    <string name="model_available_title">Disponibles en Android (%1$d)</string>
+    <string name="model_available_description">Estos modelos Whisper GGML son compatibles con el motor local de Android actual.</string>
+    <string name="model_coming_soon_title">Próximamente (%1$d)</string>
+    <string name="model_coming_soon_description">Estos modelos cumplen el límite de parámetros móvil, pero su backend nativo de Android aún no está disponible. No pueden descargarse de forma segura en esta compilación.</string>
+    <string name="model_status_initial">Elige un modelo para la transcripción local</string>
+    <string name="model_validating">Validando %1$s con Whisper…</string>
+    <string name="model_active_status">Modelo activo: %1$s (SHA-256 %2$s…)</string>
+    <string name="model_downloading">Descargando %1$s…</string>
+    <string name="model_downloaded_status">Descargado y validado: %1$s. Valídalo y úsalo abajo para activarlo.</string>
+    <string name="model_download_or_validation_failed">Falló la descarga o la validación del modelo</string>
+    <string name="model_active">Modelo activo</string>
+    <string name="model_validated_ready">Validado y listo</string>
+    <string name="model_not_validated">Sin validar: aún no se puede usar</string>
+    <string name="model_revalidate">Volver a validar</string>
+    <string name="model_validate_use">Validar y usar</string>
+    <string name="model_installed_hint">Instalado. Usa el control de validación de arriba para activarlo.</string>
+    <string name="model_download_hint">La descarga se valida con hash y Whisper antes de la activación.</string>
+    <string name="model_download">Descargar</string>
+    <string name="model_installed">Instalado</string>
+    <string name="model_coming_soon_entry">Próximamente: aún no hay soporte de Android para %1$s.</string>
+    <string name="model_not_available">Aún no disponible</string>
+    <string name="model_download_size">Descarga de %1$s</string>
+    <plurals name="model_language_count">
+        <item quantity="one">%1$d idioma</item>
+        <item quantity="many">%1$d idiomas</item>
+        <item quantity="other">%1$d idiomas</item>
+    </plurals>
+    <string name="model_imported_status">Importado y validado: %1$s. Valídalo y úsalo abajo para activarlo.</string>
+    <string name="model_import_failed">Falló la importación</string>
+    <string name="model_import_require_bin">Elige un modelo Whisper GGML .bin</string>
+    <string name="model_import_open_failed">No se puede abrir el archivo seleccionado</string>
+    <string name="model_import_empty">El modelo seleccionado está vacío</string>
+    <string name="model_import_finalize_failed">No se pudo finalizar el modelo importado</string>
+
+    <!-- History -->
+    <string name="history_title">Historial</string>
+    <string name="history_subtitle">Tus transcripciones completadas permanecen en este dispositivo.</string>
+    <string name="history_search_label">Buscar en el historial</string>
+    <string name="history_search_placeholder">Buscar por texto transcrito</string>
+    <string name="history_filter_all">Todos</string>
+    <string name="history_clear">Borrar historial</string>
+    <plurals name="history_count">
+        <item quantity="one">%1$d entrada</item>
+        <item quantity="many">%1$d entradas</item>
+        <item quantity="other">%1$d entradas</item>
+    </plurals>
+    <string name="history_empty">Aún no hay transcripciones. Tu próxima transcripción correcta aparecerá aquí.</string>
+    <string name="history_empty_filtered">No hay entradas del historial que coincidan con estos filtros.</string>
+    <string name="history_clear_dialog_title">¿Borrar historial?</string>
+    <string name="history_clear_dialog_text">Esto elimina permanentemente todas las transcripciones guardadas de este dispositivo.</string>
+    <string name="history_clear_confirm">Borrar</string>
+    <string name="history_copy">Copiar</string>
+    <string name="history_share">Compartir</string>
+    <string name="history_play">Reproducir</string>
+    <string name="history_pause">Pausar</string>
+    <string name="history_share_chooser">Compartir transcripción</string>
+    <string name="history_source_floating_button">Botón flotante</string>
+    <string name="history_source_input_method">Teclado de voz</string>
+    <string name="history_source_voice_recognition">Reconocimiento de voz</string>
+    <string name="history_source_voice_input">Entrada de voz</string>
+    <string name="history_source_audio_file">Archivo de audio</string>
+    <string name="history_source_other">Otro</string>
+
+    <!-- Engine settings -->
+    <string name="engine_settings_title">Ajustes del motor</string>
+    <string name="engine_settings_description">Idioma de Whisper, contexto de decodificación, memoria y comportamiento del sistema.</string>
+    <string name="engine_decoding_title">Decodificación</string>
+    <string name="engine_language_label">Idioma</string>
+    <string name="engine_translate">Traducir al inglés</string>
+    <string name="engine_initial_prompt">Prompt inicial</string>
+    <string name="engine_unload_label">Descargar modelo tras inactividad (ms; 0 = mantener cargado)</string>
+    <string name="engine_backend_label">Backend</string>
+    <string name="engine_backend_hint">Vulkan se usa cuando la compilación nativa incluye el backend; la CPU sigue siendo el valor seguro por defecto.</string>
+    <string name="engine_audio_title">Audio</string>
+    <string name="engine_buffer_label">Búfer extra de grabación (ms)</string>
+    <string name="engine_mute">Bajar el volumen de otros audios al grabar</string>
+    <string name="engine_automation_title">Automatización</string>
+    <string name="engine_auto_submit">Enviar con Enter tras la inserción</string>
+    <string name="engine_remove_fillers">Eliminar muletillas (eh, um, este)</string>
+    <string name="engine_trim_space">Recortar espacios finales</string>
+    <string name="engine_boot">Iniciar el botón flotante al encender</string>
+    <string name="engine_device_default">Predeterminado del sistema</string>
+    <string name="engine_microphone_label">Micrófono: %1$s</string>
+    <string name="engine_device_bluetooth">Bluetooth (%1$s)</string>
+    <string name="engine_device_headset">Auriculares (%1$s)</string>
+    <string name="engine_device_internal">Interno (%1$s)</string>
+
+    <!-- Post-processing -->
+    <string name="postprocess_title">Postprocesado</string>
+    <string name="postprocess_description">Limpia las transcripciones locales antes de que Handy las inserte o las guarde. Ningún texto sale del dispositivo.</string>
+    <string name="postprocess_enable_description">Aplica reemplazos de vocabulario y los pasos de limpieza de texto activados.</string>
+    <string name="postprocess_capitalize">Autocapitalizar</string>
+    <string name="postprocess_capitalize_description">Pone en mayúscula el inicio de las frases y el pronombre aislado “i”.</string>
+    <string name="postprocess_punctuation">Limpieza de puntuación</string>
+    <string name="postprocess_punctuation_description">Elimina espacios antes de la puntuación y colapsa espacios duplicados.</string>
+    <string name="postprocess_edit_words">Editar palabras y reglas personalizadas</string>
+
+    <!-- Custom words -->
+    <string name="custom_words_title">Palabras personalizadas</string>
+    <string name="custom_words_hint">Una palabra o frase por línea. Usa `texto oído = texto preferido` para un reemplazo explícito.</string>
+    <string name="custom_words_field_label">Palabras y reglas</string>
+
+    <!-- LLM settings -->
+    <string name="llm_prompt_library">Biblioteca de prompts</string>
+    <string name="llm_template_name">Nombre de la plantilla</string>
+    <string name="llm_save_template">Guardar plantilla</string>
+
+    <!-- Recognize -->
+    <string name="recognize_title">Entrada de voz de Handy</string>
+    <string name="recognize_status_ready">Listo</string>
+    <string name="recognize_listening">Escuchando…</string>
+    <string name="recognize_record">Grabar</string>
+    <string name="recognize_mic_unavailable">Micrófono no disponible</string>
+    <string name="recognize_failed">Falló la transcripción</string>
+
+    <!-- Transcribe file -->
+    <string name="transcribe_file_title">Transcribir audio</string>
+    <string name="transcribe_file_choose">Elige un archivo de audio para empezar</string>
+    <string name="transcribe_file_transcribe">Transcribir</string>
+    <string name="transcribe_file_copy">Copiar resultado</string>
+    <string name="transcribe_file_none">No se proporcionó ningún archivo de audio</string>
+    <string name="transcribe_file_unreadable">No se puede acceder al archivo de audio seleccionado</string>
+    <string name="transcribe_file_decoding">Decodificando audio…</string>
+    <string name="transcribe_file_no_speech">No se detectó voz</string>
+    <string name="transcribe_file_failed">No se puede transcribir el audio</string>
+    <string name="transcribe_file_copied">Copiado</string>
+
+    <!-- Live subtitles -->
+    <string name="live_subtitle_title">Subtítulos en vivo</string>
+    <string name="live_subtitle_initial">Los subtítulos en vivo usan una superposición del sistema.</string>
+    <string name="live_subtitle_start">Iniciar superposición</string>
+    <string name="live_subtitle_stop">Detener superposición</string>
+    <string name="live_subtitle_enable_overlay">Activa el acceso a la superposición y vuelve a iniciar.</string>
+    <string name="live_subtitle_started">Superposición iniciada</string>
+    <string name="live_subtitle_stopped">Superposición detenida</string>
+    <string name="live_subtitle_ready">Listo para escuchar</string>
+    <string name="live_subtitle_perm_mic">Se requiere el permiso de micrófono</string>
+    <string name="live_subtitle_perm_overlay">Se requiere el permiso de superposición</string>
+    <string name="live_subtitle_paused">En pausa</string>
+    <string name="live_subtitle_overlay_ready">Subtítulos de Handy listos</string>
+    <string name="live_subtitle_notification_title">Subtítulos de Handy</string>
+
+    <!-- Live logs -->
+    <string name="live_logs_title">Registros en vivo</string>
+    <string name="live_logs_description">Los registros permanecen en el directorio privado de la aplicación.</string>
+    <string name="live_logs_empty">Aún no hay entradas de diagnóstico.</string>
+    <string name="live_logs_clear">Borrar registros</string>
+    <string name="live_logs_close">Cerrar</string>
+
+    <!-- Floating button service -->
+    <string name="floating_button_ready">Listo para grabar</string>
+    <string name="floating_cd_ready">Handy: listo</string>
+    <string name="floating_cd_push_to_talk">Handy: hablar y soltar</string>
+    <string name="floating_cd_recording">Handy: grabando</string>
+    <string name="floating_cd_processing">Handy: procesando</string>
+    <string name="channel_recording">Grabación de Handy</string>
+
+    <!-- Input method -->
+    <string name="ime_ready">Handy listo</string>
+    <string name="ime_mic">Mic</string>
+    <string name="ime_allow_mic">Permite el micrófono en Handy</string>
+    <string name="ime_push_to_talk">Hablar y soltar…</string>
+    <string name="ime_no_speech">No hay voz</string>
 </resources>

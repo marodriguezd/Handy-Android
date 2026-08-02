@@ -1,4 +1,251 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Handy</string><string name="accessibility_service_description">Handy がローカル文字起こしをフォーカス中の入力欄に入力できるようにします。</string><string name="voice_subtype">音声</string><string name="recording_service_title">Handy 録音サービス</string><string name="recording_service_description">音声入力を待機中</string><string name="model_download_failed">モデルのダウンロードに失敗しました</string><string name="model_invalid">モデルの検証に失敗しました</string><string name="no_model_selected">モデルが選択されていません</string><string name="transcribing">文字起こし中…</string><string name="transcription_complete">文字起こし完了</string><string name="quick_settings_tile_label">Handy 音声入力</string><string name="text_copied_to_clipboard">テキストをクリップボードにコピーしました</string><string name="llm_settings_title">AI 後処理</string><string name="llm_settings_description">テキストを OpenAI 互換サービスに送信して編集できます。</string><string name="llm_endpoint_label">エンドポイント</string><string name="llm_api_key_label">API キー</string><string name="llm_model_label">モデル</string><string name="llm_system_prompt_label">システムプロンプト</string><string name="llm_enable_label">AI 後処理を使用</string><string name="save">保存</string>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="app_name">Handy</string>
+    <string name="accessibility_service_description">Handy がローカルの文字起こしをフォーカス中のテキスト欄に入力できるようにします。</string>
+    <string name="voice_subtype">音声</string>
+    <string name="recording_service_title">Handy 録音サービス</string>
+    <string name="recording_service_description">音声入力を待機中</string>
+    <string name="model_download_failed">モデルのダウンロードに失敗しました</string>
+    <string name="model_invalid">モデルの検証に失敗しました</string>
+    <string name="no_model_selected">モデルが選択されていません</string>
+    <string name="transcribing">文字起こし中…</string>
+    <string name="transcription_complete">文字起こしが完了しました</string>
+    <string name="quick_settings_tile_label">Handy ディクテーション</string>
+    <string name="text_copied_to_clipboard">テキストをクリップボードにコピーしました</string>
+    <string name="llm_settings_title">AI 後処理</string>
+    <string name="llm_settings_description">有効にすると、文字起こしテキストが編集のため設定済みの OpenAI 互換サービスに送信されます。利用できない場合は Handy がローカルの結果を保持します。ローカルエンドポイントを除き HTTPS が必要です。</string>
+    <string name="llm_endpoint_label">エンドポイント</string>
+    <string name="llm_api_key_label">API キー</string>
+    <string name="llm_model_label">モデル</string>
+    <string name="llm_system_prompt_label">システムプロンプト</string>
+    <string name="llm_enable_label">AI 後処理を使用する</string>
+    <string name="save">保存</string>
+
+    <!-- General -->
+    <string name="back">戻る</string>
+    <string name="cancel">キャンセル</string>
+    <string name="delete">削除</string>
+    <string name="stop">停止</string>
+
+    <!-- Navigation -->
+    <string name="nav_tab_transcription">文字起こし</string>
+    <string name="nav_tab_store">ストア</string>
+
+    <!-- Main screen -->
+    <string name="main_title">プライベート音声入力</string>
+    <string name="main_subtitle">音声をローカルで文字起こしし、フォーカス中のアプリに入力します。</string>
+    <string name="main_ready_title">Handy の準備ができました</string>
+    <string name="main_setup_title">セットアップを完了して Handy を起動してください</string>
+    <string name="main_ready_description">必要なアクセスがすべて有効です。フローティングボタンを起動できます。</string>
+    <string name="main_setup_description">Handy がすべてのアプリで動作するには、マイク、通知、オーバーレイ、アクセシビリティへのアクセスが必要です。</string>
+    <string name="main_open_app_settings">アプリの設定を開く</string>
+    <string name="main_allow_microphone">マイクを許可</string>
+    <string name="main_allow_notifications">通知を許可</string>
+    <string name="main_allow_overlay">オーバーレイを許可</string>
+    <string name="main_enable_accessibility">アクセシビリティを有効化</string>
+    <string name="main_handy_running">Handy 実行中</string>
+    <string name="main_start_handy">Handy を起動</string>
+    <string name="main_permissions_title">権限</string>
+    <string name="main_permissions_description">各手順を完了してください。システム設定から戻ると Handy が自動的に再確認します。</string>
+    <string name="main_feedback_title">フィードバック</string>
+    <string name="main_feedback_description">録音や文字起こしのイベントを音または振動で知らせるかどうかを選択します。</string>
+    <string name="main_sound_feedback">サウンド</string>
+    <string name="main_haptic_feedback">振動</string>
+    <string name="main_dynamic_color">ダイナミックカラー</string>
+    <string name="main_settings_title">設定</string>
+    <string name="main_store_none">インストールされたモデルはありません</string>
+    <plurals name="main_store_installed">
+        <item quantity="other">%1$d 個のモデルがインストールされています</item>
+    </plurals>
+    <string name="main_store_description">Whisper GGML モデルをダウンロードまたはインポートして、音声をローカルで文字起こしします。モデルは有効化前に検証されます。</string>
+    <string name="main_store_browse">すべてのモデルを見る</string>
+    <string name="main_store_footer">完全なカタログには、対応ダウンロード、インストール済みモデルの検証、近日公開の項目が含まれます。</string>
+
+    <!-- Settings rows -->
+    <string name="settings_models">モデル</string>
+    <string name="settings_ai_editing">AI 編集</string>
+    <string name="settings_subtitles">字幕</string>
+
+    <!-- Permission steps -->
+    <string name="permission_microphone">マイク</string>
+    <string name="permission_microphone_description">音声をローカルで 16 kHz モノラル録音します。</string>
+    <string name="permission_notifications">通知</string>
+    <string name="permission_notifications_description">Android 13 以降でフォアグラウンド録音サービスを表示し続けます。</string>
+    <string name="permission_overlay">他のアプリの上に表示</string>
+    <string name="permission_overlay_description">使用中のアプリの上に Handy の録音ボタンを表示します。</string>
+    <string name="permission_accessibility">アクセシビリティ入力</string>
+    <string name="permission_accessibility_description">Handy が完成した文字起こしをフォーカス中のテキスト欄に入力できるようにします。Handy は入力に必要なフォーカス欄以外の画面内容を読み取りません。</string>
+    <string name="permission_open_notification_settings">通知設定を開く</string>
+    <string name="permission_open_overlay_settings">オーバーレイ設定を開く</string>
+    <string name="permission_open_accessibility_settings">アクセシビリティ設定を開く</string>
+    <string name="permission_enabled">有効</string>
+    <string name="permission_needed">必要</string>
+
+    <!-- Model store -->
+    <string name="model_store_title">モデルストア</string>
+    <string name="model_store_subtitle">Handy のモバイル向けカタログを閲覧します。モデルは %1$s パラメータに制限されています。</string>
+    <string name="model_search_label">モデルを検索</string>
+    <string name="model_search_placeholder">名前、言語ファミリー、またはアーキテクチャ</string>
+    <string name="model_filter_all">すべてのモデル</string>
+    <string name="model_filter_available">今すぐ利用可能</string>
+    <string name="model_import">GGML .bin をインポート</string>
+    <string name="model_installed_title">インストール済みモデル</string>
+    <string name="model_available_title">Android で利用可能 (%1$d)</string>
+    <string name="model_available_description">これらの Whisper GGML モデルは現在のローカル Android エンジンでサポートされています。</string>
+    <string name="model_coming_soon_title">近日公開 (%1$d)</string>
+    <string name="model_coming_soon_description">これらのモデルはモバイルのパラメータ上限を満たしていますが、ネイティブの Android バックエンドがまだ利用できません。このビルドでは安全にダウンロードできません。</string>
+    <string name="model_status_initial">ローカル文字起こし用のモデルを選択してください</string>
+    <string name="model_validating">%1$s を Whisper で検証中…</string>
+    <string name="model_active_status">アクティブなモデル: %1$s (SHA-256 %2$s…)</string>
+    <string name="model_downloading">%1$s をダウンロード中…</string>
+    <string name="model_downloaded_status">ダウンロードして検証済み: %1$s。下の「検証して使用」で有効化してください。</string>
+    <string name="model_download_or_validation_failed">モデルのダウンロードまたは検証に失敗しました</string>
+    <string name="model_active">アクティブなモデル</string>
+    <string name="model_validated_ready">検証済み・使用可能</string>
+    <string name="model_not_validated">未検証: まだ使用できません</string>
+    <string name="model_revalidate">再検証</string>
+    <string name="model_validate_use">検証して使用</string>
+    <string name="model_installed_hint">インストール済み。上の検証コントロールで有効化してください。</string>
+    <string name="model_download_hint">ダウンロードは有効化前にハッシュと Whisper で検証されます。</string>
+    <string name="model_download">ダウンロード</string>
+    <string name="model_installed">インストール済み</string>
+    <string name="model_coming_soon_entry">近日公開: %1$s の Android サポートはまだ実装されていません。</string>
+    <string name="model_not_available">まだ利用できません</string>
+    <string name="model_download_size">%1$s のダウンロード</string>
+    <plurals name="model_language_count">
+        <item quantity="other">%1$d 言語</item>
+    </plurals>
+    <string name="model_imported_status">インポートして検証済み: %1$s。下の「検証して使用」で有効化してください。</string>
+    <string name="model_import_failed">インポートに失敗しました</string>
+    <string name="model_import_require_bin">Whisper GGML .bin モデルを選択してください</string>
+    <string name="model_import_open_failed">選択したファイルを開けません</string>
+    <string name="model_import_empty">選択したモデルが空です</string>
+    <string name="model_import_finalize_failed">インポートしたモデルを確定できませんでした</string>
+
+    <!-- History -->
+    <string name="history_title">履歴</string>
+    <string name="history_subtitle">完了した文字起こしはこの端末に保存されます。</string>
+    <string name="history_search_label">履歴を検索</string>
+    <string name="history_search_placeholder">文字起こしテキストで検索</string>
+    <string name="history_filter_all">すべて</string>
+    <string name="history_clear">履歴を消去</string>
+    <plurals name="history_count">
+        <item quantity="other">%1$d 件</item>
+    </plurals>
+    <string name="history_empty">まだ文字起こしはありません。次の成功した文字起こしがここに表示されます。</string>
+    <string name="history_empty_filtered">これらのフィルタに一致する履歴はありません。</string>
+    <string name="history_clear_dialog_title">履歴を消去しますか？</string>
+    <string name="history_clear_dialog_text">この端末に保存されたすべての文字起こしが完全に削除されます。</string>
+    <string name="history_clear_confirm">消去</string>
+    <string name="history_copy">コピー</string>
+    <string name="history_share">共有</string>
+    <string name="history_play">再生</string>
+    <string name="history_pause">一時停止</string>
+    <string name="history_share_chooser">文字起こしを共有</string>
+    <string name="history_source_floating_button">フローティングボタン</string>
+    <string name="history_source_input_method">音声キーボード</string>
+    <string name="history_source_voice_recognition">音声認識</string>
+    <string name="history_source_voice_input">音声入力</string>
+    <string name="history_source_audio_file">音声ファイル</string>
+    <string name="history_source_other">その他</string>
+
+    <!-- Engine settings -->
+    <string name="engine_settings_title">エンジン設定</string>
+    <string name="engine_settings_description">Whisper の言語、デコードコンテキスト、メモリ、システム動作。</string>
+    <string name="engine_decoding_title">デコード</string>
+    <string name="engine_language_label">言語</string>
+    <string name="engine_translate">英語に翻訳</string>
+    <string name="engine_initial_prompt">初期プロンプト</string>
+    <string name="engine_unload_label">アイドル後にモデルをアンロード (ms; 0 = ロードしたまま)</string>
+    <string name="engine_backend_label">バックエンド</string>
+    <string name="engine_backend_hint">Vulkan はネイティブビルドがバックエンドを公開している場合に使用されます。CPU が安全な既定値です。</string>
+    <string name="engine_audio_title">オーディオ</string>
+    <string name="engine_buffer_label">追加録音バッファ (ms)</string>
+    <string name="engine_mute">録音中に他の音声を下げる</string>
+    <string name="engine_automation_title">自動化</string>
+    <string name="engine_auto_submit">挿入後に Enter で送信</string>
+    <string name="engine_remove_fillers">フィラーワードを削除 (えー、うー)</string>
+    <string name="engine_trim_space">末尾のスペースを削除</string>
+    <string name="engine_boot">起動後にフローティングボタンを開始</string>
+    <string name="engine_device_default">システム既定</string>
+    <string name="engine_microphone_label">マイク: %1$s</string>
+    <string name="engine_device_bluetooth">Bluetooth (%1$s)</string>
+    <string name="engine_device_headset">ヘッドセット (%1$s)</string>
+    <string name="engine_device_internal">内蔵 (%1$s)</string>
+
+    <!-- Post-processing -->
+    <string name="postprocess_title">後処理</string>
+    <string name="postprocess_description">Handy が挿入または保存する前にローカルの文字起こしをクリーンアップします。テキストが端末の外に出ることはありません。</string>
+    <string name="postprocess_enable_description">語彙の置換と有効なテキストクリーンアップ手順を適用します。</string>
+    <string name="postprocess_capitalize">自動大文字化</string>
+    <string name="postprocess_capitalize_description">文の先頭と単独の「i」を大文字にします。</string>
+    <string name="postprocess_punctuation">句読点のクリーンアップ</string>
+    <string name="postprocess_punctuation_description">句読点の前のスペースを削除し、重複スペースをまとめます。</string>
+    <string name="postprocess_edit_words">カスタムワードとルールを編集</string>
+
+    <!-- Custom words -->
+    <string name="custom_words_title">カスタムワード</string>
+    <string name="custom_words_hint">1 行に 1 つの単語またはフレーズ。明示的な置換には `聞こえたテキスト = 優先テキスト` を使用します。</string>
+    <string name="custom_words_field_label">単語とルール</string>
+
+    <!-- LLM settings -->
+    <string name="llm_prompt_library">プロンプトライブラリ</string>
+    <string name="llm_template_name">テンプレート名</string>
+    <string name="llm_save_template">テンプレートを保存</string>
+
+    <!-- Recognize -->
+    <string name="recognize_title">Handy 音声入力</string>
+    <string name="recognize_status_ready">準備完了</string>
+    <string name="recognize_listening">聞いています…</string>
+    <string name="recognize_record">録音</string>
+    <string name="recognize_mic_unavailable">マイクを利用できません</string>
+    <string name="recognize_failed">文字起こしに失敗しました</string>
+
+    <!-- Transcribe file -->
+    <string name="transcribe_file_title">音声を文字起こし</string>
+    <string name="transcribe_file_choose">開始する音声ファイルを選択してください</string>
+    <string name="transcribe_file_transcribe">文字起こし</string>
+    <string name="transcribe_file_copy">結果をコピー</string>
+    <string name="transcribe_file_none">音声ファイルが提供されていません</string>
+    <string name="transcribe_file_unreadable">選択した音声ファイルにアクセスできません</string>
+    <string name="transcribe_file_decoding">音声をデコード中…</string>
+    <string name="transcribe_file_no_speech">音声が検出されませんでした</string>
+    <string name="transcribe_file_failed">音声を文字起こしできません</string>
+    <string name="transcribe_file_copied">コピーしました</string>
+
+    <!-- Live subtitles -->
+    <string name="live_subtitle_title">ライブ字幕</string>
+    <string name="live_subtitle_initial">ライブ字幕はシステムのオーバーレイを使用します。</string>
+    <string name="live_subtitle_start">オーバーレイを開始</string>
+    <string name="live_subtitle_stop">オーバーレイを停止</string>
+    <string name="live_subtitle_enable_overlay">オーバーレイへのアクセスを有効にしてから再起動してください。</string>
+    <string name="live_subtitle_started">オーバーレイを開始しました</string>
+    <string name="live_subtitle_stopped">オーバーレイを停止しました</string>
+    <string name="live_subtitle_ready">聞く準備ができました</string>
+    <string name="live_subtitle_perm_mic">マイクの権限が必要です</string>
+    <string name="live_subtitle_perm_overlay">オーバーレイの権限が必要です</string>
+    <string name="live_subtitle_paused">一時停止中</string>
+    <string name="live_subtitle_overlay_ready">Handy 字幕の準備ができました</string>
+    <string name="live_subtitle_notification_title">Handy 字幕</string>
+
+    <!-- Live logs -->
+    <string name="live_logs_title">ライブログ</string>
+    <string name="live_logs_description">ログはアプリのプライベートディレクトリに保存されます。</string>
+    <string name="live_logs_empty">診断エントリはまだありません。</string>
+    <string name="live_logs_clear">ログを消去</string>
+    <string name="live_logs_close">閉じる</string>
+
+    <!-- Floating button service -->
+    <string name="floating_button_ready">録音の準備ができました</string>
+    <string name="floating_cd_ready">Handy: 準備完了</string>
+    <string name="floating_cd_push_to_talk">Handy: 押しながら話す</string>
+    <string name="floating_cd_recording">Handy: 録音中</string>
+    <string name="floating_cd_processing">Handy: 処理中</string>
+    <string name="channel_recording">Handy 録音</string>
+
+    <!-- Input method -->
+    <string name="ime_ready">Handy 準備完了</string>
+    <string name="ime_mic">Mic</string>
+    <string name="ime_allow_mic">Handy でマイクを許可してください</string>
+    <string name="ime_push_to_talk">押しながら話す…</string>
+    <string name="ime_no_speech">音声なし</string>
 </resources>

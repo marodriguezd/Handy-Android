@@ -171,14 +171,6 @@ void cancel_context(jlong context_ptr) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_handy_android_WhisperLib_cancelTranscribe(
-    JNIEnv* /* env */,
-    jobject /* thiz */,
-    jlong context_ptr) {
-    cancel_context(context_ptr);
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_com_handy_android_WhisperLib_cancelTranscribe__J(
     JNIEnv* /* env */,
     jobject /* thiz */,

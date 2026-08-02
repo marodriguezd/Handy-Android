@@ -1,0 +1,16 @@
+<resources>
+    <!-- Light palette (mirrors ui/theme/Color.kt md_theme_light_*) -->
+    <color name="handy_primary">#6750A4</color>
+    <color name="handy_on_primary">#FFFFFF</color>
+    <color name="handy_primary_container">#EADDFF</color>
+    <color name="handy_tertiary">#7D5260</color>
+    <color name="handy_surface">#FEF7FF</color>
+    <color name="handy_on_surface">#1D1B20</color>
+    <color name="handy_on_surface_variant">#49454F</color>
+    <color name="handy_outline">#79747E</color>
+
+    <!-- Dark palette (mirrors ui/theme/Color.kt md_theme_dark_*), used by window/splash theme -->
+    <color name="handy_primary_dark">#D0BCFF</color>
+    <color name="handy_primary_dark_container">#4F378B</color>
+    <color name="handy_surface_dark">#141218</color>
+</resources>

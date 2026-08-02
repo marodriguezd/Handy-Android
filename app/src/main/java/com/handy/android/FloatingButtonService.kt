@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
@@ -52,8 +51,25 @@ class FloatingButtonService : Service() {
             onAmplitude = { amplitude -> mainHandler.post { waveform?.setAmplitude(amplitude) } },
         )
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, notification("Ready to record"))
+        runCatching {
+            startForeground(NOTIFICATION_ID, notification(getString(R.string.floating_button_ready)))
+        }.onFailure { error ->
+            // RECORD_AUDIO may be revoked at runtime; starting a microphone FGS without it
+            // throws SecurityException on Android 14+.
+            AppLog.record(this, "E", TAG, "Unable to start foreground service", error)
+            stopSelf()
+            return
+        }
         if (Settings.canDrawOverlays(this)) showOverlay()
+    }
+
+    private fun updateOverlayColors(isRecordingState: Boolean) {
+        val accentColor = ContextCompat.getColor(
+            this,
+            if (isRecordingState) R.color.handy_tertiary else R.color.handy_primary,
+        )
+        waveform?.setWaveformColor(accentColor)
+        overlayDot?.setTextColor(accentColor)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -76,7 +92,8 @@ class FloatingButtonService : Service() {
         mainHandler.removeCallbacks(holdRunnable)
         recorder.stop()
         waveform?.setAmplitude(0f)
-        overlay?.contentDescription = "Handy: ready"
+        updateOverlayColors(false)
+        overlay?.contentDescription = getString(R.string.floating_cd_ready)
     }
 
     private fun startRecording(pushToTalk: Boolean = false) {
@@ -84,8 +101,9 @@ class FloatingButtonService : Service() {
         this.pushToTalk = pushToTalk
         recording = true
         isRecording = true
+        updateOverlayColors(true)
         if (pushToTalk) AudioFeedbackManager.onStartPushToTalk(this) else AudioFeedbackManager.onStartRecording(this)
-        overlay?.contentDescription = if (pushToTalk) "Handy: push to talk" else "Handy: recording"
+        overlay?.contentDescription = getString(if (pushToTalk) R.string.floating_cd_push_to_talk else R.string.floating_cd_recording)
     }
 
     private fun stopRecording() {
@@ -96,9 +114,10 @@ class FloatingButtonService : Service() {
         pushToTalk = false
         if (wasPushToTalk) AudioFeedbackManager.onStopPushToTalk(this) else AudioFeedbackManager.onStopRecording(this)
         waveform?.setAmplitude(0f)
+        updateOverlayColors(false)
         val samples = recorder.stop()
         val audioPath = runCatching { AudioRecorder.writeWav(this@FloatingButtonService, samples).absolutePath }.getOrNull()
-        overlay?.contentDescription = "Handy: processing"
+        overlay?.contentDescription = getString(R.string.floating_cd_processing)
         scope.launch(Dispatchers.Default) {
             val result = runCatching {
                 TranscriptionEngine.transcribe(this@FloatingButtonService, samples)
@@ -116,24 +135,28 @@ class FloatingButtonService : Service() {
                 )
                 AutoTypeAccessibilityService.instance?.insertText(result)
             }
-            launch(Dispatchers.Main) { overlay?.contentDescription = "Handy: ready" }
+            launch(Dispatchers.Main) { overlay?.contentDescription = getString(R.string.floating_cd_ready) }
         }
     }
 
     private fun showOverlay() {
+        val primaryColor = ContextCompat.getColor(this, R.color.handy_primary)
+        val containerColor = ContextCompat.getColor(this, R.color.handy_primary_container)
         val waveformView = AudioWaveformView(this).apply {
-            setBackgroundColor(Color.rgb(76, 56, 150))
-            contentDescription = "Handy: ready"
+            setBackgroundColor(containerColor)
+            setWaveformColor(primaryColor)
+            contentDescription = getString(R.string.floating_cd_ready)
         }
         waveform = waveformView
         val container = FrameLayout(this)
         val touchTarget = TextView(this).apply {
             text = "●"
             textSize = 22f
-            setTextColor(Color.WHITE)
+            setTextColor(primaryColor)
             gravity = Gravity.CENTER
             setOnClickListener { toggleRecording() }
         }
+        overlayDot = touchTarget
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -204,6 +227,8 @@ class FloatingButtonService : Service() {
         overlay = container
     }
 
+    private var overlayDot: TextView? = null
+
     override fun onDestroy() {
         mainHandler.removeCallbacks(holdRunnable)
         if (recording) stopRecording()
@@ -212,6 +237,7 @@ class FloatingButtonService : Service() {
         recorder.release()
         overlay?.let { view -> runCatching { getSystemService(WindowManager::class.java).removeView(view) } }
         overlay = null
+        overlayDot = null
         waveform = null
         scope.cancel()
         super.onDestroy()
@@ -220,8 +246,8 @@ class FloatingButtonService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun notification(message: String): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-        .setContentTitle("Handy")
+        .setSmallIcon(R.drawable.ic_stat_handy)
+        .setContentTitle(getString(R.string.app_name))
         .setContentText(message)
         .setOngoing(true)
         .build()
@@ -229,7 +255,7 @@ class FloatingButtonService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Handy recording", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CHANNEL_ID, getString(R.string.channel_recording), NotificationManager.IMPORTANCE_LOW),
             )
         }
     }

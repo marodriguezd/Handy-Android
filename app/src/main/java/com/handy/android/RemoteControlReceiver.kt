@@ -12,6 +12,12 @@ class RemoteControlReceiver : BroadcastReceiver() {
             ACTION_CANCEL, FloatingButtonService.ACTION_CANCEL -> FloatingButtonService.ACTION_CANCEL
             else -> return
         }
+        // Starting the microphone foreground service requires RECORD_AUDIO (Android 14+).
+        // If the service is already running the intent is just re-delivered, so allow it.
+        if (!PermissionChecker.canStartMicrophoneService(context, FloatingButtonService.isRunning)) {
+            AppLog.record(context, "E", "RemoteControl", "RECORD_AUDIO missing, ignoring remote command")
+            return
+        }
         runCatching {
             ContextCompat.startForegroundService(
                 context,

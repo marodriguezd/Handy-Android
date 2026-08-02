@@ -48,6 +48,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Check material3 stable status (Expressive migration gate)
+        run: |
+          python3 scripts/check_material3_stable.py
+          python3 scripts/check_material3_stable.py --selftest
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

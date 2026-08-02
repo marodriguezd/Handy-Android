@@ -36,7 +36,7 @@ El módulo Android es un proyecto Gradle independiente en la raíz. La aplicaci�
   - `Java_com_handy_android_WhisperLib_initContext`
   - `Java_com_handy_android_WhisperLib_freeContext`
   - `Java_com_handy_android_WhisperLib_fullTranscribe`
-  - `Java_com_handy_android_WhisperLib_cancelTranscribe`
+  - `Java_com_handy_android_WhisperLib_cancelTranscribe__J` (única variante válida; el `cancelTranscribe()` sin args de `IWhisperEngine` es un override normal, no `external`)
 - Captura: PCM 16 kHz, mono, 16-bit, normalizado a `[-1, 1]`.
 - Modelos: `files/models/*.bin`.
 - Modelo activo: `files/active_model` mediante `SettingsManager`.

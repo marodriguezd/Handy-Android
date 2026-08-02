@@ -27,14 +27,15 @@ object HistorySource {
     const val LIVE_SUBTITLE = "live_subtitle"
     const val UNKNOWN = "unknown"
 
-    fun label(sourceType: String): String = when (sourceType) {
-        FLOATING_BUTTON -> "Floating button"
-        INPUT_METHOD -> "Voice keyboard"
-        VOICE_RECOGNITION -> "Voice recognition"
-        VOICE_INPUT -> "Voice input"
-        AUDIO_FILE -> "Audio file"
-        LIVE_SUBTITLE -> "Live subtitles"
-        else -> "Other"
+    @androidx.annotation.StringRes
+    fun labelRes(sourceType: String): Int = when (sourceType) {
+        FLOATING_BUTTON -> R.string.history_source_floating_button
+        INPUT_METHOD -> R.string.history_source_input_method
+        VOICE_RECOGNITION -> R.string.history_source_voice_recognition
+        VOICE_INPUT -> R.string.history_source_voice_input
+        AUDIO_FILE -> R.string.history_source_audio_file
+        LIVE_SUBTITLE -> R.string.live_subtitle_title
+        else -> R.string.history_source_other
     }
 }
 

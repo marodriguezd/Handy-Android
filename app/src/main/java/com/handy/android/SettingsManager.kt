@@ -16,7 +16,6 @@ object SettingsManager {
     private const val EXTRA_RECORDING_BUFFER_MS = "extra_recording_buffer_ms"
     private const val MUTE_WHILE_RECORDING = "mute_while_recording"
     private const val INPUT_DEVICE_ID = "input_device_id"
-    private const val ALWAYS_ON_MICROPHONE = "always_on_microphone"
     private const val AUTO_SUBMIT = "auto_submit"
     private const val REMOVE_FILLER_WORDS = "remove_filler_words"
     private const val TRIM_TRAILING_SPACE = "trim_trailing_space"
@@ -28,6 +27,7 @@ object SettingsManager {
     private const val PUNCTUATION_CLEANUP_ENABLED = "punctuation_cleanup_enabled"
     private const val SOUND_FEEDBACK_ENABLED = "sound_feedback_enabled"
     private const val HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled"
+    private const val DYNAMIC_COLOR_ENABLED = "dynamic_color_enabled"
     private const val LLM_ENABLED = "llm_enabled"
     private const val LLM_ENDPOINT = "llm_endpoint"
     private const val LLM_API_KEY = "llm_api_key"
@@ -129,12 +129,6 @@ object SettingsManager {
         val target = file(context, INPUT_DEVICE_ID)
         if (deviceId == null) target.delete() else target.writeText(deviceId.toString())
     }
-
-    fun alwaysOnMicrophoneEnabled(context: Context): Boolean =
-        booleanSetting(context, ALWAYS_ON_MICROPHONE, default = false)
-
-    fun setAlwaysOnMicrophoneEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, ALWAYS_ON_MICROPHONE), enabled)
 
     fun autoSubmitEnabled(context: Context): Boolean =
         booleanSetting(context, AUTO_SUBMIT, default = false)
@@ -241,6 +235,13 @@ object SettingsManager {
 
     fun setHapticFeedbackEnabled(context: Context, enabled: Boolean) =
         setBoolean(file(context, HAPTIC_FEEDBACK_ENABLED), enabled)
+
+    /** Whether the Material You dynamic colour scheme should replace the fixed brand palette (API 31+). */
+    fun dynamicColorEnabled(context: Context): Boolean =
+        booleanSetting(context, DYNAMIC_COLOR_ENABLED, default = false)
+
+    fun setDynamicColorEnabled(context: Context, enabled: Boolean) =
+        setBoolean(file(context, DYNAMIC_COLOR_ENABLED), enabled)
 
     fun llmEnabled(context: Context): Boolean =
         booleanSetting(context, LLM_ENABLED, default = false)

@@ -60,10 +60,8 @@ class AutoTypeAccessibilityService : AccessibilityService() {
     }
 
     private fun performImeEnter(node: AccessibilityNodeInfo?) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || node == null) return
-        // ACTION_IME_ENTER is 0x00400000 in the Android accessibility API.
-        // Use the numeric id so this module remains source-compatible with older SDK stubs.
-        node.performAction(0x00400000)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || node == null) return
+        node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
     }
 
     companion object {

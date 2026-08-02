@@ -19,7 +19,9 @@ Canonical Android validation commands:
 ./gradlew checkModelCatalog
 ```
 
-The Android model storefront is generated from `src-tauri/src/catalog/catalog.json` by `scripts/generate_android_model_catalog.py`. Keep the three Android-compatible legacy `.bin` artifacts in `scripts/android_model_catalog_overrides.json`; do not edit `ModelCatalog.kt` manually. `checkModelCatalog` is part of `preBuild` and must fail when the generated source is stale. The current catalog is limited to 1.2 billion parameters and only the three Whisper `.bin` overrides are downloadable by the current JNI backend; other entries are displayed as coming soon.
+The Android model storefront is generated from `src-tauri/src/catalog/catalog.json` by `scripts/generate_android_model_catalog.py`.
+
+When a stable Compose Material3 1.5.x is released, the Expressive migration (AUDIT.md §2.3) becomes viable: CI detects it automatically via `scripts/check_material3_stable.py` (fails on stable ≥ 1.5.0; run with `--selftest` to validate offline). Keep the three Android-compatible legacy `.bin` artifacts in `scripts/android_model_catalog_overrides.json`; do not edit `ModelCatalog.kt` manually. `checkModelCatalog` is part of `preBuild` and must fail when the generated source is stale. The current catalog is limited to 1.2 billion parameters and only the three Whisper `.bin` overrides are downloadable by the current JNI backend; other entries are displayed as coming soon.
 
 Android generated outputs (`.gradle/`, `app/build/`, `app/.cxx/`) must remain ignored. Work directly on the current Android module. Do not modify desktop Tauri behavior to solve an Android-only issue unless explicitly requested.
 
@@ -29,6 +31,12 @@ Android generated outputs (`.gradle/`, `app/build/`, `app/.cxx/`) must remain ig
 - **The Gauntlet Validation Rule (Uncle Bob's Test Harness Strategy)**: AI assistants working on code must adhere to the Gauntlet Strategy: do not request line-by-line manual code reviews. Instead, rely on automated test gates (`./gradlew checkModelCatalog testDebugUnitTest lintDebug`) and present empirical command/task execution evidence (`BUILD SUCCESSFUL`) before declaring any task complete.
 - **Mobile Thermal & CPU Protection**: When executing local verification on mobile host devices, ensure unit test tasks (`testDebugUnitTest`) do not trigger heavy native C++/Rust re-compilations. Reserve full APK/AAB packaging for CI/CD pipelines (GitHub Actions).
 - **AAPT2 Host Override**: For ARM64 Linux environments, ensure `/usr/bin/aapt2` points to the native SDK 35 binary (`ln -sf $ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2 /usr/bin/aapt2`) and `android.aapt2FromMavenOverride=/usr/bin/aapt2` is set in `gradle.properties` to avoid ARSC table load failures on `android-35/android.jar`.
+- **AAPT2 on pure ARM64 hosts**: the official SDK `aapt2` is an x86-64 binary and crashes with `Illegal instruction` (exit 132) on ARM64-only hosts (no binfmt_misc/x86-64 emulation). If the machine has `qemu-x86_64` and the amd64 cross libc (`libc6-amd64-cross`, usually under `/usr/x86_64-linux-gnu`), replace the `/usr/bin/aapt2` symlink with a wrapper script:
+  ```bash
+  #!/bin/bash
+  exec qemu-x86_64 -L /usr/x86_64-linux-gnu /root/android-sdk/build-tools/35.0.0/aapt2 "$@"
+  ```
+  CI (`android.yml`) runs on x86_64 runners and does not need this workaround.
 - **Accessibility Text Actions**: When triggering text paste in `AutoTypeAccessibilityService`, use `node.performAction(AccessibilityNodeInfo.ACTION_PASTE)` on the target `AccessibilityNodeInfo`. Do not use `performGlobalAction` with invalid paste constants.
 
 ## Desktop/Tauri Reference Commands (not the active Android workflow)

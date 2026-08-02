@@ -102,7 +102,7 @@ object TranscriptionEngine {
         val requestId = beginRequest()
 
         return withContext(Dispatchers.Default) {
-            inferenceMutex.withLock {
+            val result = inferenceMutex.withLock {
                 if (!isLatest(requestId)) throw CancellationException("A newer transcription superseded this request")
                 evictIfRequested()
                 val model = selectedModel(context) ?: throw NoModelException()
@@ -120,7 +120,7 @@ object TranscriptionEngine {
                     activeEngine = whisper
                 }
                 try {
-                    val result = whisper.transcribe(
+                    whisper.transcribe(
                         audioData = samples,
                         numThreads = SettingsManager.threadCount(context)
                             ?: Runtime.getRuntime().availableProcessors().coerceAtMost(8),
@@ -128,16 +128,20 @@ object TranscriptionEngine {
                         language = SettingsManager.language(context),
                         initialPrompt = SettingsManager.initialPrompt(context),
                     ).trim()
-                    val processedResult = LlmPostProcessor.process(context, result)
-                    if (!isLatest(requestId)) throw CancellationException("A newer transcription superseded this request")
-                    scheduleUnload(context)
-                    processedResult
                 } finally {
                     synchronized(stateLock) {
                         if (activeEngine === whisper) activeEngine = null
                     }
                 }
             }
+
+            // Network post-processing runs OUTSIDE the shared inference mutex: a slow LLM
+            // (≤ 5 s timeout) must not serialize every transcription through the native
+            // engine lock. Stale results are still discarded via the isLatest guard.
+            val processedResult = LlmPostProcessor.process(context, result)
+            if (!isLatest(requestId)) throw CancellationException("A newer transcription superseded this request")
+            scheduleUnload(context)
+            processedResult
         }
     }
 

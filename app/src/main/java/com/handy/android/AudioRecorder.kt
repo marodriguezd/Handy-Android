@@ -172,16 +172,6 @@ class AudioRecorder(
 
     fun release() = stop()
 
-    /** A warm microphone is represented by keeping the recorder lifecycle ready; actual capture still starts on demand. */
-    fun prepareWarmMicrophone() {
-        if (SettingsManager.alwaysOnMicrophoneEnabled(context)) {
-            audioManager = context.getSystemService(AudioManager::class.java)
-            // Resolve the audio manager/device route early. AudioRecord itself is
-            // still opened only for an active capture to avoid holding the mic.
-            // This removes route discovery latency without keeping a live input.
-        }
-    }
-
     private fun requestAudioFocus() {
         if (!SettingsManager.muteWhileRecording(context)) return
         val manager = context.getSystemService(AudioManager::class.java) ?: return

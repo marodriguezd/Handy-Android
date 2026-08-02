@@ -95,8 +95,10 @@ Las firmas JNI deben coincidir exactamente con `WhisperLib.kt`:
 Java_com_handy_android_WhisperLib_initContext
 Java_com_handy_android_WhisperLib_freeContext
 Java_com_handy_android_WhisperLib_fullTranscribe
-Java_com_handy_android_WhisperLib_cancelTranscribe
+Java_com_handy_android_WhisperLib_cancelTranscribe__J
 ```
+
+> Nota: `WhisperLib` declara `external fun cancelTranscribe(context: Long)`, cuyo símbolo JNI es `Java_com_handy_android_WhisperLib_cancelTranscribe__J` (el sufijo `__J` codifica el único parámetro `long`). La variante sin sufijo no existe en Kotlin y debe considerarse código muerto.
 
 El contexto nativo (`ModelContext`) contiene `whisper_context*`, un mutex de inferencia y una bandera atómica `std::atomic<bool> cancel_requested`.
 
