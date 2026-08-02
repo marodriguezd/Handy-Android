@@ -34,7 +34,7 @@ Last verified result:
 - assembleRelease: PASS
 - git diff --check: PASS
 
-The unit-test task now includes JVM tests for `AudioBuffer` and the generated model catalog. Instrumented Android tests are still pending. The storefront catalog is generated from the desktop catalog and currently exposes 52 entries at or below 1.2B parameters; only the three legacy Whisper `.bin` artifacts have Android download overrides, while other entries are informational/coming soon. When more than one device is connected, always pass `-s <DEVICE_SERIAL>`; otherwise ADB can fail with `more than one device/emulator` or target the wrong device.
+The unit-test task now includes 78 JVM tests across 17 suites (AudioBuffer, model catalog, model downloader, model validator, transcription engine, Silero VAD, rule-based post-process, LLM post-process, history repository, audio feedback, waveform, permission gates, app icon, notification icon, IME smoke, accessibility action, theme palette). Instrumented Android tests are still pending. The storefront catalog is generated from the desktop catalog and currently exposes 53 entries at or below 1.2B parameters; only the three legacy Whisper `.bin` artifacts have Android download overrides, while other entries are informational/coming soon. When more than one device is connected, always pass `-s <DEVICE_SERIAL>`; otherwise ADB can fail with `more than one device/emulator` or target the wrong device.
 
 The existing physical fixture was prepared in the debug app's private storage for the authorized device run. A clean checkout still needs a separately supplied model and audio fixture; these are intentionally not committed to the repository.
 
@@ -106,4 +106,4 @@ Known gaps
 - Live subtitles use bounded periodic windows and may discard audio while inference is busy.
 - `ACTION_SET_TEXT` has no universal fallback for every target application.
 - Release compilation is verified, but signing/AAB distribution is not configured.
-- The Android module, workflow, and documentation are included in the repository commit; clean-checkout CI remains the next verification target.
+- The Android module, workflow, and documentation are included in the repository commit; clean-checkout CI is the current verification gate — `android.yml` runs `lintDebug`, `testDebugUnitTest`, `assembleDebug` and `assembleRelease`. On ARM64-only Linux hosts, local full packaging remains blocked by the x86-64 AAPT2/clang toolchain (see AGENTS.md), while the JVM gates run fine locally.

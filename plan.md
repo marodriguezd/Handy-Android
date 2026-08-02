@@ -88,7 +88,7 @@ Este documento es el plan vivo del módulo Android. El trabajo activo debe reali
 - [x] Implementar Fallback Automático Multinivel de Inserción de Texto en `AutoTypeAccessibilityService.kt` (Nivel 1: `ACTION_SET_TEXT`, Nivel 2: `ClipboardManager` + `GLOBAL_ACTION_PASTE`, Nivel 3: Toast / Notificación).
 - [x] Implementar `HandyTileService.kt` para control de dictado desde el panel de Ajustes Rápidos del sistema.
 - [x] Añadir indicador visual de forma de onda (Audio Waveform) en el overlay flotante durante la grabación.
-- [x] Migrar strings Android a recursos/i18n (`res/values/strings.xml` y `res/values-es/strings.xml`).
+- [x] Migrar strings Android a recursos/i18n (`res/values/strings.xml` como fuente y traducciones es/de/fr/ja/zh/pt).
 
 ## Fase 7 — CI y release
 
