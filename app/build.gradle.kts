@@ -84,6 +84,17 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all { test ->
+                // Robolectric downloads the android-all jars from Maven Central inside the
+                // test JVM. Conscrypt (pinned above for linux-aarch64 natives) is registered as
+                // the first JCA provider and breaks SunJSSE's TLS 1.3 X25519/XDH key exchange
+                // (InvalidAlgorithmParameterException in OpenSSLXDHKeyPairGenerator), making the
+                // download fail and every Robolectric test fail with an AssertionError in
+                // MavenArtifactFetcher. Forcing TLS 1.2 avoids the XDH path entirely (ECDHE
+                // uses EC, which Conscrypt implements correctly).
+                test.systemProperty("jdk.tls.client.protocols", "TLSv1.2")
+                test.systemProperty("https.protocols", "TLSv1.2")
+            }
         }
     }
 
