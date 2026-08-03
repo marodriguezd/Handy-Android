@@ -39,6 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -70,6 +71,18 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      # Robolectric downloads the android-all jars (~130 MB) from Maven Central into
+      # ~/.m2/repository at test runtime; the Gradle cache above does not cover it, so
+      # without this every run re-downloads them. Keyed on app/build.gradle.kts, where
+      # the pinned Robolectric/Conscrypt versions live.
+      - name: Cache Robolectric android-all jars (~/.m2)
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-m2-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}
+          restore-keys: |
+            robolectric-m2-${{ runner.os }}-
 
       - name: Validate Android project
         run: ./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug assembleRelease
