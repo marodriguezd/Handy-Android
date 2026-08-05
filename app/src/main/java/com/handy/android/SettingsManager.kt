@@ -40,6 +40,18 @@ object SettingsManager {
 
     private fun file(context: Context, name: String) = File(context.filesDir, name)
 
+    /**
+     * Atomic marker write: routes through [MarkerFileHelper] so concurrent writers
+     * (main process, IME service, settings UI) never expose a partially-written
+     * marker to readers. Empty/blank values delete the marker.
+     */
+    private fun writeMarker(context: Context, name: String, value: String) =
+        MarkerFileHelper.writeString(context, name, value)
+
+    /** Atomic marker delete (see [writeMarker] for the cross-process rationale). */
+    private fun deleteMarker(context: Context, name: String) =
+        MarkerFileHelper.delete(context, name)
+
     fun activeModelName(context: Context): String? =
         file(context, ACTIVE_MODEL).takeIf { it.isFile }?.readText()?.trim()
             ?.takeIf { it.isNotEmpty() && it == File(it).name && it.endsWith(".bin", ignoreCase = true) }
@@ -63,36 +75,33 @@ object SettingsManager {
         check(ModelValidator.verifyRecordedDigest(model) && ModelValidator.readRecordedDigest(model) == validation.sha256) {
             "Model digest changed before activation: $fileName"
         }
-        file(context, ACTIVE_MODEL).writeText(fileName)
+        writeMarker(context, ACTIVE_MODEL, fileName)
     }
 
-    fun clearActiveModel(context: Context) = file(context, ACTIVE_MODEL).delete()
+    fun clearActiveModel(context: Context) = deleteMarker(context, ACTIVE_MODEL)
 
     fun language(context: Context): String =
         file(context, MODEL_LANGUAGE).takeIf { it.isFile }?.readText()?.trim().orEmpty().ifBlank { "auto" }
 
-    fun setLanguage(context: Context, language: String) = file(context, MODEL_LANGUAGE).writeText(language.trim())
+    fun setLanguage(context: Context, language: String) = writeMarker(context, MODEL_LANGUAGE, language.trim())
 
     fun threadCount(context: Context): Int? =
         file(context, MODEL_THREADS).takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()?.takeIf { it > 0 }
 
     fun setThreadCount(context: Context, threads: Int?) {
-        val marker = file(context, MODEL_THREADS)
-        if (threads == null || threads <= 0) marker.delete() else marker.writeText(threads.toString())
+        if (threads == null || threads <= 0) deleteMarker(context, MODEL_THREADS) else writeMarker(context, MODEL_THREADS, threads.toString())
     }
 
     fun translate(context: Context): Boolean = file(context, MODEL_TRANSLATE).readTextOrNull() == "1"
 
     fun setTranslate(context: Context, enabled: Boolean) {
-        val marker = file(context, MODEL_TRANSLATE)
-        if (enabled) marker.writeText("1") else marker.delete()
+        if (enabled) writeMarker(context, MODEL_TRANSLATE, "1") else deleteMarker(context, MODEL_TRANSLATE)
     }
 
     fun initialPrompt(context: Context): String = file(context, INITIAL_PROMPT).readTextOrNull()?.trim().orEmpty()
 
     fun setInitialPrompt(context: Context, prompt: String) {
-        val target = file(context, INITIAL_PROMPT)
-        if (prompt.isBlank()) target.delete() else target.writeText(prompt.trim())
+        if (prompt.isBlank()) deleteMarker(context, INITIAL_PROMPT) else writeMarker(context, INITIAL_PROMPT, prompt.trim())
     }
 
     fun modelUnloadTimeoutMs(context: Context): Long =
@@ -100,59 +109,57 @@ object SettingsManager {
             ?.coerceIn(0L, 60L * 60L * 1_000L) ?: 0L
 
     fun setModelUnloadTimeoutMs(context: Context, timeoutMs: Long) =
-        file(context, MODEL_UNLOAD_TIMEOUT_MS).writeText(timeoutMs.coerceAtLeast(0L).toString())
+        writeMarker(context, MODEL_UNLOAD_TIMEOUT_MS, timeoutMs.coerceAtLeast(0L).toString())
 
     fun gpuBackend(context: Context): String =
         file(context, GPU_BACKEND).readTextOrNull()?.trim()?.lowercase().takeUnless { it.isNullOrBlank() } ?: "cpu"
 
-    fun setGpuBackend(context: Context, backend: String) {
-        file(context, GPU_BACKEND).writeText(if (backend.equals("vulkan", true)) "vulkan" else "cpu")
-    }
+    fun setGpuBackend(context: Context, backend: String) =
+        writeMarker(context, GPU_BACKEND, if (backend.equals("vulkan", true)) "vulkan" else "cpu")
 
     fun extraRecordingBufferMs(context: Context): Long =
         file(context, EXTRA_RECORDING_BUFFER_MS).readTextOrNull()?.trim()?.toLongOrNull()
             ?.coerceIn(0L, 2_000L) ?: 300L
 
     fun setExtraRecordingBufferMs(context: Context, value: Long) =
-        file(context, EXTRA_RECORDING_BUFFER_MS).writeText(value.coerceIn(0L, 2_000L).toString())
+        writeMarker(context, EXTRA_RECORDING_BUFFER_MS, value.coerceIn(0L, 2_000L).toString())
 
     fun muteWhileRecording(context: Context): Boolean =
         booleanSetting(context, MUTE_WHILE_RECORDING, default = true)
 
     fun setMuteWhileRecording(context: Context, enabled: Boolean) =
-        setBoolean(file(context, MUTE_WHILE_RECORDING), enabled)
+        setBoolean(context, MUTE_WHILE_RECORDING, enabled)
 
     fun inputDeviceId(context: Context): Int? =
         file(context, INPUT_DEVICE_ID).readTextOrNull()?.trim()?.toIntOrNull()?.takeIf { it >= 0 }
 
     fun setInputDeviceId(context: Context, deviceId: Int?) {
-        val target = file(context, INPUT_DEVICE_ID)
-        if (deviceId == null) target.delete() else target.writeText(deviceId.toString())
+        if (deviceId == null) deleteMarker(context, INPUT_DEVICE_ID) else writeMarker(context, INPUT_DEVICE_ID, deviceId.toString())
     }
 
     fun autoSubmitEnabled(context: Context): Boolean =
         booleanSetting(context, AUTO_SUBMIT, default = false)
 
     fun setAutoSubmitEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, AUTO_SUBMIT), enabled)
+        setBoolean(context, AUTO_SUBMIT, enabled)
 
     fun removeFillerWordsEnabled(context: Context): Boolean =
         booleanSetting(context, REMOVE_FILLER_WORDS, default = false)
 
     fun setRemoveFillerWordsEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, REMOVE_FILLER_WORDS), enabled)
+        setBoolean(context, REMOVE_FILLER_WORDS, enabled)
 
     fun trimTrailingSpaceEnabled(context: Context): Boolean =
         booleanSetting(context, TRIM_TRAILING_SPACE, default = true)
 
     fun setTrimTrailingSpaceEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, TRIM_TRAILING_SPACE), enabled)
+        setBoolean(context, TRIM_TRAILING_SPACE, enabled)
 
     fun autoStartOnBoot(context: Context): Boolean =
         booleanSetting(context, AUTO_START_ON_BOOT, default = false)
 
     fun setAutoStartOnBoot(context: Context, enabled: Boolean) =
-        setBoolean(file(context, AUTO_START_ON_BOOT), enabled)
+        setBoolean(context, AUTO_START_ON_BOOT, enabled)
 
     data class PromptTemplate(val name: String, val prompt: String)
 
@@ -174,7 +181,9 @@ object SettingsManager {
         .orEmpty()
 
     fun setLlmPromptTemplates(context: Context, templates: List<PromptTemplate>) {
-        file(context, LLM_PROMPT_TEMPLATES).writeText(
+        writeMarker(
+            context,
+            LLM_PROMPT_TEMPLATES,
             templates.filter { it.name.isNotBlank() && it.prompt.isNotBlank() }
                 .distinctBy { it.name.trim().lowercase() }
                 .joinToString("\n") { template ->
@@ -199,81 +208,84 @@ object SettingsManager {
         .orEmpty()
 
     fun setCustomWords(context: Context, words: List<String>) =
-        file(context, CUSTOM_WORDS).writeText(words.map(String::trim).filter(String::isNotEmpty).distinct().joinToString("\n"))
+        writeMarker(
+            context,
+            CUSTOM_WORDS,
+            words.map(String::trim).filter(String::isNotEmpty).distinct().joinToString("\n"),
+        )
 
     /** Whether local vocabulary and text cleanup should be applied to transcriptions. */
     fun postProcessingEnabled(context: Context): Boolean =
         booleanSetting(context, POST_PROCESSING_ENABLED, default = true)
 
     fun setPostProcessingEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, POST_PROCESSING_ENABLED), enabled)
+        setBoolean(context, POST_PROCESSING_ENABLED, enabled)
 
     /** Whether sentence and isolated-`i` capitalization should be applied. */
     fun autoCapitalizationEnabled(context: Context): Boolean =
         booleanSetting(context, AUTO_CAPITALIZATION_ENABLED, default = true)
 
     fun setAutoCapitalizationEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, AUTO_CAPITALIZATION_ENABLED), enabled)
+        setBoolean(context, AUTO_CAPITALIZATION_ENABLED, enabled)
 
     /** Whether punctuation spacing and duplicate whitespace should be normalized. */
     fun punctuationCleanupEnabled(context: Context): Boolean =
         booleanSetting(context, PUNCTUATION_CLEANUP_ENABLED, default = true)
 
     fun setPunctuationCleanupEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, PUNCTUATION_CLEANUP_ENABLED), enabled)
+        setBoolean(context, PUNCTUATION_CLEANUP_ENABLED, enabled)
 
     /** Whether short sound cues should be played for recording events. */
     fun soundFeedbackEnabled(context: Context): Boolean =
         file(context, SOUND_FEEDBACK_ENABLED).readTextOrNull()?.trim() != "0"
 
     fun setSoundFeedbackEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, SOUND_FEEDBACK_ENABLED), enabled)
+        setBoolean(context, SOUND_FEEDBACK_ENABLED, enabled)
 
     /** Whether haptic cues should be emitted for recording events. */
     fun hapticFeedbackEnabled(context: Context): Boolean =
         file(context, HAPTIC_FEEDBACK_ENABLED).readTextOrNull()?.trim() != "0"
 
     fun setHapticFeedbackEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, HAPTIC_FEEDBACK_ENABLED), enabled)
+        setBoolean(context, HAPTIC_FEEDBACK_ENABLED, enabled)
 
     /** Whether the Material You dynamic colour scheme should replace the fixed brand palette (API 31+). */
     fun dynamicColorEnabled(context: Context): Boolean =
         booleanSetting(context, DYNAMIC_COLOR_ENABLED, default = false)
 
     fun setDynamicColorEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, DYNAMIC_COLOR_ENABLED), enabled)
+        setBoolean(context, DYNAMIC_COLOR_ENABLED, enabled)
 
     fun llmEnabled(context: Context): Boolean =
         booleanSetting(context, LLM_ENABLED, default = false)
 
     fun setLlmEnabled(context: Context, enabled: Boolean) =
-        setBoolean(file(context, LLM_ENABLED), enabled)
+        setBoolean(context, LLM_ENABLED, enabled)
 
     fun llmEndpoint(context: Context): String =
         file(context, LLM_ENDPOINT).readTextOrNull()?.trim().orEmpty().ifBlank { DEFAULT_LLM_ENDPOINT }
 
     fun setLlmEndpoint(context: Context, endpoint: String) =
-        file(context, LLM_ENDPOINT).writeText(endpoint.trim())
+        writeMarker(context, LLM_ENDPOINT, endpoint.trim())
 
     fun llmApiKey(context: Context): String =
         file(context, LLM_API_KEY).readTextOrNull()?.trim()?.let(::decodeApiKey).orEmpty()
 
     fun setLlmApiKey(context: Context, apiKey: String) {
-        val target = file(context, LLM_API_KEY)
-        if (apiKey.isBlank()) target.delete() else target.writeText(encodeApiKey(apiKey.trim()))
+        if (apiKey.isBlank()) deleteMarker(context, LLM_API_KEY) else writeMarker(context, LLM_API_KEY, encodeApiKey(apiKey.trim()))
     }
 
     fun llmModel(context: Context): String =
         file(context, LLM_MODEL).readTextOrNull()?.trim().orEmpty().ifBlank { DEFAULT_LLM_MODEL }
 
     fun setLlmModel(context: Context, model: String) =
-        file(context, LLM_MODEL).writeText(model.trim())
+        writeMarker(context, LLM_MODEL, model.trim())
 
     fun llmSystemPrompt(context: Context): String =
         file(context, LLM_SYSTEM_PROMPT).readTextOrNull()?.trim().orEmpty().ifBlank { DEFAULT_LLM_PROMPT }
 
     fun setLlmSystemPrompt(context: Context, prompt: String) =
-        file(context, LLM_SYSTEM_PROMPT).writeText(prompt.trim())
+        writeMarker(context, LLM_SYSTEM_PROMPT, prompt.trim())
 
     private fun booleanSetting(context: Context, name: String, default: Boolean): Boolean =
         when (file(context, name).readTextOrNull()?.trim()) {
@@ -282,8 +294,9 @@ object SettingsManager {
             else -> default
         }
 
-    private fun setBoolean(target: File, enabled: Boolean) {
-        if (enabled) target.writeText(FEEDBACK_ENABLED) else target.writeText("0")
+    private fun setBoolean(context: Context, name: String, enabled: Boolean) {
+        if (enabled) MarkerFileHelper.writeString(context, name, FEEDBACK_ENABLED)
+        else MarkerFileHelper.writeString(context, name, "0")
     }
 
     private fun File.readTextOrNull(): String? = takeIf { isFile }?.readText()
