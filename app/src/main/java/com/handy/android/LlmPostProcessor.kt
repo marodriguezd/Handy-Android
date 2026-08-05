@@ -3,26 +3,53 @@ package com.handy.android
 import android.content.Context
 import java.net.URI
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.async
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
 /** Optional network post-processing; local rules remain the guaranteed fallback. */
 object LlmPostProcessor {
-    suspend fun process(context: Context, text: String): String {
+    /**
+     * Refines [text] with the configured OpenAI-compatible endpoint. The
+     * in-flight coroutine is registered in [LlmCallRegistry] under [owner] so a
+     * surface can cancel only its own request (see [cancelForOwner]).
+     *
+     * @param owner identity of the calling surface (Activity/Service). `null`
+     *   means ownerless: globally cancellable via [cancelAll] but never by an
+     *   owner-scoped cancel.
+     */
+    suspend fun process(context: Context, text: String, owner: Any? = null): String {
         val fallback = PostProcessor.process(context, text)
         if (text.isBlank() || !SettingsManager.llmEnabled(context)) return fallback
         if (!isEndpointAllowed(SettingsManager.llmEndpoint(context))) return fallback
 
-        return withTimeoutOrNull(TIMEOUT_MS) {
-            runCatching { request(context, text) }
-                .getOrNull()
-                ?.takeIf(String::isNotBlank)
-                ?: fallback
-        } ?: fallback
+        val deferred = coroutineScope {
+            async(Dispatchers.IO) {
+                val self = coroutineContext[Job] ?: error("no job in scope")
+                LlmCallRegistry.register(self, owner)
+                try {
+                    runCatching { request(context, text) }
+                        .getOrNull()
+                        ?.takeIf(String::isNotBlank)
+                        ?: fallback
+                } finally {
+                    LlmCallRegistry.unregister(self)
+                }
+            }
+        }
+        return withTimeoutOrNull(TIMEOUT_MS) { deferred.await() } ?: fallback
     }
+
+    /** Cancels only the in-flight LLM calls owned by [owner] (by identity). */
+    fun cancelForOwner(owner: Any?) = LlmCallRegistry.cancelAllForOwner(owner)
+
+    /** Cancels every in-flight LLM call (global shutdown: feature off, IME death). */
+    fun cancelAll() = LlmCallRegistry.cancelAll()
 
     internal fun isEndpointAllowed(endpoint: String): Boolean = runCatching {
         val uri = URI(endpoint)
@@ -46,9 +73,12 @@ object LlmPostProcessor {
         try {
             val body = JSONObject()
                 .put("model", SettingsManager.llmModel(context))
-                .put("messages", org.json.JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", SettingsManager.llmSystemPrompt(context)))
-                    .put(JSONObject().put("role", "user").put("content", text)))
+                .put(
+                    "messages",
+                    org.json.JSONArray()
+                        .put(JSONObject().put("role", "system").put("content", SettingsManager.llmSystemPrompt(context)))
+                        .put(JSONObject().put("role", "user").put("content", text)),
+                )
                 .toString()
             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             if (connection.responseCode !in 200..299) return@withContext ""
