@@ -2,6 +2,7 @@ package com.handy.android
 
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -131,6 +132,25 @@ object ModelValidator {
                 if (read < 0) break
                 digest.update(buffer, 0, read)
             }
+        }
+        return digest.digest().joinToString("") { byte ->
+            (byte.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
+    }
+
+    /**
+     * Stream variant used by the plain-JVM test gate (mirrors the origin's
+     * `FileSha256.sha256Hex(InputStream)`): reads [input] fully and returns its
+     * lowercase hex SHA-256. The implementation is identical to [sha256] so the
+     * file and stream paths are guaranteed to agree.
+     */
+    fun sha256(input: InputStream): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
         }
         return digest.digest().joinToString("") { byte ->
             (byte.toInt() and 0xff).toString(16).padStart(2, '0')
